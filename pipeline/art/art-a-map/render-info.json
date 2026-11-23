@@ -1,0 +1,62 @@
+{
+ "palettes": {
+  "black": {
+   "tee": "#151515",
+   "key": "#EFE6CF",
+   "green": "#6DB98A",
+   "blue": "#6F9FDB",
+   "red": "#E4432D",
+   "mode": "knockout"
+  },
+  "cream": {
+   "tee": "#ECE3CE",
+   "key": "#22201D",
+   "green": "#2F7D52",
+   "blue": "#2F5FA8",
+   "red": "#D8381F",
+   "mode": "multiply"
+  }
+ },
+ "anchors": {
+  "stage": [
+   768,
+   1321
+  ],
+  "foh": [
+   616,
+   1122
+  ],
+  "haji_ali": [
+   282,
+   204
+  ],
+  "platforms": [
+   271,
+   1686
+  ],
+  "track_mid": [
+   574,
+   1094
+  ]
+ },
+ "type_zones": {
+  "wordmark": [
+   300,
+   44,
+   820,
+   150
+  ],
+  "city": [
+   300,
+   262,
+   400,
+   190
+  ],
+  "dates": [
+   690,
+   1478,
+   450,
+   74
+  ]
+ }
+}

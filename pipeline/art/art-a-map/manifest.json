@@ -1,0 +1,36 @@
+{
+  "concept": "the ground you stood on: Mahalaxmi Race Course seen from above, drawn from real OpenStreetMap geometry and turned so the Arabian Sea and Haji Ali bay sit at the top. It is drawn like a hand-pulled riso/screen-print map: buildings as hand-hatched blocks with wobbly pen outlines, open ground as a hand-set halftone with the roads left as bare shirt, the sea as ripple hatching plus coastal echo lines, and the course as a green turf field with a doubled track line, ringed by the rain trees on the perimeter path. A crowd of thousands of heads, raised hands and phone lights packs the infield in front of a small red stage and thins out toward the far bend. Broken red sound rings ripple from the stage across the whole map. That is the one bright accent. The drawing thins out object by object toward a ragged edge, so there is no rectangle.",
+  "palette_black": {
+    "tee": "#151515",
+    "key": "#EFE6CF",
+    "green": "#6DB98A",
+    "blue": "#6F9FDB",
+    "accent_red": "#E4432D",
+    "overlap": "knockout, top ink wins (green < blue < key < red); every ink misregistered 4-8 px"
+  },
+  "palette_cream": {
+    "tee": "#ECE3CE",
+    "key": "#22201D",
+    "green": "#2F7D52",
+    "blue": "#2F5FA8",
+    "accent_red": "#D8381F",
+    "overlap": "overprint/multiply for key, green and blue like riso on paper; red sits on top"
+  },
+  "type_zones": [
+    {"name": "wordmark", "x": 300, "y": 44, "w": 820, "h": 150},
+    {"name": "city", "x": 300, "y": 262, "w": 400, "h": 190},
+    {"name": "dates", "x": 690, "y": 1478, "w": 450, "h": 74}
+  ],
+  "type_zone_notes": "wordmark sits on the thinned open sea at the top right. city ('mumbai') sits in Haji Ali bay, right of the dargah; the waves and rings are kept sparse there, not removed. dates sit bottom-right just past the stage end. All three zones are calmed in the drawing; type should be cream/ink vectors set over it.",
+  "annotations": [
+    {"text": "we were somewhere in here", "x": 905, "y": 1395, "rotation": -7, "points_to": [700, 1225]},
+    {"text": "haji ali, out on the water", "x": 60, "y": 96, "rotation": -6, "points_to": [282, 204]},
+    {"text": "the arabian sea, a km behind us", "x": 520, "y": 560, "rotation": -3, "points_to": [560, 430]},
+    {"text": "horses here since 1883", "x": 60, "y": 690, "rotation": -9, "points_to": [335, 800]},
+    {"text": "foh. meet here if we lose each other", "x": 330, "y": 1010, "rotation": -5, "points_to": [616, 1122]},
+    {"text": "western line, rumbling under the bass", "x": 70, "y": 1555, "rotation": -4, "points_to": [400, 1450]}
+  ],
+  "anchors_units": {"stage": [768, 1321], "foh_tent": [616, 1122], "haji_ali_dargah": [282, 204], "track_centre": [574, 1094]},
+  "map": {"source": "OpenStreetMap via Overpass (ODbL), cached in osm.json", "projection": "local metres with cos(lat) correction, rotated -78 deg (west near-up), 0.80 units/m, slight hand-drawn warp", "track_centroid": [18.984293, 72.820206]},
+  "print": {"canvas_px": [3600, 4800], "unit_space": [1200, 1600], "alpha": "binary 0/255", "min_stroke": "2.6 units = 7.8 px; every ink opened with a 5x5 square to remove specks", "ink_margin": "nothing within ~38 px of the canvas edge"}
+}
