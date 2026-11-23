@@ -1,0 +1,145 @@
+{
+  "concept": "line drawings of the night: a hand-inked crowd at mahalaxmi race course, seen from behind, looking at a small, loud stage under the mumbai towers. brush lines with pressure and wobble, spot colour printed loose and off-register. foreground: a girl on someone's shoulders (kurta, braid with a red paranda, bangles), a guy filming with the stage on his screen, two friends hugging (bindi, jhumka, gajra; bandana, striped shirt), a guy with his head thrown back singing. behind them a sea of black hair and phone screens. the drawing trails off at the bottom like a sketchbook page. cream tee: hair is printed solid in the line ink with strands reversed out; black tee: hair is the tee.",
+  "palette_black": {
+    "tee": "#151515",
+    "line": "#F1E7D0",
+    "ink_yellow": "#F6B330",
+    "ink_blue": "#5A8CF0",
+    "accent_red": "#E4432D"
+  },
+  "palette_cream": {
+    "tee": "#ECE3CE",
+    "line_and_hair": "#1C1A17",
+    "ink_yellow": "#F0A417",
+    "ink_blue": "#2F5FD0",
+    "accent_red": "#D8381F"
+  },
+  "units": "1200 x 1600 (multiply by 3 for px on the 3600 x 4800 art)",
+  "type_zones": [
+    {
+      "name": "wordmark",
+      "x": 150,
+      "y": 70,
+      "w": 900,
+      "h": 135
+    },
+    {
+      "name": "city",
+      "x": 100,
+      "y": 215,
+      "w": 1000,
+      "h": 200
+    },
+    {
+      "name": "dates",
+      "x": 330,
+      "y": 428,
+      "w": 540,
+      "h": 52
+    },
+    {
+      "name": "signoff",
+      "x": 420,
+      "y": 494,
+      "w": 360,
+      "h": 30
+    }
+  ],
+  "annotations": [
+    {
+      "text": "the imperial twins, tardeo",
+      "x": 850,
+      "y": 494,
+      "rotation": -3,
+      "points_to": [
+        942,
+        545
+      ]
+    },
+    {
+      "text": "black kites, doing laps",
+      "x": 1000,
+      "y": 458,
+      "rotation": -4,
+      "points_to": [
+        1100,
+        508
+      ]
+    },
+    {
+      "text": "a plane lining up for bom",
+      "x": 36,
+      "y": 448,
+      "rotation": 3,
+      "points_to": [
+        150,
+        506
+      ]
+    },
+    {
+      "text": "still a working race course",
+      "x": 20,
+      "y": 760,
+      "rotation": -2,
+      "points_to": [
+        90,
+        735
+      ]
+    },
+    {
+      "text": "our turf for two nights",
+      "x": 1012,
+      "y": 760,
+      "rotation": 2,
+      "points_to": [
+        960,
+        800
+      ]
+    }
+  ],
+  "figures": {
+    "plane": [
+      150,
+      506
+    ],
+    "birds": [
+      1100,
+      508
+    ],
+    "twins": [
+      942,
+      545
+    ],
+    "rails": [
+      90,
+      735
+    ],
+    "stage": [
+      600,
+      695
+    ],
+    "shoulders": [
+      470,
+      995.2
+    ],
+    "huggers": [
+      800,
+      1210
+    ],
+    "singer": [
+      1026,
+      1238
+    ],
+    "filmer": [
+      263.4,
+      1105.0
+    ]
+  },
+  "art_bbox": {
+    "x": 19,
+    "y": 489,
+    "w": 1159,
+    "h": 1093
+  },
+  "seed": 81226
+}
