@@ -113,7 +113,10 @@ def select_only(ob):
     for o in sc.objects: o.select_set(False)
     ob.select_set(True); bpy.context.view_layer.objects.active = ob
 def glb(path, **kw):
-    args = dict(filepath=path, use_selection=True, export_apply=True, export_yup=True, export_materials="PLACEHOLDER",
+    # export_current_frame: without it the exporter jumps to frame 0 before gathering, where the rig is still in
+    # MakeHuman's rest A-pose (build.py keys the arms down later), so every body-<pose>.glb came out unposed
+    args = dict(filepath=path, use_selection=True, export_apply=True, export_current_frame=True, export_yup=True,
+                export_materials="PLACEHOLDER",
                 export_draco_mesh_compression_enable=True, export_draco_mesh_compression_level=7,
                 export_skins=False, export_animations=False, export_morph=False)
     args.update(kw)
