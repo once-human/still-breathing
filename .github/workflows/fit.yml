@@ -81,10 +81,15 @@ jobs:
       - name: Export
         run: |
           X=""; [ "${{ matrix.name }}" = "m170-M" ] && X=proxy
+          (while sleep 10; do free -m | awk 'NR==2{print "mem used",$3,"MB, free",$7,"MB"}'; done) & MEM=$!
           ~/blender/blender -b --factory-startup sim.blend -P pipeline/export.py -- "$PWD/out/${{ matrix.name }}" $X \
-            | grep -E "FIT|exported|done|Error|Traceback"
+            | grep --line-buffered -E "FIT|bake|tee glb|exported|done|Error|Traceback"
+          kill $MEM
           ls -la out/*
           test -s "out/${{ matrix.name }}/stand.glb"
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with: { name: "sim-${{ matrix.name }}", path: sim.blend, retention-days: 3 }
       - uses: actions/upload-artifact@v4
         with:
           name: fit-${{ matrix.name }}

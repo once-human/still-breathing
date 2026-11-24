@@ -74,7 +74,7 @@ for pose in POSES:
     p["frame"] = tee["frame"]; p["lift_m"] = round(lift, 4)
     fit["poses"][pose] = p
 
-print("FIT", json.dumps(fit)); json.dump(fit, open(os.path.join(OUT, "fit.json"), "w"), indent=1)
+print("FIT", json.dumps(fit), flush=True); json.dump(fit, open(os.path.join(OUT, "fit.json"), "w"), indent=1)
 
 # ---------- per pose: AO into the vertices, thickness, smoothing, GLB ----------
 sc.render.engine = "CYCLES"; sc.cycles.device = "CPU"; sc.cycles.samples = 96
@@ -109,12 +109,14 @@ for pose in POSES:
     except Exception: pass
     select_only(tee)
     sc.render.bake.target = "VERTEX_COLORS"
+    print("bake", pose, len(tee.data.vertices), "verts", flush=True)
     bpy.ops.object.bake(type="AO")
+    print("baked", pose, flush=True)
     tee.data.materials.clear(); tee.data.materials.append(outer); tee.data.materials.append(inner)
     so = tee.modifiers.new("thick", "SOLIDIFY"); so.thickness = 0.0032; so.offset = 0; so.use_even_offset = True; so.material_offset = 1
     if "stiff" in tee.vertex_groups: so.vertex_group = "stiff"; so.thickness_vertex_group = 0.5
     tee.modifiers.new("sub", "SUBSURF").levels = 1
-    glb(os.path.join(OUT, f"{pose}.glb"), export_vertex_color="ACTIVE")
+    glb(os.path.join(OUT, f"{pose}.glb"), export_vertex_color="ACTIVE"); print("tee glb", pose, flush=True)
     # the body in this pose (armature applied), for fit mode
     body.hide_render = False; select_only(body)
     glb(os.path.join(OUT, f"body-{pose}.glb"), export_materials="NONE")
