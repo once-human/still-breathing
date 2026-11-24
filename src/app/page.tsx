@@ -3,6 +3,7 @@ import { Product } from "@/components/Product";
 import { BigWord } from "@/components/BigWord";
 import { Label } from "@/components/Label";
 import { SIZES, SIZE_ORDER, SHOWS, THE_TEE } from "@/content/tee";
+import pkg from "../../package.json";
 
 const ROWS: [string, "chest_round" | "length" | "shoulder"][] = [["chest, all round", "chest_round"], ["length, shoulder to hem", "length"], ["shoulder, seam to seam", "shoulder"]];
 
@@ -73,7 +74,7 @@ export default function Home() {
         <span className="border-t border-line pt-1.5">still breathing, lineup 01</span>
         <span className="border-t border-line pt-1.5 text-quiet">fan-made, not for sale</span>
         <span className="hidden border-t border-line pt-1.5 text-quiet md:block">made in india</span>
-        <span className="hidden border-t border-line pt-1.5 text-right text-quiet md:block">v0.2.0</span>
+        <span className="hidden border-t border-line pt-1.5 text-right text-quiet md:block">v{pkg.version}</span>
       </footer>
     </>
   );
