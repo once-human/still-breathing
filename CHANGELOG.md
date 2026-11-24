@@ -2,6 +2,10 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.8.1 — 2026-11-25
+### Shirts
+- 01 crowd: the two friends on the right are drawn again, both from behind, his arm round her shoulders.
+
 ## 0.8.0 — 2026-11-25
 Breath and end of the line are back.
 

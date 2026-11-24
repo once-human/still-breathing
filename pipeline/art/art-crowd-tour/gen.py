@@ -2570,14 +2570,15 @@ class Scene(Art):
                                                 'arm_1': {'elbow': (Cx + 1.42 * Cw, Cy + 0.02 * Ch), 'wrist': (Cx + 0.98 * Cw, Cy - 1.3 * Ch)}})
         self.marks['monkeycap'] = (Cx, Cy - 0.65 * Ch)
 
-        # --- Mumbai's huggers (right, near): her in profile, bindi and gajra, laughing; him from behind, bandana, striped shirt
-        Lx, Ly, Lw = 1012, 1336, 96
-        Rx, Ry, Rw = 1140, 1346, 100
-        self.person(Lx, Ly, Lw, LW, r, {'garment': 'tank', 'gfill': 'B', 'hair': 'bun', 'sw': 1.1, 'yend': 2.8, 'lean': 0.03, 'trail': False, '_skiphead': True})
-        self.head_profile(Lx + 4, Ly - 4, Lw * 1.02, LW, r, face=1, back=-6, bindi=True, earring=True, gajra=True, smile=True, hair='bun')
+        # --- the friends (right, near): both from behind, his arm round her shoulders
+        Lx, Ly, Lw = 936, 1318, 94
+        Rx, Ry, Rw = 1058, 1330, 98
+        Lh, Rh = Lw * 1.13, Rw * 1.13
+        self.person(Lx, Ly, Lw, LW, r, {'garment': 'tank', 'gfill': 'B', 'hair': 'bun', 'sw': 1.1, 'yend': 2.8, 'trail': False,
+                                         'tilt': 5, 'lean': 0.03})
         self.marks['huggers'] = (Lx + 40, Ly - 40)
-        self.person(Rx, Ry, Rw, LW, r, {'garment': 'shirt', 'gfill': None, 'hair': 'bandana', 'bandfill': 'B', 'sw': 1.22, 'tilt': -9, 'yend': 2.8, 'trail': False})
-        Rh = Rw * 1.13
+        self.person(Rx, Ry, Rw, LW, r, {'garment': 'shirt', 'gfill': None, 'hair': 'bandana', 'bandfill': 'B', 'sw': 1.18, 'tilt': -7,
+                                         'yend': 2.8, 'trail': False})
         body = [(Rx - 1.2 * Rw, Ry + 1.0 * Rh), (Rx + 1.2 * Rw, Ry + 1.0 * Rh), (Rx + 1.3 * Rw, Ry + 2.8 * Rh), (Rx - 1.3 * Rw, Ry + 2.8 * Rh)]
         r2 = random.Random(r.random())
 
@@ -2588,25 +2589,17 @@ class Scene(Art):
                 self._render(pts, 7.0, 'Y', 0.5, 1.0, 0.25, r2, draw=dr, off=off)
                 x += r2.uniform(17, 22)
         self.masked(body, 'Y', stripes)
-        sx, sy = Rx - 1.1 * Rw, Ry + 1.05 * Rh
-        Lh = Lw * 1.13
-        ctrl = [(sx + 10, sy + 6), (sx - 28, sy - 14), (Lx + 30, Ly + 0.98 * Lh), (Lx - 0.45 * Lw, Ly + 1.0 * Lh)]
-        sp, left, right = self.tube(ctrl, [0.44 * Rw, 0.38 * Rw, 0.32 * Rw, 0.27 * Rw], LW, r, wob=1.0, trem=0.8)
+        # his arm, across her back, the hand resting on her far shoulder
+        sx, sy = Rx - 1.05 * Rw, Ry + 1.02 * Rh
+        ctrl = [(sx + 8, sy + 8), (sx - 30, sy - 6), (Lx + 0.2 * Lw, Ly + 0.92 * Lh), (Lx - 0.62 * Lw, Ly + 0.96 * Lh)]
+        sp, left, right = self.tube(ctrl, [0.42 * Rw, 0.36 * Rw, 0.31 * Rw, 0.27 * Rw], LW, r, wob=1.0, trem=0.8)
         self.knock(left + right[::-1])
         self.ink(left, LW, rng=r, a0=0.6)
         self.ink(right, LW, rng=r, a0=0.6)
         k = int(len(sp) * 0.3)
         self.line([left[k], ((left[k][0] + right[k][0]) / 2 + 4, (left[k][1] + right[k][1]) / 2), right[k]], LW * 0.85, rng=r, wob=0.6, trem=0)
         ex, ey = sp[-1]
-        self.draw_hand((ex, ey), math.radians(115), Rw * 0.45, 'mitten', LW * 0.85, r)
-        sx, sy = Lx + 1.0 * Lw, Ly + 1.4 * Lh
-        ctrl = [(sx - 8, sy - 8), (sx + 12, sy + 55), (Rx - 30, Ly + 2.05 * Lh), (Rx + 30, Ly + 1.95 * Lh)]
-        sp, left, right = self.tube(ctrl, [0.36 * Lw, 0.32 * Lw, 0.28 * Lw, 0.24 * Lw], LW, r, wob=1.0, trem=0.8)
-        self.knock(left + right[::-1])
-        self.ink(left, LW, rng=r, a0=0.6)
-        self.ink(right, LW, rng=r, a0=0.6)
-        ex, ey = sp[-1]
-        self.draw_hand((ex, ey), math.radians(-8), Lw * 0.5, 'open', LW * 0.8, r)
+        self.draw_hand((ex, ey), math.radians(112), Rw * 0.45, 'mitten', LW * 0.85, r)
 
         # --- the coffee: left edge, a steel tumbler held under his chin, steam
         Fx, Fy, Fw = 548, 1418, 104
