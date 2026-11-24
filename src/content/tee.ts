@@ -3,12 +3,12 @@ import sizes from "../../public/tee/fred/sizes.json";
 /** Lineup 01: again.., the shirts for the December shows. Everything the page says about them lives here. */
 
 export type Colour = "black" | "cream";
-export type Design = "c" | "a" | "d" | "e" | "f";
+export type Design = "c" | "a" | "d" | "e";
 export type City = "mumbai" | "bengaluru";
 
 /**
- * Five shirts. Same blank, same front (again.. in four scripts); the back is what changes.
- * The crowd is the tour's shirt (both cities in one drawing); each city also has its map, and Bengaluru has two more.
+ * Four shirts. Same blank, same front (again.. in four scripts); the back is what changes.
+ * The crowd is the tour's shirt (both cities in one drawing); each city also has its map, and Bengaluru has one more.
  * Each shirt comes in one colour only: a night shirt in black, a day shirt in off white.
  */
 export const DESIGNS: Record<Design, { no: string; name: string; city: City | null; colour: Colour; back: string }> = {
@@ -16,7 +16,6 @@ export const DESIGNS: Record<Design, { no: string; name: string; city: City | nu
   a: { no: "02", name: "map", city: "mumbai", colour: "cream", back: "the race course from above, the sea beside it, the sound rolling out from the stage" },
   d: { no: "03", name: "map", city: "bengaluru", colour: "cream", back: "the NICE grounds from above, every person in the crowd drawn, friends holding hands; the last train in at Madavara, Tumakuru Road jammed, the sound rolling out over the village to the lake" },
   e: { no: "04", name: "breath", city: "bengaluru", colour: "black", back: "the crowd through a heat camera on a cold December night, hands up, every breath rising" },
-  f: { no: "05", name: "end of the line", city: "bengaluru", colour: "cream", back: "the green line out to Madavara, its last station, where the show is: the last city, the end of the line" },
 };
 export const CITIES: City[] = ["mumbai", "bengaluru"];
 

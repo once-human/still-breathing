@@ -2,6 +2,10 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.9.2 — 2026-11-25
+### Shirts
+- End of the line is gone from the lineup, with its prints and frames.
+
 ## 0.9.1 — 2026-11-25
 ### Shirts
 - 01 crowd: four more notes in the same hand: a december moon / mallige in her hair / best friends since 7th std / filter coffee, still hot.
