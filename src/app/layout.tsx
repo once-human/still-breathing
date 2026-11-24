@@ -3,7 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { SmoothScroll } from "@/components/SmoothScroll";
 
-const description = "again.. mumbai: a fan-made tee for the Fred again.. India shows. Lineup 01 of Still Breathing. Not for sale.";
+const description = "again..: two shirts for the December shows in India, the crowd and the map. Lineup 01 of Still Breathing.";
 
 export const metadata: Metadata = {
   title: "still breathing",

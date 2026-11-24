@@ -228,7 +228,7 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
     try {
       const blob = await engine.current.photo({
         format, look, spp: PHOTO_SPP, signal: ac.signal,
-        caption: { title: "again.. mumbai", line: `${d.no} ${d.name} · ${COLOURS[tee].name} · ${sc.label}`, foot: "mumbai 08+09.12 · fan made, not for sale" },
+        caption: { title: "again..", line: `${d.no} ${d.name} · ${COLOURS[tee].name} · ${sc.label}`, foot: "the india shows, december" },
         onProgress: (n, t) => setDeveloping(n / t),
       });
       setPhoto({ url: URL.createObjectURL(blob), blob, name: `still-breathing-${d.name}-${tee}-${sceneId}-${format}.jpg` });

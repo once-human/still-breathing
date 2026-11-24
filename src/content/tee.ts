@@ -6,9 +6,10 @@ export type Colour = "black" | "cream";
 export type Design = "b" | "a";
 
 /** Lineup 01 has two shirts. Same blank, same front; the back is what changes. */
-export const DESIGNS: Record<Design, { no: string; name: string; back: string }> = {
-  b: { no: "01", name: "crowd", back: "the crowd at the barrier, drawn in lines, lit by the stage" },
-  a: { no: "02", name: "map", back: "the race course from above, the sea beside it, the sound rolling out from the stage" },
+/** Each shirt comes in one colour only: the crowd is a night shirt, the map is a day shirt. */
+export const DESIGNS: Record<Design, { no: string; name: string; colour: Colour; back: string }> = {
+  b: { no: "01", name: "crowd", colour: "black", back: "the crowd at the barrier, drawn in lines, lit by the stage" },
+  a: { no: "02", name: "map", colour: "cream", back: "the race course from above, the sea beside it, the sound rolling out from the stage" },
 };
 
 export const COLOURS: Record<Colour, { name: string; hex: string; ink: string }> = {
@@ -34,7 +35,7 @@ export const SHOWS = [
 export const THE_TEE = {
   lineup: "lineup 01",
   name: "again.. mumbai",
-  lede: "The four scripts of again.. on the chest, a drawing of the night across the back. Heavy cotton, cut loose, made for a long night on your feet.",
+  lede: "again.. in four scripts across the chest, a drawing of the night across the whole back. Heavy cotton, cut loose, made for a long night on your feet.",
   cloth: [
     ["cotton", "100% combed cotton, single jersey"],
     ["weight", "240 g/m², heavy and dense, not see-through"],

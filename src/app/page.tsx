@@ -64,7 +64,7 @@ export default function Home() {
           <section className="mt-16 md:col-span-5 md:mt-0 lg:col-span-4 lg:col-start-9">
             <Label>about this tee</Label>
             <p className="max-w-[40ch] text-[14px] text-ink/85">
-              still breathing makes one shirt per moment. lineup 01 is for fred again..&apos;s first shows in india. it&apos;s fan-made, not affiliated with fred again.. or anyone on the tour, and it isn&apos;t for sale.
+              still breathing makes one shirt per moment. lineup 01 is for the december shows in india: two shirts, the crowd in black and the map in off white, each made to order and sent anywhere in india.
             </p>
           </section>
         </div>
@@ -72,7 +72,7 @@ export default function Home() {
 
       <footer className="mt-32 grid grid-cols-2 gap-3 px-4 pb-4 text-[13px] md:grid-cols-4">
         <span className="border-t border-line pt-1.5">still breathing, lineup 01</span>
-        <span className="border-t border-line pt-1.5 text-quiet">fan-made, not for sale</span>
+        <span className="border-t border-line pt-1.5 text-quiet">made to order</span>
         <span className="hidden border-t border-line pt-1.5 text-quiet md:block">made in india</span>
         <span className="hidden border-t border-line pt-1.5 text-right text-quiet md:block">v{pkg.version}</span>
       </footer>

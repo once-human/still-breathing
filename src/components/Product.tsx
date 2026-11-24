@@ -3,14 +3,14 @@
 import { useState } from "react";
 import { Viewer } from "@/components/Viewer";
 import { Countdown } from "@/components/Countdown";
-import { COLOURS, DESIGNS, SIZES, SIZE_ORDER, SHOWS, THE_TEE, type Colour, type Design, type Size } from "@/content/tee";
+import { COLOURS, DESIGNS, SIZES, SIZE_ORDER, SHOWS, THE_TEE, type Design, type Size } from "@/content/tee";
 
 const fmtDays = (days: string[]) => days.map((d) => d.slice(8, 10)).join("+") + "." + days[0].slice(5, 7);
 
 /** The tee and its sheet, side by side: what you pick on the right is what you see on the left. */
 export function Product() {
-  const [tee, setTee] = useState<Colour>("black");
   const [design, setDesign] = useState<Design>("b");
+  const tee = DESIGNS[design].colour;
   const [size, setSize] = useState<Size>("M");
   const z = SIZES[size];
   return (
@@ -20,7 +20,7 @@ export function Product() {
       </div>
       <div className="md:col-span-5 lg:col-span-4 lg:col-start-9">
         <div className="md:sticky md:top-16">
-          <p className="border-t border-line pt-1.5 text-[13px] text-quiet">{THE_TEE.lineup} · fred again.. · fan-made</p>
+          <p className="border-t border-line pt-1.5 text-[13px] text-quiet">{THE_TEE.lineup} · the india shows, december</p>
           <div className="mt-4 flex gap-5 text-[15px]" role="group" aria-label="Design">
             {(Object.keys(DESIGNS) as Design[]).map((d) => (
               <button key={d} onClick={() => setDesign(d)} aria-pressed={d === design} className={`flex items-baseline gap-1.5 ${d === design ? "text-ink" : "text-quiet hover:text-ink"}`}>
@@ -35,18 +35,12 @@ export function Product() {
           <p className="mt-5 max-w-[34ch] text-ink/85">{THE_TEE.lede}</p>
           <p className="mt-3 max-w-[34ch] text-[13px] text-quiet">back: {DESIGNS[design].back}.</p>
 
-          <div className="mt-10 border-t border-line pt-1.5">
-            <p className="text-[13px] text-quiet">colour · {COLOURS[tee].name}</p>
-            <div className="mt-3 flex gap-3">
-              {(Object.keys(COLOURS) as Colour[]).map((c) => (
-                <button key={c} onClick={() => setTee(c)} aria-pressed={c === tee} aria-label={COLOURS[c].name}
-                  className={`h-11 w-11 rounded-full border transition ${c === tee ? "border-ink ring-2 ring-ink ring-offset-2 ring-offset-paper" : "border-line hover:border-quiet"}`}
-                  style={{ background: COLOURS[c].hex }} />
-              ))}
-            </div>
-          </div>
+          <p className="mt-6 flex items-center gap-2 text-[13px]">
+            <span className="inline-block h-3 w-3 rounded-full border border-line" style={{ background: COLOURS[tee].hex }} />
+            {COLOURS[tee].name}<span className="text-quiet">, the only colour this one comes in</span>
+          </p>
 
-          <div className="mt-8 border-t border-line pt-1.5">
+          <div className="mt-10 border-t border-line pt-1.5">
             <p className="text-[13px] text-quiet">size · {size}</p>
             <div className="mt-3 grid grid-cols-6 gap-1.5">
               {SIZE_ORDER.map((s) => (
