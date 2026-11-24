@@ -14,7 +14,7 @@ export type City = "mumbai" | "bengaluru";
 export const DESIGNS: Record<Design, { no: string; name: string; city: City | null; colour: Colour; back: string }> = {
   c: { no: "01", name: "crowd", city: null, colour: "black", back: "both nights in one drawing: the crowd from behind, the green line stopping at Madavara on one side, the Mumbai skyline behind the race course on the other, people from both cities in front" },
   a: { no: "02", name: "map", city: "mumbai", colour: "cream", back: "the race course from above, the sea beside it, the sound rolling out from the stage" },
-  d: { no: "03", name: "map", city: "bengaluru", colour: "cream", back: "the NICE grounds from above, the green line ending at Madavara beside them, the sound rolling out from the stage" },
+  d: { no: "03", name: "map", city: "bengaluru", colour: "cream", back: "the NICE grounds from above, every person in the crowd drawn, friends holding hands; the last train in at Madavara, Tumakuru Road jammed, the sound rolling out over the village to the lake" },
   e: { no: "04", name: "breath", city: "bengaluru", colour: "black", back: "the crowd through a heat camera on a cold December night, hands up, every breath rising" },
   f: { no: "05", name: "end of the line", city: "bengaluru", colour: "cream", back: "the green line out to Madavara, its last station, where the show is: the last city, the end of the line" },
 };

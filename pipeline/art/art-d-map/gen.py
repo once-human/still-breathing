@@ -17,6 +17,7 @@ stipple, hatching with uneven spacing. The map thins out object by object to
 a ragged edge; then ink spread, minimum-feature clean-up,
 misregistration and a binary alpha.
 """
+import sys
 import json, math, os, random, time
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageChops
@@ -44,8 +45,8 @@ LAT_C, LON_C = 13.05742, 77.47281             # Madavara station
 MLAT = 110574.0
 MLON = 111320.0 * math.cos(math.radians(LAT_C))
 ROT = math.radians(-30.0)
-SCALE = 0.78                                  # units per metre
-CX, CY = 404.0, 668.0                         # where the station lands
+SCALE = 1.0                                   # units per metre: close in, the grounds are the subject
+CX, CY = 372.0, 600.0                         # where the station lands
 cosR, sinR = math.cos(ROT), math.sin(ROT)
 
 _wr = random.Random(SEED + 1)
@@ -566,12 +567,12 @@ def dpx(pts):
 
 
 TYPE_ZONES = {   # units: x, y, w, h  (also used for the manifest)
-    'city': (56, 1268, 420, 146),
-    'dates': (782, 70, 360, 62),
+    'city': (360, 1330, 600, 150),
+    'dates': (440, 1488, 440, 60),
 }
 base = Image.new('L', (DW, DH), 0)
 bd = ImageDraw.Draw(base)
-bc = (660, 760)
+bc = (610, 640)
 harm = [(rng.uniform(0.04, 0.08), k, rng.uniform(0, TAU)) for k in (2, 3, 4, 5, 7, 11, 13)]
 blob = []
 for i in range(720):
@@ -590,7 +591,7 @@ bd.ellipse([(sx - 330) * DLR, (sy - 330) * DLR, (sx + 330) * DLR, (sy + 330) * D
 dens = base.filter(ImageFilter.GaussianBlur(55 * DLR))
 # the south-west runs out: the NICE Road dissolves before it reaches the city name
 sw = Image.new('L', (DW, DH), 0)
-ImageDraw.Draw(sw).polygon(dpx([(-200, 1180), (380, 1180), (560, 1420), (560, 1800), (-200, 1800)]), fill=255)
+ImageDraw.Draw(sw).polygon(dpx([(-200, 1250), (200, 1250), (300, 1500), (300, 1800), (-200, 1800)]), fill=255)
 sw = sw.filter(ImageFilter.GaussianBlur(70 * DLR))
 dens = SUB(dens, sw.point(lambda p: int(p * 0.85)))
 calm = Image.new('L', (DW, DH), 0)
@@ -697,9 +698,9 @@ def hatch_field(angle, spacing, width, rng, wav=0.5):
 
 
 rng = random.Random(SEED + 10)
-HA = hatch_field(-60, 5.6, 2.7, rng)       # the two hatch directions sit on the map's own grain
-HB = hatch_field(30, 5.4, 2.7, rng)
-HD = hatch_field(-15, 5.0, 2.8, rng, wav=0.3)     # the halls: tighter, a third direction
+HA = hatch_field(-60, 7.6, 2.8, rng)       # the two hatch directions sit on the map's own grain
+HB = hatch_field(30, 7.4, 2.8, rng)
+HD = hatch_field(-15, 7.0, 3.0, rng, wav=0.3)     # the halls: tighter, a third direction
 log('hatch fields done')
 
 KEY = blank()
@@ -714,6 +715,8 @@ for b in buildings:
     if not keep(c[0], c[1], rng, gamma=0.9):
         continue
     a = poly_area(b)
+    if a < 85:
+        continue
     if a < 130:
         bS.append(b)
     else:
@@ -788,7 +791,7 @@ load = Image.effect_noise((UW // 45 + 2, UH // 45 + 2), 60).convert('L').resize(
 built = poly_mask(buildings).resize((UW // 4, UH // 4), Image.BILINEAR).filter(ImageFilter.GaussianBlur(7))
 bmax = max(1, max(built.getdata()))
 built = built.point(lambda p: min(255, int(p * 255 / bmax * 2.2))).resize((UW, UH), Image.BICUBIC)
-g = 8.2
+g = 9.0
 ga = math.radians(15)
 cga, sga = math.cos(ga), math.sin(ga)
 span = int(math.hypot(UW, UH) / g) + 2
@@ -800,7 +803,7 @@ for i in range(-span, span):
         if not (0 <= x < UW and 0 <= y < UH):
             continue
         bt = built.getpixel((int(x), int(y))) / 255.0
-        if not keep(x, y, rng, gamma=1.6) or rng.random() > 0.5 + 0.5 * bt:
+        if bt < 0.12 or not keep(x, y, rng, gamma=1.6) or rng.random() > 0.15 + 0.85 * bt:
             continue
         r = 1.22 + 0.95 * bt + 0.3 * (load.getpixel((int(x), int(y))) / 255.0) + rng.uniform(-0.08, 0.1)
         dot(gd, x, y, r, squash=rng.uniform(0.86, 1.06))
@@ -821,8 +824,7 @@ for _ in range(11000):
         continue
     dot(kdd, x, y, rng.uniform(1.3, 1.65), rng)
 KEY_DUST = SUB(AND(KEY_DUST, BIEC), dilate(BLD, int(2 * R)))
-KEY_GROUND = OR(KEY_GROUND, KEY_DUST)
-CITY = OR(KEY_BLD, KEY_GROUND)
+CITY = KEY_BLD
 CITY = SUB(CITY, ROADS)
 CITY = SUB(CITY, dilate(METRO_M, 0))
 log('city texture done')
@@ -898,21 +900,23 @@ for w_, pts in bridges:
         x0, y0 = x + nx * side * (w_ / 2 + 2.2), y + ny * side * (w_ / 2 + 2.2)
         x1, y1 = x + nx * side * (w_ / 2 + 6.0) + 1.0, y + ny * side * (w_ / 2 + 6.0) + 1.2
         pen(krd, [(x0, y0), (x1, y1)], 2.6, rng, wob=0.2, trem=0, a0=0.5, a1=0.8)
-# minor roads that matter: the tertiary roads get one edge in pieces
+# the village lanes: real streets, both kerbs pulled by hand, fading out where the drawing does
 for w_, k, pts in roads:
-    if k != 'tertiary':
+    if k not in ('tertiary', 'residential', 'unclassified', 'living_street'):
         continue
-    e = offset_path(densify(pts, 4.0), w_ / 2 + 0.5)
-    for seg in thin_path(e, rng, (20, 70), gamma=1.3):
-        if len(seg) > 3 and rng.random() < 0.6:
-            pen_path(krd, seg, 2.6, rng, amp=0.5, trem=0.3)
+    ww = max(w_, 6.4)
+    for side in (-1, 1):
+        e = offset_path(densify(pts, 4.0), side * (ww / 2 + 0.5))
+        for seg in thin_path(e, rng, (40, 150), gamma=0.55):
+            if len(seg) > 3 and rng.random() < 0.88:
+                pen_path(krd, seg, 2.7, rng, amp=0.45, trem=0.3)
 log('roads done')
 
 # ---------------------------------------------------------------- the lake shore
 KL = blank()
 kld = ImageDraw.Draw(KL)
 for ring in [lake] + islands:
-    for seg in thin_path(ring + ring[:1], rng, (40, 120), gamma=0.6):
+    for seg in thin_path(ring + ring[:1], rng, (40, 120), gamma=0.0):
         if len(seg) > 3:
             pen_path(kld, seg, 3.2, rng, amp=0.6, trem=0.4, pv=0.25)
     for seg in arclen_split(ring + ring[:1], rng, (50, 200), (20, 80)):
@@ -925,10 +929,9 @@ for pd in ponds:
             pen_path(kld, seg, 2.8, rng, amp=0.4)
 
 # the BIEC compound wall: a quick dashed line, a hand in a hurry
-for seg in arclen_split(biec + biec[:1], rng, (12, 30), (5, 11)):
-    m = seg[len(seg) // 2]
-    if keep(m[0], m[1], rng, gamma=0.5):
-        pen(kld, [seg[0], seg[len(seg) // 2], seg[-1]], 2.7, rng, wob=0.3, trem=0.2)
+for seg in arclen_split(biec + biec[:1], rng, (120, 300), (0.01, 0.02)):
+    if len(seg) > 2:
+        pen_path(kld, seg, 3.4, rng, amp=0.35, trem=0.2)
 log('shore + wall done')
 
 # ==========================================================================
@@ -945,17 +948,20 @@ czd = ImageDraw.Draw(CZ)
 avoid = dilate(OR(HALL_M, poly_mask([b for b in buildings if poly_area(b) > 60])), int(3 * R)).resize((UW, UH), Image.NEAREST)
 inside_b = erode(BIEC, int(5 * R)).resize((UW, UH), Image.NEAREST)
 toward = math.atan2(-fy, -fx)      # arms reach toward the stage
+sys.path.insert(0, os.path.dirname(HERE))
+from aerial import Crowd, lay_out
 placed = 0
-G = 5.9
+G = 19.0
 row = 0
 gy_ = 0.0
 lean = noise(40, rng, 60).resize((UW, UH), Image.BILINEAR)   # pockets and clumps in the crowd
+cands = []
 while gy_ < UH:
     gx_ = (row % 2) * G / 2
     row += 1
     while gx_ < UW:
-        x, y = gx_ + rng.uniform(-1.9, 1.9), gy_ + rng.uniform(-1.9, 1.9)
-        gx_ += G * rng.uniform(0.86, 1.14)
+        x, y = gx_ + rng.uniform(-1.7, 1.7), gy_ + rng.uniform(-1.7, 1.7)
+        gx_ += G * rng.uniform(0.94, 1.08)
         if not (0 <= x < UW - 1 and 0 <= y < UH - 1):
             continue
         if not inside_b.getpixel((int(x), int(y))) or avoid.getpixel((int(x), int(y))):
@@ -963,7 +969,7 @@ while gy_ < UH:
         rx_, ry_ = x - sx, y - sy
         dist = rx_ * fx + ry_ * fy
         lat = abs(rx_ * nx_ + ry_ * ny_)
-        if dist < 18 or math.hypot(x - FOH[0], y - FOH[1]) < 13:
+        if dist < 30 or math.hypot(x - FOH[0], y - FOH[1]) < 26:
             continue
         clump = lean.getpixel((int(x), int(y))) / 255.0
         p = (0.82 + 0.18 * clump) * math.exp(-max(0, dist - 120 - 60 * clump) / 120.0) * \
@@ -973,43 +979,11 @@ while gy_ < UH:
             continue
         placed += 1
         if p > 0.3:
-            dot(czd, x, y, 5.0)
-        kind = rng.random()
-        hr = rng.uniform(1.45, 1.8)
-        if kind < 0.5:                           # a head
-            dot(cdw, x, y, hr, rng, squash=rng.uniform(0.85, 1.05))
-        elif kind < 0.72:                        # head + one arm up toward the stage
-            dot(cdw, x, y, hr, rng)
-            a = toward + rng.gauss(0, 0.55)
-            side = rng.choice((-1.3, 1.3))
-            bx, by = x + math.cos(a + side) * hr * 0.8, y + math.sin(a + side) * hr * 0.8
-            L = rng.uniform(2.8, 4.2)
-            ex, ey = bx + math.cos(a) * L, by + math.sin(a) * L
-            pen(cdw, [(bx, by), (ex, ey)], 2.5, rng, wob=0.2, trem=0, a0=0.3, a1=0.3, pv=0.1)
-            dot(cdw, ex, ey, 1.35)
-        elif kind < 0.84:                        # both hands up
-            dot(cdw, x, y, hr * 0.95, rng)
-            a = toward + rng.gauss(0, 0.35)
-            for s_ in (-0.55, 0.55):
-                bx, by = x + math.cos(a + s_ * 2.4) * hr * 0.7, y + math.sin(a + s_ * 2.4) * hr * 0.7
-                L = rng.uniform(2.8, 3.8)
-                ex, ey = bx + math.cos(a + s_ * 0.45) * L, by + math.sin(a + s_ * 0.45) * L
-                cdw.line([(bx * R, by * R), (ex * R, ey * R)], fill=255, width=int(2.5 * R))
-                dot(cdw, ex, ey, 1.3)
-        elif kind < 0.92:                        # on someone's shoulders: a bigger double head
-            dot(cdw, x, y, hr * 1.25, rng)
-            a = toward + rng.gauss(0, 0.4)
-            dot(cdw, x + math.cos(a) * 2.6, y + math.sin(a) * 2.6, hr * 0.9, rng)
-        else:                                    # phone held up: a lit slab + head
-            dot(cdw, x, y, hr * 0.9, rng)
-            a = toward + rng.gauss(0, 0.5)
-            cx_, cy_ = x + math.cos(a) * 4.0, y + math.sin(a) * 4.0
-            hw, hh = 1.45 * R, 2.2 * R
-            ca_, sa_ = math.cos(a + math.pi / 2), math.sin(a + math.pi / 2)
-            quad = [(cx_ * R + ca_ * dx - sa_ * dy, cy_ * R + sa_ * dx + ca_ * dy)
-                    for dx, dy in ((-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh))]
-            (adw if rng.random() < 0.06 else cdw).polygon(quad, fill=255)
-    gy_ += G * 0.87
+            dot(czd, x, y, 14.5)
+        cands.append((x, y, p, dist))
+    gy_ += G * 0.88
+CROWD = Crowd(cdw, R, toward, s=1.7, accent=adw)
+lay_out(cands, CROWD, rng, rings=2, pairs=9, riders=0.0)
 CZ = thr(CZ.filter(ImageFilter.GaussianBlur(5 * R)), 120)
 log(f'crowd: {placed} marks')
 
@@ -1022,22 +996,27 @@ sp = catmull(stream, step=1.0)
 spn = normals(sp)
 scum = cumlen(sp)
 TRAIL = blank()
-ImageDraw.Draw(TRAIL).line(px(sp[int(len(sp) * 0.12):]), fill=255, width=int(19 * R), joint='curve')
+ImageDraw.Draw(TRAIL).line(px(sp[int(len(sp) * 0.12):]), fill=255, width=int(34 * R), joint='curve')
 TRAIL = SUB(TRAIL, poly_mask([biec]).point(lambda p: 255 - p))
 WALK = blank()
 wkd = ImageDraw.Draw(WALK)
 walkers = 0
+walk = Crowd(wkd, R, 0.0, s=1.3)
 i = int(len(sp) * 0.04)
 while i < len(sp) * 0.93:
     x, y = sp[i]
     t = scum[i] / scum[-1]
     nx, ny = spn[i]
-    for _ in range(rng.choice((1, 2, 2, 3))):
-        o = rng.gauss(0, 2.6 + 1.6 * t)
+    j = min(i + 3, len(sp) - 1)
+    head = math.atan2(sp[j][1] - y, sp[j][0] - x)
+    n_ = rng.choice((1, 2, 2, 3))
+    o0 = rng.gauss(0, 3.0 + 2.0 * t)
+    for q in range(n_):
+        o = o0 + (q - (n_ - 1) / 2) * 15.0
         wx, wy = x + nx * o + rng.gauss(0, 0.8), y + ny * o + rng.gauss(0, 0.8)
-        dot(wkd, wx, wy, rng.uniform(1.45, 1.75), rng)
+        walk.person(wx, wy, head + rng.gauss(0, 0.15), rng, k=rng.uniform(0.92, 1.0))
         walkers += 1
-    i += int(rng.uniform(4, 9))
+    i += int(rng.uniform(18, 26))
 KC = OR(SUB(KC, TRAIL), WALK)
 cdw = ImageDraw.Draw(KC)
 log(f'stream: {walkers} walkers')
@@ -1105,17 +1084,17 @@ dp = densify(deck, 2.0)
 dn_ = normals(dp)
 dc = cumlen(dp)
 nxt = 0.0
+PIERS = []
 for (x, y), (nx, ny), s in zip(dp, dn_, dc):
     if s < nxt:
         continue
     nxt = s + rng.uniform(15, 18.5)      # the deck spans, pier to pier
+    PIERS.append((x, y, nx, ny))
     if dc[-1] - s < 8 or not keep(x, y, rng, gamma=0.4):
         continue
     # pier cap: a tick right across the deck
     pen(gnd, [(x + nx * 8.6, y + ny * 8.6), (x - nx * 8.6, y - ny * 8.6)], 2.9, rng, wob=0.3, trem=0, a0=0.4, a1=0.6)
     # the pier's shadow on the ground, falling south-east (key)
-    shx, shy = x + SHD[0] * 1.6, y + SHD[1] * 1.6
-    dot(kmd, shx, shy, 1.7, rng)
 # deck shadow: a broken key line under the viaduct
 for seg in arclen_split(offset_path(deck, 0), rng, (16, 40), (8, 20)):
     m = seg[len(seg) // 2]
@@ -1138,6 +1117,12 @@ for side in (-1, 1):
     e = offset_path(deck[-8:], side * 4.8)
     pen_path(kmd, [(x + 1.2, y - 1.0) for x, y in e], 2.7, rng, amp=0.3, trem=0, a0=0.3, a1=0.2)
 dot(kmd, ex_ + ux * 6, ey_ + uy * 6, 3.4, rng)
+DECK_SOLID = road_mask([(9.6, METRO_C)])
+SPANS = blank()
+spd = ImageDraw.Draw(SPANS)
+for x, y, nx, ny in PIERS:
+    spd.line(px([(x + nx * 5.5, y + ny * 5.5), (x - nx * 5.5, y - ny * 5.5)]), fill=255, width=int(1.9 * R))
+GREEN = OR(GREEN, SUB(DECK_SOLID, SPANS))
 # Madavara station: the platform box, hatched in green, drawn over in key
 if station:
     st = simplify(station, 1.0)
@@ -1161,7 +1146,7 @@ orch_mask = poly_mask(orchards).resize((UW, UH), Image.NEAREST)
 def tree(d, x, y, base, rng, n=(4, 7)):
     for _ in range(rng.randint(*n)):
         ox, oy = rng.gauss(0, base * 0.42), rng.gauss(0, base * 0.42)
-        dot(d, x + ox, y + oy, base * rng.uniform(0.46, 0.72), rng)
+        dot(d, x + ox, y + oy, base * rng.uniform(0.58, 0.82), rng)
 
 
 for poly in orchards:
@@ -1171,7 +1156,7 @@ for poly in orchards:
     xs, ys = [p[0] for p in poly], [p[1] for p in poly]
     ang = rng.uniform(0, math.pi)
     ca_, sa_ = math.cos(ang), math.sin(ang)
-    sp_ = rng.uniform(11.0, 12.4)
+    sp_ = rng.uniform(15.0, 17.0)
     c0 = centroid(poly)
     ext = max(max(xs) - min(xs), max(ys) - min(ys))
     rowi = -ext
@@ -1186,9 +1171,8 @@ for poly in orchards:
                 continue
             if rng.random() < 0.1 or not keep(x, y, rng, gamma=1.1):
                 continue           # a gap in the row: a tree that died, a well, a shed
-            tb = rng.uniform(3.3, 4.1)
+            tb = rng.uniform(4.4, 5.4)
             tree(od, x, y, tb, rng, (3, 4))
-            dot(kmd, x + SHD[0] * 0.8, y + SHD[1] * 0.8, rng.uniform(1.5, 1.9), rng)   # its shadow
         rowi += sp_ * rng.uniform(0.92, 1.08)
 GREEN = OR(GREEN, ORCH)
 
@@ -1209,7 +1193,7 @@ for _ in range(9000):
             scd.line([(bx * R, y * R), ((bx + math.cos(a) * L) * R, (y + math.sin(a) * L) * R)], fill=255, width=int(2.6 * R))
     else:
         dot(scd, x, y, rng.uniform(1.5, 2.1), rng)
-GREEN = OR(GREEN, SCR)
+# (the scrub was specks: it stays off the shirt)
 
 # woods, parks, the school ground: lumpy canopies
 WD = blank()
@@ -1236,14 +1220,14 @@ for _ in range(16000):
     x, y = rng.uniform(0, UW - 1), rng.uniform(0, UH - 1)
     if not field_s.getpixel((int(x), int(y))) or cz_s.getpixel((int(x), int(y))):
         continue
-    if tclump.getpixel((int(x), int(y))) < 140 or not keep(x, y, rng, gamma=0.8):
+    if tclump.getpixel((int(x), int(y))) < 168 or not keep(x, y, rng, gamma=0.8) or rng.random() < 0.45:
         continue
     for k in range(rng.choice((2, 3, 3))):
         a = -math.pi / 2 + (k - 1) * 0.5 + rng.gauss(0, 0.15)
-        L = rng.uniform(3.0, 4.4)
-        bx = x + (k - 1) * 1.6
-        tfd.line([(bx * R, y * R), ((bx + math.cos(a) * L) * R, (y + math.sin(a) * L) * R)], fill=255, width=int(2.6 * R))
-GREEN = OR(GREEN, AND(TUFT, FIELD))
+        L = rng.uniform(5.0, 7.0)
+        bx = x + (k - 1) * 2.6
+        tfd.line([(bx * R, y * R), ((bx + math.cos(a) * L) * R, (y + math.sin(a) * L) * R)], fill=255, width=int(3.2 * R))
+GREEN = OR(GREEN, SUB(SUB(SUB(FIELD, CZ), TUFT), TRAIL))
 # crowd edge: the grass shows between the last people
 edge_turf = AND(SUB(CZ, erode(CZ, int(3 * R))), FIELD)
 GREEN = OR(GREEN, AND(edge_turf, TUFT))
@@ -1304,7 +1288,7 @@ for i, Lv in enumerate(levels):
     ys_, xs_ = np.nonzero(edge & (brk >= cut))
     on = set()
     for x, y in zip(xs_.tolist(), ys_.tolist()):
-        if keep(x, y, rng, gamma=1.0):
+        if keep(x, y, rng, gamma=0.25, floor=0.6):
             on.add((x, y))
     wob = 0.5 + i * 0.12
 
@@ -1332,10 +1316,10 @@ while yy < lb[3] + 6:
            for x in range(lb[0] - 200, lb[2] + 10, 2)]
     for seg in arclen_split(pts, rng, (8, 40), (7, 34)):
         m = seg[len(seg) // 2]
-        if keep(m[0], m[1], rng, gamma=1.5):
+        if keep(m[0], m[1], rng, gamma=0.35, floor=0.55):
             pen_path(wvd, seg, 2.7, rng, amp=0.3, trem=0.15, step=3, pv=0.15)
-    yy += rng.uniform(7.6, 10.0)
-deep = thr(Image.fromarray(np.clip(255 - land_blur, 0, 255).astype(np.uint8)).resize((W, H), Image.BILINEAR), 255 - 118)
+    yy += rng.uniform(5.8, 7.4)
+deep = thr(Image.fromarray(np.clip(255 - land_blur, 0, 255).astype(np.uint8)).resize((W, H), Image.BILINEAR), 255 - 168)
 WATER_M = SUB(OR(LAKE, PONDS), ISLANDS)
 BLUE = OR(BLUE, AND(AND(waves, deep), WATER_M))
 log('blue done')
@@ -1379,6 +1363,98 @@ for k, rad in enumerate(radii):
 log('rings done')
 
 # ==========================================================================
+# LIFE ON THE ROADS -- the last train pulling in, and everyone on Tumakuru Road
+# ==========================================================================
+rng = random.Random(SEED + 52)
+VEH_M = blank()            # paper under everything on wheels
+VEH_K = blank()            # its ink
+VEH_G = blank()            # Bengaluru's autos: green
+vmd, vkd, vgd = ImageDraw.Draw(VEH_M), ImageDraw.Draw(VEH_K), ImageDraw.Draw(VEH_G)
+
+
+def along(path, s):
+    """point and unit direction at arc length s"""
+    cl = cumlen(path)
+    s = min(max(s, 0), cl[-1] - 1e-6)
+    i = next(k for k in range(1, len(cl)) if cl[k] >= s)
+    t = (s - cl[i - 1]) / max(cl[i] - cl[i - 1], 1e-9)
+    (x0, y0), (x1, y1) = path[i - 1], path[i]
+    L = math.hypot(x1 - x0, y1 - y0) or 1
+    return (x0 + (x1 - x0) * t, y0 + (y1 - y0) * t), ((x1 - x0) / L, (y1 - y0) / L)
+
+
+def oblong(c, u, half_l, half_w, r=0.35):
+    """a rounded oblong along u, page units"""
+    ux, uy = u
+    vx, vy = -uy, ux
+    pts = []
+    for cx_, cy_, a0 in ((half_l - half_w * r, half_w - half_w * r, 0), (-half_l + half_w * r, half_w - half_w * r, 90),
+                         (-half_l + half_w * r, -half_w + half_w * r, 180), (half_l - half_w * r, -half_w + half_w * r, 270)):
+        for k in range(5):
+            a = math.radians(a0 + k * 22.5)
+            lx, ly = cx_ + math.cos(a) * half_w * r, cy_ + math.sin(a) * half_w * r
+            pts.append((c[0] + ux * lx + vx * ly, c[1] + uy * lx + vy * ly))
+    return pts
+
+
+# the last train: three cars nosing up to the buffer stop, in the platform
+mc = densify(METRO_C, 2.0)
+mcl = cumlen(mc)
+s0 = mcl[-1] - 26
+for car in range(3):
+    mid = s0 - car * 37 - 17
+    c, u = along(mc, mid)
+    body = oblong(c, u, 17.5, 4.6, r=0.55 if car == 0 else 0.25)
+    vmd.polygon(px(oblong(c, u, 19.0, 6.1, r=0.5)), fill=255)
+    pen(vkd, body, 2.6, rng, wob=0.15, trem=0.1, closed=True)
+    ux, uy = u
+    vx, vy = -uy, ux
+    for k in (-11, -3.5, 4, 11.5):               # roof panels, scratched across
+        pen(vkd, [(c[0] + ux * k + vx * 2.6, c[1] + uy * k + vy * 2.6), (c[0] + ux * k - vx * 2.6, c[1] + uy * k - vy * 2.6)],
+            2.0, rng, wob=0.1, trem=0)
+    if car == 0:                                 # the cab's windscreen
+        f = (c[0] + ux * 14.2, c[1] + uy * 14.2)
+        vkd.polygon(px(oblong(f, u, 1.6, 3.2, r=0.6)), fill=255)
+
+# Tumakuru Road, both ways, thick with people heading in: cars, buses, green autos
+for nm, br, pts in motor:
+    path = densify(pts, 2.0)
+    cl = cumlen(path)
+    s = rng.uniform(4, 20)
+    while s < cl[-1] - 8:
+        c, u = along(path, s)
+        if not (40 < c[0] < UW - 40 and 40 < c[1] < UH - 40) or not keep(c[0], c[1], rng, gamma=0.5):
+            s += rng.uniform(16, 30)
+            continue
+        jam = math.exp(-math.hypot(c[0] - GATE[0], c[1] - GATE[1]) / 260.0)
+        if jam < 0.22 or rng.random() > 0.35 + jam:
+            s += rng.uniform(30, 60)
+            continue
+        lane = rng.gauss(0, 0.4)
+        cc = (c[0] - u[1] * lane, c[1] + u[0] * lane)
+        kind = rng.random()
+        if kind < 0.16:                           # a BMTC bus
+            hl, hw = 16.0, 4.4
+            vmd.polygon(px(oblong(cc, u, hl + 1.4, hw + 1.4)), fill=255)
+            vkd.polygon(px(oblong(cc, u, hl, hw, r=0.2)), fill=255)
+            for k in (-7.5, -2.5, 2.5, 7.5):       # roof hatches knocked out
+                vkd.polygon(px(oblong((cc[0] + u[0] * k * 1.3, cc[1] + u[1] * k * 1.3), u, 1.6, 2.1, r=0.3)), fill=0)
+            step = hl * 2 + rng.uniform(7, 12)
+        elif kind < 0.5:                          # an auto: green, its canopy a rounded nose
+            vmd.polygon(px(oblong(cc, u, 6.8, 5.0, r=0.6)), fill=255)
+            vgd.polygon(px(oblong(cc, u, 5.4, 3.7, r=0.7)), fill=255)
+            vmd.polygon(px(oblong((cc[0] - u[0] * 1.6, cc[1] - u[1] * 1.6), u, 1.0, 2.2, r=0.4)), fill=255)
+            step = 14 + rng.uniform(4, 12)
+        else:                                     # a car, its windscreen a slit of paper
+            vmd.polygon(px(oblong(cc, u, 8.6, 5.0, r=0.45)), fill=255)
+            vkd.polygon(px(oblong(cc, u, 7.3, 3.7, r=0.45)), fill=255)
+            w_ = (cc[0] + u[0] * 2.4, cc[1] + u[1] * 2.4)
+            vkd.polygon(px(oblong(w_, u, 1.1, 2.8, r=0.4)), fill=0)
+            step = 18 + rng.uniform(4, 12)
+        s += step * (1.0 - 0.3 * jam) + rng.uniform(0, 26) * (1 - jam)
+log('roads alive')
+
+# ==========================================================================
 # assemble
 # ==========================================================================
 rng = random.Random(SEED + 55)
@@ -1397,6 +1473,15 @@ KEYALL = SUB(KEYALL, HALO)
 GREEN = SUB(GREEN, HALO)
 BLUE = SUB(BLUE, HALO)
 ACCENT = OR(ACC, RINGS)
+_lift = blank()
+for k_ in range(1, 9):
+    _lift.paste(255, (0, 0), BIEC.transform(BIEC.size, Image.AFFINE, (1, 0, -SHD[0] * 1.35 * R * k_ / 8, 0, 1, -SHD[1] * 1.35 * R * k_ / 8)))
+SLAB = SUB(_lift, BIEC)
+KEYALL = OR(SUB(KEYALL, SLAB), SLAB)
+GREEN, BLUE, ACCENT = SUB(GREEN, SLAB), SUB(BLUE, SLAB), SUB(ACCENT, SLAB)
+KEYALL = OR(SUB(KEYALL, VEH_M), VEH_K)
+GREEN = OR(SUB(GREEN, VEH_M), VEH_G)
+BLUE = SUB(BLUE, VEH_M)
 
 # a ragged outer edge for anything that still runs toward the canvas rectangle
 edge_f = Image.new('L', (DW, DH), 0)
@@ -1468,6 +1553,9 @@ anch = {
     'halls': [round(c) for c in hall_c], 'lake': [round(c) for c in lake_c],
     'interchange': [round(c) for c in proj(13.0556, 77.4769)],
     'tumakuru_road': [round(c) for c in proj(13.0600, 77.4640)],
+    'rings': getattr(CROWD, 'rings_at', []),
+    'train': [round(c) for c in along(mc, s0 - 17)[0]],
+    'jam': [round(c) for c in GATE],
 }
 json.dump({'palette': PAL, 'anchors': anch, 'type_zones': TYPE_ZONES},
           open(os.path.join(HERE, f'render-info{SUFFIX}.json'), 'w'), indent=1)

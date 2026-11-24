@@ -2,6 +2,14 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.9.0 — 2026-11-25
+Bengaluru's map, drawn again as a picture to wear.
+
+### Shirts
+- 03 map (off white): closer in, so the grounds are the picture. Everyone in the crowd is a small drawn person seen from above, arms up; friends hold hands in pairs and dance in rings. The halls stand up off the ground, the Green Line is a solid line with the last train in at Madavara, buses, autos and cars are jammed on Tumakuru Road outside the gate, and the village streets run down to the lake, where bengaluru and the dates sit on the water.
+- Four handwritten notes: madavara. the green line ends here / everyone's on tumakuru road / we'll be somewhere in here / strangers, holding hands.
+- Bigger, bolder marks everywhere: no fine dots or speckle.
+
 ## 0.8.1 — 2026-11-25
 ### Shirts
 - 01 crowd: the two friends on the right are drawn again, both from behind, his arm round her shoulders.
