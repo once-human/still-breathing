@@ -2,6 +2,13 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.7.0 — 2026-11-25
+Your hands and hair in front of the tee, to the pixel.
+
+### Try-on
+- Your hands, forearms, hair and face show in front of the tee with their real edges. A trained model on your device reads every pixel of the camera as hair, skin, face, clothes or background; nothing leaves the browser.
+- Your own clothes never show through, and bare skin counts only along your forearms and hands.
+
 ## 0.6.0 — 2026-11-25
 The studio and the living room are real places now.
 

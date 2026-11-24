@@ -26,7 +26,7 @@ import { texture, uv, vec2, vec3, vec4, float, normalMap, normalize, vertexColor
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-import type { PoseLandmarker, NormalizedLandmark, Landmark } from "@mediapipe/tasks-vision";
+import type { PoseLandmarker, ImageSegmenter, NormalizedLandmark, Landmark } from "@mediapipe/tasks-vision";
 import { KNIT_REPEAT } from "@/lib/viewer/scene";
 import { SIZES, type Size } from "@/content/tee";
 
@@ -110,6 +110,12 @@ export class TryOn {
   private mask = document.createElement("canvas");
   private tier = 0; private busy = 0; private over = 0; private swapping = false; private camInt = 1 / 30;
   private makePose: ((model: "full" | "lite") => Promise<PoseLandmarker>) | null = null;
+  // what every pixel of the frame is (Google's selfie multiclass model: hair, skin, face, clothes, other), so your
+  // hands, arms, hair and face are laid over the tee exactly where they are in front of it
+  private seg: ImageSegmenter | null = null; private cat: Uint8Array | null = null; private catW = 0; private catH = 0;
+  private lab = { hair: 1, body: 2, face: 3, others: 5 };
+  private segIn = document.createElement("canvas");
+  private segCv = [document.createElement("canvas"), document.createElement("canvas"), document.createElement("canvas")];
   private midU = new OneEuro(1.0, 0.04, 1.6); private midV = new OneEuro(1.0, 0.04, 1.6); private body = 0;
   private keyOff = new THREE.Vector3(0, 2, 2); private shown = false; private qSpeed = 0;
   private lit = false; private lum = 0.5; private tint = new THREE.Color(1, 1, 1); private side = new THREE.Vector2();
@@ -134,7 +140,7 @@ export class TryOn {
 
   async start(design: string, tee: "black" | "cream", size: Size) {
     this.onStatus("model");
-    const [{ PoseLandmarker, FilesetResolver }] = await Promise.all([import("@mediapipe/tasks-vision"), this.renderer.init()]);
+    const [{ PoseLandmarker, ImageSegmenter, FilesetResolver }] = await Promise.all([import("@mediapipe/tasks-vision"), this.renderer.init()]);
     const files = await FilesetResolver.forVisionTasks("/mediapipe");
     const opts = (delegate: "GPU" | "CPU", model: string) => ({
       baseOptions: { modelAssetPath: `/mediapipe/pose_landmarker_${model}.task`, delegate },
@@ -143,7 +149,19 @@ export class TryOn {
     // every device starts at full quality and is eased down only if it really can't keep up (see govern)
     this.tier = 0;
     this.makePose = (model) => PoseLandmarker.createFromOptions(files, opts("GPU", model)).catch(() => PoseLandmarker.createFromOptions(files, opts("CPU", "lite")));
-    this.pose = await this.makePose(this.tier ? "lite" : "full");
+    const segOpts = (delegate: "GPU" | "CPU") => ({
+      baseOptions: { modelAssetPath: "/mediapipe/selfie_multiclass_256x256.tflite", delegate },
+      runningMode: "VIDEO" as const, outputCategoryMask: true, outputConfidenceMasks: false,
+    });
+    const [pose, seg] = await Promise.all([
+      this.makePose(this.tier ? "lite" : "full"),
+      ImageSegmenter.createFromOptions(files, segOpts("GPU")).catch(() => ImageSegmenter.createFromOptions(files, segOpts("CPU"))).catch(() => null),
+    ]);
+    this.pose = pose; this.seg = seg;
+    if (seg) {
+      const L = seg.getLabels().map((x) => x.toLowerCase()), at = (k: string, d: number) => { const i = L.findIndex((x) => x.includes(k)); return i < 0 ? d : i; };
+      this.lab = { hair: at("hair", 1), body: at("body", 2), face: at("face", 3), others: at("other", 5) };
+    }
     if (this.dead) return;
     // a soft room-like environment; its strength and colour follow the video
     this.scene.environment = new THREE.PMREMGenerator(this.renderer).fromScene(new RoomEnvironment(), 0.04).texture;
@@ -378,6 +396,17 @@ export class TryOn {
     if (fc.width !== v.videoWidth || fc.height !== v.videoHeight) { fc.width = v.videoWidth; fc.height = v.videoHeight; }
     this.fctx.drawImage(v, 0, 0);
     const r = this.pose.detectForVideo(fc, now);
+    if (this.seg) {
+      try {
+        // read at half size: the model itself sees 256 px, and the mask costs a quarter as much to fetch and walk
+        const si = this.segIn, sw = Math.round(fc.width / 2), shh = Math.round(fc.height / 2);
+        if (si.width !== sw || si.height !== shh) { si.width = sw; si.height = shh; }
+        si.getContext("2d")!.drawImage(fc, 0, 0, sw, shh);
+        const sr = this.seg.segmentForVideo(si, now), cm = sr.categoryMask;
+        if (cm) { const a = cm.getAsUint8Array(); if (!this.cat || this.cat.length !== a.length) this.cat = new Uint8Array(a.length); this.cat.set(a); this.catW = cm.width; this.catH = cm.height; }
+        sr.close();
+      } catch { this.seg = null; this.cat = null; }
+    }
     this.place(r.landmarks[0] ?? null, r.worldLandmarks[0] ?? null, t, dt);
     if (this.frameN++ % 10 === 0) this.light(dt * 10);
     this.renderer.render(this.scene, this.camera);
@@ -615,6 +644,7 @@ export class TryOn {
     const W = this.arms.width, H = this.arms.height;
     c.clearRect(0, 0, W, H);
     if (!l || !this.rig.visible) return;
+    if (this.cat && this.catW) { this.drawFront(c, W, H, l); return; }
     const P = this.P, torsoZ = (P.get(L_SH)!.z + P.get(R_SH)!.z) / 2;
     const sw = Math.hypot((this.img[L_SH].x - this.img[R_SH].x) * W, (this.img[L_SH].y - this.img[R_SH].y) * H), r = sw * 0.11;
     // the arm as one solid shape: a round-capped stroke along the forearm into the hand, plus the palm.
@@ -641,6 +671,44 @@ export class TryOn {
     c.globalCompositeOperation = "source-over";
   }
 
+  /**
+   * What's in front of the tee, to the pixel: your hair, your face (a chin over the collar), anything you hold, and
+   * your forearms and hands. Bare skin counts only along your forearms and hands; skin elsewhere (a neck, a
+   * tank top's shoulders) is what the tee covers. Your own clothes never show through.
+   */
+  private drawFront(c: CanvasRenderingContext2D, W: number, H: number, l: NormalizedLandmark[]) {
+    const w = this.catW, h = this.catH, cat = this.cat!, [fc, sc, ac] = this.segCv;
+    for (const cv of this.segCv) if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+    const fx = fc.getContext("2d")!, sx = sc.getContext("2d")!;
+    const front = fx.createImageData(w, h), skin = sx.createImageData(w, h);
+    const F = new Uint32Array(front.data.buffer), S = new Uint32Array(skin.data.buffer), { hair, body, face, others } = this.lab;
+    for (let i = 0; i < cat.length; i++) { const k = cat[i]; if (k === hair || k === face || k === others) F[i] = 0xffffffff; else if (k === body) S[i] = 0xffffffff; }
+    fx.putImageData(front, 0, 0); sx.putImageData(skin, 0, 0);
+    // the skin that counts: round each forearm and hand the pose model sees, wide enough for any arm
+    const sw = Math.hypot((l[L_SH].x - l[R_SH].x) * w, (l[L_SH].y - l[R_SH].y) * h), r = sw * 0.14;
+    const ax = ac.getContext("2d")!; ax.clearRect(0, 0, w, h);
+    ax.fillStyle = ax.strokeStyle = "#fff"; ax.lineCap = ax.lineJoin = "round"; ax.lineWidth = 2 * r;
+    ax.beginPath();
+    for (const [el, wr, ix] of [[L_EL, L_WR, L_IDX], [R_EL, R_WR, R_IDX]]) {
+      if (Math.min(l[el].visibility ?? 0, l[wr].visibility ?? 0) < 0.5) continue;
+      ax.moveTo(l[el].x * w, l[el].y * h); ax.lineTo(l[wr].x * w, l[wr].y * h); ax.lineTo(l[ix].x * w, l[ix].y * h);
+    }
+    ax.stroke();
+    for (const [wr, ix] of [[L_WR, L_IDX], [R_WR, R_IDX]]) {
+      if ((l[wr].visibility ?? 0) < 0.5) continue;
+      ax.beginPath(); ax.arc(((l[wr].x + l[ix].x) / 2) * w, ((l[wr].y + l[ix].y) / 2) * h, r * 1.3, 0, Math.PI * 2); ax.fill();
+    }
+    sx.globalCompositeOperation = "destination-in"; sx.drawImage(ac, 0, 0); sx.globalCompositeOperation = "source-over";
+    // together, softened by a hair (the model works at 256 px), and filled with the frame itself
+    sx.drawImage(fc, 0, 0);
+    c.filter = `blur(${Math.max(0.6, (W / w) * 0.8).toFixed(1)}px)`;
+    c.drawImage(sc, 0, 0, W, H);
+    c.filter = "none";
+    c.globalCompositeOperation = "source-in";
+    c.drawImage(this.frameCv, 0, 0, W, H);
+    c.globalCompositeOperation = "source-over";
+  }
+
   /** the picture as you see it: the mirror, the tee, your hands */
   async snapshot(): Promise<Blob> {
     const W = this.video.videoWidth, H = this.video.videoHeight, out = document.createElement("canvas");
@@ -660,7 +728,7 @@ export class TryOn {
     cancelAnimationFrame(this.raf);
     (this.video.srcObject as MediaStream | null)?.getTracks().forEach((t) => t.stop());
     this.video.srcObject = null;
-    this.pose?.close();
+    this.pose?.close(); this.seg?.close();
     this.renderer.dispose();
   }
 }
