@@ -102,7 +102,7 @@ export class TryOn {
   private prevT = 0; private frameN = 0;
   private anchor = new THREE.Vector3();           // garment frame: between the shoulder joints
   private bones: THREE.Bone[] = [];               // shoulder bones (+x, -x), waist
-  private sleeves: THREE.Bone[] = []; private armQ = [new THREE.Quaternion(), new THREE.Quaternion()];
+  private sleeves: THREE.Bone[] = []; private lifts: THREE.Bone[] = []; private tmpV = new THREE.Vector3(); private armQ = [new THREE.Quaternion(), new THREE.Quaternion()];
   private restArm = [new THREE.Vector3(), new THREE.Vector3()];
   private sizeScale = new THREE.Vector3(1, 1, 1);
   private filt = new Map<number, Euro3>();
@@ -221,7 +221,15 @@ export class TryOn {
     for (const p of parts) for (let i = 0; i < p.pos.length; i += 3) { const y = p.pos[i + 1]; if (y < yTop - 0.08 && y > yTop - 0.16 && Math.abs(p.pos[i]) < 0.1) { zs += p.pos[i + 2]; zn++; } }
     // between the shoulder joints: 6 cm under the top of the shoulder line, at the chest's mid depth
     this.anchor.set(0, yTop - 0.06, zn ? zs / zn : 0);
-    const half = SIZES.M.chest_round / 400, armpit = yTop - 0.26;
+    // the body's side and the armpit, measured on the draped mesh (the cut-on sleeve starts where the body ends)
+    let B = 0;
+    for (const p of parts) for (let i = 0; i < p.pos.length; i += 3) { const y = p.pos[i + 1]; if (y < yTop - 0.38 && y > yTop - 0.46) B = Math.max(B, Math.abs(p.pos[i])); }
+    let armpit = yTop - 0.29;
+    for (let d = 0.2; d < 0.4; d += 0.01) {
+      let m = 0;
+      for (const p of parts) for (let i = 0; i < p.pos.length; i += 3) { const y = p.pos[i + 1]; if (y < yTop - d && y > yTop - d - 0.01) m = Math.max(m, Math.abs(p.pos[i])); }
+      if (m < B + 0.012) { armpit = yTop - d + 0.03; break; }
+    }
     // round the collar, any surface that faces in toward the body (the inside of the neckband, mostly the back
     // half) is never seen on a person: your neck and shoulders fill it. It's cut, so only the outside shows
     {
@@ -232,34 +240,36 @@ export class TryOn {
     }
     const joints = [new THREE.Vector3(0.18, yTop - 0.06, this.anchor.z), new THREE.Vector3(-0.18, yTop - 0.06, this.anchor.z)];
 
-    // a skeleton: the body, and one bone per sleeve at the shoulder joint
+    // a skeleton: the body; a shoulder bone per side across the yoke with the sleeve hanging from it; a waist bone
+    // that follows your hips; and a bone per side that lifts the body under the arm when the arm goes up
     const root = new THREE.Bone();
     this.bones = joints.map((j) => { const b = new THREE.Bone(); b.position.copy(j); root.add(b); return b; });
-    // a third bone at the waist: the lower body of the tee follows your hips, so it twists and leans with you
     let yBot = 1e9;
     for (const p of parts) for (let i = 1; i < p.pos.length; i += 3) yBot = Math.min(yBot, p.pos[i]);
-    const waistY = yTop - 0.45;
-    { const b = new THREE.Bone(); b.position.set(0, waistY, this.anchor.z); root.add(b); this.bones.push(b); }
-    // each sleeve hangs from its shoulder bone: the shoulder takes part of the arm's turn across the yoke, the
-    // sleeve the rest, so a raised arm bends the cloth in two easy stages instead of folding the yoke flat
+    { const b = new THREE.Bone(); b.position.set(0, yTop - 0.45, this.anchor.z); root.add(b); this.bones.push(b); }
     this.sleeves = this.bones.slice(0, 2).map((sb) => { const b = new THREE.Bone(); sb.add(b); return b; });
+    this.lifts = [0, 1].map(() => { const b = new THREE.Bone(); root.add(b); return b; });
     root.updateMatrixWorld(true);
-    const skeleton = new THREE.Skeleton([root, ...this.bones, ...this.sleeves]);
+    // bone indices: 0 root, 1-2 shoulders, 3 waist, 4-5 sleeves, 6-7 lifts
+    const skeleton = new THREE.Skeleton([root, ...this.bones, ...this.sleeves, ...this.lifts]);
     const sums = [new THREE.Vector3(), new THREE.Vector3()], cnt = [0, 0];
     const meshes: THREE.SkinnedMesh[] = [];
     for (const p of parts) {
       const nv = p.pos.length / 3, SI = new Uint16Array(4 * nv), SW = new Float32Array(4 * nv);
       for (let v = 0; v < nv; v++) {
-        const x = p.pos[3 * v], y = p.pos[3 * v + 1], ax = Math.abs(x);
-        // above the armpit the yoke hands over to the sleeve between the neck side and the dropped shoulder;
-        // below it, only what's outside the side seam is sleeve
-        const up = ss(armpit - 0.03, armpit + 0.05, y), out = ss(half + 0.005, half + 0.05, ax);
-        const w = y > armpit ? Math.max(ss(0.1, half, ax) * up, out) : out;            // shoulder bone and beyond
-        const a = Math.min(w, y > armpit ? Math.max(ss(half - 0.01, half + 0.05, ax) * up, out) : out); // the sleeve itself
-        const s = x >= 0 ? 0 : 1;
-        const h = (1 - w) * ss(armpit, yBot + 0.04, y);
-        SI[4 * v] = 0; SI[4 * v + 1] = 1 + s; SI[4 * v + 2] = 4 + s; SI[4 * v + 3] = 3;
-        SW[4 * v] = 1 - w - h; SW[4 * v + 1] = w - a; SW[4 * v + 2] = a; SW[4 * v + 3] = h;
+        const x = p.pos[3 * v], y = p.pos[3 * v + 1], ax = Math.abs(x), s = x >= 0 ? 0 : 1;
+        const above = ss(armpit - 0.02, armpit + 0.03, y);
+        // the whole sleeve, underside included: everything outside the body's side line, so it rises as a tube
+        const a = ss(B - 0.005, B + 0.03, ax) * Math.max(above, ss(B + 0.005, B + 0.025, ax) * ss(armpit - 0.09, armpit - 0.04, y));
+        // the yoke between the neck and the sleeve takes a share of the turn
+        const w = Math.max(a, ss(0.07, B, ax) * above);
+        // the side under the arm rises with it (the hem lifts on that side, as on a real tee)
+        const lift = (1 - w) * ss(0.04, B, ax) * ss(yBot - 0.1, armpit, y) * (1 - ss(armpit, armpit + 0.1, y));
+        const h = (1 - w - lift) * ss(armpit - 0.05, yBot + 0.04, y);
+        const inf: [number, number][] = [[0, 1 - w - lift - h], [1 + s, w - a], [4 + s, a], [6 + s, lift], [3, h]];
+        inf.sort((m, n) => n[1] - m[1]);
+        const tot = inf[0][1] + inf[1][1] + inf[2][1] + inf[3][1] || 1;
+        for (let k = 0; k < 4; k++) { SI[4 * v + k] = inf[k][0]; SW[4 * v + k] = Math.max(0, inf[k][1]) / tot; }
         if (a > 0.9) { sums[s].x += x; sums[s].y += y; sums[s].z += p.pos[3 * v + 2]; cnt[s]++; }
       }
       p.geo.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(SI, 4));
@@ -478,10 +488,13 @@ export class TryOn {
     if (!this.rig.visible) { this.rig.visible = true; this.onStatus("ready"); }
   }
 
-  /** the arm's turn, shared: 40% at the shoulder across the yoke, the rest in the sleeve */
+  /** the arm's turn, shared: 25% at the shoulder across the yoke, the rest in the sleeve */
   private splitArm(s: 0 | 1) {
-    const q = this.armQ[s], sh = this.bones[s].quaternion.identity().slerp(q, 0.4);
+    const q = this.armQ[s], sh = this.bones[s].quaternion.identity().slerp(q, 0.25);
     this.sleeves[s].quaternion.copy(sh).invert().multiply(q);
+    // how far the arm has come up from hanging: 0 at rest, about 1 at shoulder height
+    const r = this.restArm[s], dy = this.tmpV.copy(r).applyQuaternion(q).y;
+    this.lifts[s].position.y = 0.055 * Math.min(1.6, Math.max(0, (dy - r.y) / Math.max(0.2, -r.y)));
   }
 
   /** forearms and hands in front of the body, cut from the video and laid back over the tee */
