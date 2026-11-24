@@ -1,0 +1,52 @@
+import sizes from "../../public/tee/fred/sizes.json";
+
+/** Lineup 01: the Mumbai tee. Everything the page says about it lives here. */
+
+export type Colour = "black" | "cream";
+export type Design = "b" | "a";
+
+/** Lineup 01 has two shirts. Same blank, same front; the back is what changes. */
+export const DESIGNS: Record<Design, { no: string; name: string; back: string }> = {
+  b: { no: "01", name: "crowd", back: "the crowd at the barrier, drawn in lines, lit by the stage" },
+  a: { no: "02", name: "map", back: "the race course from above, the sea beside it, the sound rolling out from the stage" },
+};
+
+export const COLOURS: Record<Colour, { name: string; hex: string; ink: string }> = {
+  black: { name: "black", hex: "#151515", ink: "#4C66F5" },
+  cream: { name: "off white", hex: "#FFFAE7", ink: "#2C46BE" },
+};
+
+export const SIZE_ORDER = ["XS", "S", "M", "L", "XL", "2XL"] as const;
+export type Size = (typeof SIZE_ORDER)[number];
+
+type SizeRow = { chest_round: number; chest_flat: number; length: number; shoulder: number };
+export const SIZES = Object.fromEntries(
+  SIZE_ORDER.map((s) => [s, (sizes.sizes as Record<string, { cm: SizeRow }>)[s].cm]),
+) as Record<Size, SizeRow>;
+
+/** The shows this tee is for. Dates are local (IST). */
+export const SHOWS = [
+  { city: "delhi ncr", days: ["2026-12-05"] },
+  { city: "mumbai", days: ["2026-12-08", "2026-12-09"] },
+  { city: "bengaluru", days: ["2026-12-12", "2026-12-13"] },
+];
+
+export const THE_TEE = {
+  lineup: "lineup 01",
+  name: "again.. mumbai",
+  lede: "The four scripts of again.. on the chest, a drawing of the night across the back. Heavy cotton, cut loose, made for a long night on your feet.",
+  cloth: [
+    ["cotton", "100% combed cotton, single jersey"],
+    ["weight", "240 g/m², heavy and dense, not see-through"],
+    ["fit", "oversized, dropped shoulder, boxy body"],
+    ["collar", "ribbed, keeps its shape"],
+    ["hems", "double stitched"],
+    ["finish", "pre-shrunk and bio-washed, soft from the first wear"],
+  ] as [string, string][],
+  care: [
+    "wash cold, inside out",
+    "no bleach",
+    "dry in the shade, the sun fades black",
+    "iron inside out, never on the print",
+  ],
+};

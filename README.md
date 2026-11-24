@@ -5,7 +5,8 @@ The Still Breathing site and the pipeline that makes its garments: every tee is 
 Live: https://still-breathing-studio.vercel.app (Vercel, deploys on every push to `main` that touches `public/`).
 
 ## Layout
-- `public/` the static site (open `public/index.html` through any static server)
+- `src/` the Next.js site (`npm run dev`); `src/lib/viewer/` has the WebGPU real-time renderer, the BVH builder and the WGSL path tracer
+- `public/tee/` meshes, maps and offline frames the viewer loads
 - `pipeline/` pattern, body, cloth sim, textures and renders
   - `pattern.py` flat pattern of the Qikink UC22 blank (sizes in `sizes.py`)
   - `body.py` the body the tee is draped on (MakeHuman via the MPFB Blender extension)

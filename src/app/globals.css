@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+/* After dark: the page is the room before the lights come up. The print's blue is the only colour. */
+:root {
+  --paper: #0d0d0c;
+  --ink: #efece4;
+  --quiet: #8b877e;
+  --line: #3a3833;
+  --blue: #4c66f5;
+  --studio: #8e8c88;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-quiet: var(--quiet);
+  --color-studio: var(--studio);
+  --color-line: var(--line);
+  --color-blue: var(--blue);
+  --font-sans: var(--font-face), "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+html {
+  background: var(--paper);
+  color: var(--ink);
+  color-scheme: dark;
+  overflow-x: clip;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+}
+
+::selection { background: var(--blue); color: var(--ink); }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+
+/* The giant lowercase type: the one loud thing on the page. */
+.bigword {
+  font-weight: 800;
+  font-variation-settings: "opsz" 96;
+  letter-spacing: -0.055em;
+  line-height: 0.8;
+  white-space: nowrap;
+  text-transform: lowercase;
+}
+.tnum { font-variant-numeric: tabular-nums; }
+
+@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+html.lenis, html.lenis body { height: auto; }
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
+.lenis.lenis-stopped { overflow: hidden; }
+
+@media (prefers-reduced-motion: reduce) {
+  [class*="animate-["] { animation: none !important; }
+}

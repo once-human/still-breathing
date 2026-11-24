@@ -5,3 +5,8 @@ __pycache__/
 .claude/
 # local preview server leftovers
 *.log
+# site build
+node_modules/
+.next/
+next-env.d.ts
+*.tsbuildinfo
