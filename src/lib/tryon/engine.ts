@@ -89,6 +89,8 @@ export class TryOn {
   private fill = new THREE.HemisphereLight(0xffffff, 0x444444, 0.3);
   private occluders = new THREE.Group();
   private neck: THREE.Mesh; private head: THREE.Mesh;
+  private torso: THREE.Mesh | null = null;
+  private occMat = new THREE.MeshBasicNodeMaterial({ colorWrite: false });
   private probe = document.createElement("canvas").getContext("2d", { willReadFrequently: true })!;
   private colorN: { value: THREE.Texture } | null = null;
   private ormN: { value: THREE.Texture } | null = null;
@@ -126,7 +128,7 @@ export class TryOn {
     this.probe.canvas.width = 16; this.probe.canvas.height = 9;
     this.fctx = frameCv.getContext("2d", { alpha: false, desynchronized: true })!;
     // neck and head: depth only, drawn first, so the tee is hidden wherever they are in front of it
-    const occ = new THREE.MeshBasicNodeMaterial({ colorWrite: false });
+    const occ = this.occMat;
     this.neck = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 20, 1, true), occ);
     this.head = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), occ);
     for (const m of [this.neck, this.head]) { m.renderOrder = -1; m.castShadow = true; this.occluders.add(m); }
@@ -176,8 +178,8 @@ export class TryOn {
   private async loadTee(design: string, tee: "black" | "cream") {
     void tee;
     const gl = new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath("/draco/"));
-    const [gltf, c, o, n, k] = await Promise.all([
-      gl.loadAsync(`${ASSET}form-M/stand.glb`), this.tx(`tex/color-${design}-${tee}.jpg`, true), this.tx(`tex/orm-${design}-${tee}.png`, false),
+    const [gltf, bodyG, c, o, n, k] = await Promise.all([
+      gl.loadAsync(`${ASSET}form-M/stand.glb`), gl.loadAsync(`${ASSET}form-M/body-stand.glb`), this.tx(`tex/color-${design}-${tee}.jpg`, true), this.tx(`tex/orm-${design}-${tee}.png`, false),
       this.tx("tex/normal-M.png", false), this.tx("tex/knit-normal.png", false),
     ]);
     k.wrapS = k.wrapT = THREE.RepeatWrapping;
@@ -215,6 +217,24 @@ export class TryOn {
     // between the shoulder joints: 6 cm under the top of the shoulder line, at the chest's mid depth
     this.anchor.set(0, yTop - 0.06, zn ? zs / zn : 0);
     const half = SIZES.M.chest_round / 400, armpit = yTop - 0.26;
+    // your torso, from the form the tee was draped on: depth only, so the inside of the back panel (seen through
+    // the neck opening) is hidden behind your body, as it is in life. Arms are left out (the sleeves handle them),
+    // and it's drawn a little smaller than the form so it never cuts into the front of the tee.
+    {
+      const bm = bodyG.scene.getObjectByProperty("isMesh", true) as THREE.Mesh | undefined;
+      if (bm) {
+        bodyG.scene.updateMatrixWorld(true);
+        const g = bm.geometry.clone().applyMatrix4(bm.matrixWorld), bp = g.attributes.position.array as Float32Array;
+        const bi = g.index ? g.index.array : Uint32Array.from({ length: bp.length / 3 }, (_, i) => i), keep: number[] = [];
+        const inside = (v: number) => { const x = bp[3 * v], y = bp[3 * v + 1]; return Math.abs(x) < 0.19 && y < yTop - 0.02 && y > yTop - 0.75; };
+        for (let t = 0; t < bi.length; t += 3) if (inside(bi[t]) && inside(bi[t + 1]) && inside(bi[t + 2])) keep.push(bi[t], bi[t + 1], bi[t + 2]);
+        if (keep.length) {
+          const tg = new THREE.BufferGeometry(); tg.setAttribute("position", new THREE.BufferAttribute(bp, 3)); tg.setIndex(keep);
+          this.torso = new THREE.Mesh(tg, this.occMat); this.torso.renderOrder = -1; this.torso.frustumCulled = false;
+          this.rig.add(this.torso); this.fitTorso();
+        }
+      }
+    }
     const joints = [new THREE.Vector3(0.18, yTop - 0.06, this.anchor.z), new THREE.Vector3(-0.18, yTop - 0.06, this.anchor.z)];
 
     // a skeleton: the body, and one bone per sleeve at the shoulder joint
@@ -262,6 +282,15 @@ export class TryOn {
   setSize(s: Size) {
     const w = SIZES[s].chest_round / SIZES.M.chest_round, l = SIZES[s].length / SIZES.M.length;
     this.sizeScale.set(w, l, w);
+    this.fitTorso();
+  }
+
+  /** your body doesn't change with the tee's size: undo the rig's scale on the torso, about the garment's anchor, and
+   *  draw it 8% slimmer than the form */
+  private fitTorso() {
+    const t = this.torso; if (!t) return;
+    const k = 0.92, sx = k / this.sizeScale.x, sy = 1 / this.sizeScale.y, sz = k / this.sizeScale.z, a = this.anchor;
+    t.scale.set(sx, sy, sz); t.position.set(a.x * (1 - sx), a.y * (1 - sy), a.z * (1 - sz));
   }
 
   resize() {
