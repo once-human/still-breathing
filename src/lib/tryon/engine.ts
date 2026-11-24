@@ -376,7 +376,23 @@ export class TryOn {
       if (y < H / 2) top += l; else bot += l;
     }
     const n = W * H, lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / n / 255, m = Math.max(r, g, b) || 1;
-    const sx = (right - left) / (right + left + 1e-3), sy = (top - bot) / (top + bot + 1e-3);
+    let sx = (right - left) / (right + left + 1e-3);
+    const sy = (top - bot) / (top + bot + 1e-3);
+    // better still, your face: it's lit by the same lamp as you, so the brighter cheek says where the light is
+    const l = this.lms, fc = this.frameCv;
+    if (l && Math.min(l[L_EAR].visibility ?? 0, l[R_EAR].visibility ?? 0, l[NOSE].visibility ?? 0) > 0.6) {
+      const cheek = (ear: number) => {
+        const x = ((l[NOSE].x + l[ear].x) / 2) * fc.width, y = ((l[NOSE].y + l[ear].y) / 2 + 0.01) * fc.height;
+        const r2 = Math.max(3, Math.abs(l[L_EAR].x - l[R_EAR].x) * fc.width * 0.12);
+        c.drawImage(fc, x - r2, y - r2, 2 * r2, 2 * r2, 0, 0, 4, 4);
+        const q = c.getImageData(0, 0, 4, 4).data; let s2 = 0;
+        for (let i = 0; i < q.length; i += 4) s2 += 0.2126 * q[i] + 0.7152 * q[i + 1] + 0.0722 * q[i + 2];
+        return s2;
+      };
+      // the right ear's cheek is on the preview's right (+x); the left's on its left
+      const cr = cheek(R_EAR), cl = cheek(L_EAR);
+      sx = Math.max(-1, Math.min(1, 1.6 * (cr - cl) / (cr + cl + 1e-3)));
+    }
     // the room is read every few frames; the tee eases toward it so a camera's auto-exposure never makes it flicker
     const k = this.lit ? 1 - Math.exp(-dt * 3) : 1; this.lit = true;
     this.tint.lerp(new THREE.Color(0.35 + 0.65 * r / m, 0.35 + 0.65 * g / m, 0.35 + 0.65 * b / m), k);
@@ -426,7 +442,7 @@ export class TryOn {
     this.camera.aspect = W / H; this.camera.updateProjectionMatrix();
     for (const i of TRACK) {
       // the body's own shape (metres around the hips) and where it stands are smoothed apart
-      let f = this.filt.get(i); if (!f) this.filt.set(i, (f = new Euro3(0.9, 2.5)));
+      let f = this.filt.get(i); if (!f) this.filt.set(i, (f = new Euro3(0.9, 2.5, 0.45, 1.2)));
       const b = f.f(new THREE.Vector3(X(i), Y(i), Z(i)), t);
       this.P.set(i, new THREE.Vector3(b.x + T[0], b.y + T[1], -(b.z + T[2])));
     }
