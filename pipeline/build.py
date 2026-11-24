@@ -71,6 +71,14 @@ if FORM:
             out.append(sum(w * v for w, v in ws) / sum(w for w, _ in ws))
         for i, v in enumerate(out): secs[i][k] = v
     for k in (1, 2, 3, 4): smooth(k)
+    # heavy cotton doesn't follow a body in under the chest or in at the waist: it falls straight from the
+    # fullest point above. So the form is the hull from the top down: no section's front, back or sides sit
+    # inside any section above it (the cloth bridges every hollow, as it does on a real ghost mannequin)
+    fr, bk, lt, rt = 1e9, -1e9, 1e9, -1e9
+    for s_ in reversed(secs):
+        _, cx, a, cy, b = s_
+        fr, bk, lt, rt = min(fr, cy - b), max(bk, cy + b), min(lt, cx - a), max(rt, cx + a)
+        s_[1], s_[2], s_[3], s_[4] = (lt + rt) / 2, (rt - lt) / 2, (fr + bk) / 2, (bk - fr) / 2
     zt = secs[-1][0]
     print("form", round(secs[0][0], 3), "to", round(zt, 3), "sections", len(secs))
     # drop the body's torso between those heights (arms and everything above stay)
