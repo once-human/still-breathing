@@ -21,14 +21,13 @@
     "lift_m": 0.0
    },
    "sit": {
-    "back_hem_vs_waistband_cm": -18,
-    "front_hem_vs_waistband_cm": -19,
+    "back_hem_vs_waistband_cm": -17,
+    "front_hem_vs_waistband_cm": -18,
     "seat_cm": 33,
     "frame": 430,
     "lift_m": -0.3457
    }
-  },
-  "waist_fixed": true
+  }
  },
  "f155-S": {
   "size": "S",
@@ -41,7 +40,7 @@
    "stand": {
     "hem_below_crotch_cm": 5,
     "sleeve_above_elbow_cm": 3,
-    "hem_vs_waistband_cm": -23,
+    "hem_vs_waistband_cm": -22,
     "frame": 200,
     "lift_m": 0.0
    },
@@ -53,13 +52,12 @@
    },
    "sit": {
     "back_hem_vs_waistband_cm": -18,
-    "front_hem_vs_waistband_cm": -19,
+    "front_hem_vs_waistband_cm": -18,
     "seat_cm": 33,
     "frame": 430,
     "lift_m": -0.3457
    }
-  },
-  "waist_fixed": true
+  }
  },
  "f155-XS": {
   "size": "XS",
@@ -72,13 +70,13 @@
    "stand": {
     "hem_below_crotch_cm": 3,
     "sleeve_above_elbow_cm": 4,
-    "hem_vs_waistband_cm": -21,
+    "hem_vs_waistband_cm": -20,
     "frame": 200,
     "lift_m": 0.0
    },
    "up": {
     "hem_rise_cm": 8,
-    "hem_vs_waistband_cm": -13,
+    "hem_vs_waistband_cm": -12,
     "frame": 300,
     "lift_m": 0.0
    },
@@ -89,8 +87,7 @@
     "frame": 430,
     "lift_m": -0.3457
    }
-  },
-  "waist_fixed": true
+  }
  },
  "f162-L": {
   "size": "L",
@@ -120,8 +117,7 @@
     "frame": 430,
     "lift_m": -0.3806
    }
-  },
-  "waist_fixed": true
+  }
  },
  "f162-M": {
   "size": "M",
@@ -151,8 +147,7 @@
     "frame": 430,
     "lift_m": -0.3806
    }
-  },
-  "waist_fixed": true
+  }
  },
  "f162-S": {
   "size": "S",
@@ -182,8 +177,7 @@
     "frame": 430,
     "lift_m": -0.3806
    }
-  },
-  "waist_fixed": true
+  }
  },
  "form-M": {
   "size": "M",
@@ -219,7 +213,7 @@
    },
    "up": {
     "hem_rise_cm": 5,
-    "hem_vs_waistband_cm": -18,
+    "hem_vs_waistband_cm": -17,
     "frame": 300,
     "lift_m": 0.0
    },
@@ -230,8 +224,7 @@
     "frame": 430,
     "lift_m": -0.369
    }
-  },
-  "waist_fixed": true
+  }
  },
  "m163-S": {
   "size": "S",
@@ -250,7 +243,7 @@
    },
    "up": {
     "hem_rise_cm": 5,
-    "hem_vs_waistband_cm": -15,
+    "hem_vs_waistband_cm": -14,
     "frame": 300,
     "lift_m": 0.0
    },
@@ -261,8 +254,7 @@
     "frame": 430,
     "lift_m": -0.369
    }
-  },
-  "waist_fixed": true
+  }
  },
  "m163-XS": {
   "size": "XS",
@@ -292,8 +284,7 @@
     "frame": 430,
     "lift_m": -0.369
    }
-  },
-  "waist_fixed": true
+  }
  },
  "m170-L": {
   "size": "L",
@@ -317,14 +308,13 @@
     "lift_m": 0.0
    },
    "sit": {
-    "back_hem_vs_waistband_cm": -16,
-    "front_hem_vs_waistband_cm": -16,
+    "back_hem_vs_waistband_cm": -15,
+    "front_hem_vs_waistband_cm": -15,
     "seat_cm": 39,
     "frame": 430,
     "lift_m": -0.4061
    }
-  },
-  "waist_fixed": true
+  }
  },
  "m170-M": {
   "size": "M",
@@ -337,7 +327,7 @@
    "stand": {
     "hem_below_crotch_cm": 3,
     "sleeve_above_elbow_cm": 5,
-    "hem_vs_waistband_cm": -19,
+    "hem_vs_waistband_cm": -18,
     "frame": 200,
     "lift_m": 0.0
    },
@@ -348,14 +338,13 @@
     "lift_m": 0.0
    },
    "sit": {
-    "back_hem_vs_waistband_cm": -16,
-    "front_hem_vs_waistband_cm": -16,
+    "back_hem_vs_waistband_cm": -15,
+    "front_hem_vs_waistband_cm": -15,
     "seat_cm": 39,
     "frame": 430,
     "lift_m": -0.4061
    }
-  },
-  "waist_fixed": true
+  }
  },
  "m170-S": {
   "size": "S",
@@ -385,8 +374,7 @@
     "frame": 430,
     "lift_m": -0.4061
    }
-  },
-  "waist_fixed": true
+  }
  },
  "m177-2XL": {
   "size": "2XL",
@@ -416,8 +404,7 @@
     "frame": 430,
     "lift_m": -0.433
    }
-  },
-  "waist_fixed": true
+  }
  },
  "m177-L": {
   "size": "L",
@@ -442,13 +429,12 @@
    },
    "sit": {
     "back_hem_vs_waistband_cm": -15,
-    "front_hem_vs_waistband_cm": 5,
+    "front_hem_vs_waistband_cm": 4,
     "seat_cm": 40,
     "frame": 430,
     "lift_m": -0.433
    }
-  },
-  "waist_fixed": true
+  }
  },
  "m177-XL": {
   "size": "XL",
@@ -461,7 +447,7 @@
    "stand": {
     "hem_below_crotch_cm": 4,
     "sleeve_above_elbow_cm": 6,
-    "hem_vs_waistband_cm": -18,
+    "hem_vs_waistband_cm": -19,
     "frame": 200,
     "lift_m": 0.0
    },
@@ -478,7 +464,6 @@
     "frame": 430,
     "lift_m": -0.433
    }
-  },
-  "waist_fixed": true
+  }
  }
 }

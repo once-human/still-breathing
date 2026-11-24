@@ -15,7 +15,7 @@
   },
   "up": {
    "hem_rise_cm": 5,
-   "hem_vs_waistband_cm": -18,
+   "hem_vs_waistband_cm": -17,
    "frame": 300,
    "lift_m": 0.0
   },
@@ -26,6 +26,5 @@
    "frame": 430,
    "lift_m": -0.369
   }
- },
- "waist_fixed": true
+ }
 }

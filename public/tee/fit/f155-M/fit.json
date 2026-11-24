@@ -20,12 +20,11 @@
    "lift_m": 0.0
   },
   "sit": {
-   "back_hem_vs_waistband_cm": -18,
-   "front_hem_vs_waistband_cm": -19,
+   "back_hem_vs_waistband_cm": -17,
+   "front_hem_vs_waistband_cm": -18,
    "seat_cm": 33,
    "frame": 430,
    "lift_m": -0.3457
   }
- },
- "waist_fixed": true
+ }
 }
