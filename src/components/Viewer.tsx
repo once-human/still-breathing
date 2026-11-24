@@ -136,6 +136,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   // which edge of the stage the pointer is near: that side's way to the next view shows
   const [edge, setEdge] = useState<"l" | "r" | null>(null);
+  // and whether it's down by the bottom edge, where the strip and the counter are
+  const [low, setLow] = useState(false);
 
   useEffect(() => {
     let dead = false;
@@ -643,8 +645,10 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           const r = e.currentTarget.getBoundingClientRect(), x = (e.clientX - r.left) / r.width;
           const v = x < 0.22 ? "l" : x > 0.78 ? "r" : null;
           if (v !== edge) setEdge(v);
+          const b = (e.clientY - r.top) / r.height > 0.8;
+          if (b !== low) setLow(b);
         }}
-        onPointerLeave={() => setEdge(null)}
+        onPointerLeave={() => { setEdge(null); setLow(false); }}
         onKeyDown={(e) => { if (e.key === "ArrowRight") void goShot(shotI + 1); else if (e.key === "ArrowLeft") void goShot(shotI - 1); }}
       >
         {/* the last view stays up while the next one loads (never an empty stage in between) */}
@@ -704,6 +708,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
             </div>
           </div>
         ) : null}
+        {/* down by the bottom: a softer shade than the sides', so the strip and the counter read clearly */}
+        <div aria-hidden className={`pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[30%] bg-[radial-gradient(ellipse_75%_100%_at_50%_100%,rgba(0,0,0,0.4),transparent_72%)] transition-opacity duration-700 ease-out ${low ? "opacity-100" : "opacity-0"}`} />
         <p className={`pointer-events-none absolute right-3 bottom-3 z-20 text-[12px] tnum ${dark ? "text-white/70" : "text-black/55"}`}>{shotI + 1} / {SHOTS.length}</p>
         {/* the views as little pictures, like a photo app's strip, each as it really looks: see what's there, tap to go */}
         <div className="absolute bottom-3 left-1/2 z-20 hidden -translate-x-1/2 gap-2 md:flex" role="group" aria-label="Views">

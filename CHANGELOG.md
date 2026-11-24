@@ -2,6 +2,10 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.13.1 — 2026-11-25
+### Studio
+- Down by the bottom of the view a softer shade comes up too, so the strip of views and the counter read clearly over any light.
+
 ## 0.13.0 — 2026-11-25
 ### Studio
 - Nothing half-ready is ever shown. Switching views, shirts or the light fades the view out, a slow breath (and after a beat, "breathing in..") holds the stage while the new one gets ready, the person, the room and all, and only then it fades back in whole. On opening, the 3D takes over from the photos only once its room is in too.
