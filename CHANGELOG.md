@@ -2,6 +2,10 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.12.2 — 2026-11-25
+### Site
+- The countdown and the rest of the page really do follow your show now. The first shirt on the page never asked where you are, so everyone saw the next date, Delhi NCR.
+
 ## 0.12.1 — 2026-11-25
 ### Site
 - For the tour shirts, the page now talks about the show that's quickest for you to reach, not the one nearest on a map: by road when it's close, by air when it's far, with a little grace for the cities with two nights. From Pune that's Mumbai.

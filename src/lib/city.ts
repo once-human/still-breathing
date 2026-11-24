@@ -10,12 +10,14 @@ const subs = new Set<() => void>();
 const emit = () => subs.forEach((f) => f());
 
 export function setFocusCity(city: string | null) {
-  if (city === focus) return;
-  focus = city; emit();
+  // a lineup-wide shirt needs the visitor's nearest show: asked the first time one is on the page, including the
+  // very first shirt (focus starts out null, so this must come before the "nothing changed" check)
   if (!city && !asked) {
     asked = true;
     fetch("/api/near").then((r) => r.json()).then((j: { city: string | null }) => { near = j.city; emit(); }).catch(() => {});
   }
+  if (city === focus) return;
+  focus = city; emit();
 }
 
 const subscribe = (f: () => void) => { subs.add(f); return () => subs.delete(f); };
