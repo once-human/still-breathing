@@ -19,11 +19,13 @@ def knockout(a, tee):
     a[..., 3] = np.where((d < 24) | (d2 < 24), 0, a[..., 3])
     return a
 
-def resize_rgba(img, size):
-    # premultiplied, so edges don't pick up the colour of transparent pixels
+def resize_rgba(img, size, f=Image.BOX):
+    # premultiplied, so edges don't pick up the colour of transparent pixels. Shrinking line art: an area
+    # average (each pixel is the ink that falls in it), as sharp as it gets with no ringing, and it packs 4x
+    # smaller than a windowed-sinc resample, whose ripples make every pixel unique
     a = np.array(img.convert("RGBA")).astype(np.float32) / 255
     a[..., :3] *= a[..., 3:4]
-    ch = [np.array(Image.fromarray(a[..., i]).resize(size, Image.LANCZOS)) for i in range(4)]
+    ch = [np.array(Image.fromarray(a[..., i]).resize(size, f)) for i in range(4)]
     out = np.clip(np.dstack(ch), 0, 1)
     out[..., :3] /= np.maximum(out[..., 3:4], 1e-4)
     return out
@@ -31,7 +33,7 @@ def resize_rgba(img, size):
 def recut(img, size):
     # flat-ink vector lettering exported small: scale it up, then cut the edges again to one pixel of
     # antialiasing at the new size, as if it had been exported there
-    out = resize_rgba(img, size)
+    out = resize_rgba(img, size, Image.LANCZOS)
     k = size[0] / img.width
     out[..., 3] = np.clip((out[..., 3] - 0.5) * k + 0.5, 0, 1)
     return out
