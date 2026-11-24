@@ -3,13 +3,13 @@
 // The render mesh (~340k vertices, both shells) is far too heavy to simulate per frame, so a coarse particle
 // net is built from it: one particle per 3 cm cell, edges wherever the mesh connects two cells. Each particle
 // is a mass on a spring toward where the garment rests (the rest pose already holds gravity and the form's
-// support). Where the form carries the cloth (shoulders, yoke, chest) it is simply carried: those particles
-// move with the form and nothing else. Below the chest and along the sleeves the cloth hangs free, with the
-// slow, heavily damped swing of 240 GSM cotton: it trails a turn, eases back, and doesn't bounce.
+// support). Only the neckband sits fixed on the form; the yoke and chest are carried but still give a little,
+// and below them and along the sleeves the cloth hangs free with the swing of 240 GSM cotton: a pendulum of
+// the cloth below it, settled by knit friction and the air in a swing or two.
 // Distance constraints along the edges keep the jersey from stretching, so motion travels through it the way it
 // does through real knit. The simulation runs in world space while the garment is turned, so inertia is real.
 //
-// Wind: a slow night breeze moves through it. Gusts travel across the cloth as waves (so a ripple runs from
+// Wind: light air (a room with the door open) moves through it. Gusts travel across the cloth as waves (so a ripple runs from
 // one side seam to the other), the direction drifts, and there are real lulls when the air goes still. The
 // push is aerodynamic: it acts along each patch's normal and against the patch's own velocity, so a panel
 // facing the breeze bellies, one edge-on barely moves, and fast swings are damped by the air.
@@ -32,7 +32,7 @@ export const TEX_H = 16;        // up to 4096 particles (a 2XL tee is about 2000
 const SUB_DT = 1 / 100;         // longest sub-step; each frame is split into equal steps no longer than this
 const MAX_OFF = 0.08;           // m, a safety net the cloth never normally reaches
 const SOFT_OFF = 0.04;          // m, where the cloth starts to feel the form and stiffens (smoothly)
-const BREEZE = 0.32;            // m/s at the top of a gust: still night air, a draught you'd barely feel
+const BREEZE = 0.6;             // m/s at the top of a gust: light air (Beaufort 1), the draught in a room with a door open
 // air on cloth, as it really is: pressure 1/2 rho Cd |u| u, over the cloth's weight per area
 // (rho 1.2 kg/m3, Cd about 1 for a sheet face-on, 240 GSM jersey = 0.24 kg/m2) -> 2.5 per (m/s)^2
 const AIR = (0.5 * 1.2 * 1.0) / 0.24;
@@ -112,13 +112,17 @@ function buildNet(meshes: { pos: Float32Array; idx: Uint32Array }[], CELL: numbe
     const x = rest[3 * c], y = rest[3 * c + 1];
     // only the collar and the tops of the shoulders sit on the form; everything else hangs from them, the
     // yoke barely, the hem and sleeve ends most
-    if (yTop - y < 0.06 * len && Math.abs(x) < 0.2) { pin[c] = 1; mob[c] = 0; inv[c] = 0; continue; }
-    const down = ss(0.04 * len, 0.85 * len, yTop - y);
-    const out = ss(0.2, 0.38, Math.abs(x));
-    const m = Math.max(0.12, down, 0.8 * out);
+    // (only a narrow band: the cloth just below the neckband already lifts and settles with the rest)
+    if (yTop - y < 0.035 * len && Math.abs(x) < 0.16) { pin[c] = 1; mob[c] = 0; inv[c] = 0; continue; }
+    const down = ss(0.02 * len, 0.7 * len, yTop - y);
+    const out = ss(0.17, 0.36, Math.abs(x));
+    const m = Math.max(0.25, down, 0.85 * out);
     mob[c] = m;
-    const f = 2.6 * (1 - m) + 1.3 * m;                          // natural sway, Hz: heavy cotton, short swing
-    const zeta = 0.95 * (1 - m) + 0.72 * m;                     // well damped: it trails and eases back, no bounce
+    // natural sway, Hz: where the form carries it, a short stiff swing; where it hangs, a pendulum of the cloth
+    // below (about 30 cm of it: sqrt(g/L)/2pi = 0.9 Hz)
+    const f = 2.0 * (1 - m) + 0.95 * m;
+    // knit friction and air settle it in a swing or two: it moves, then rests, never bounces on
+    const zeta = 0.85 * (1 - m) + 0.42 * m;
     const w = 2 * Math.PI * f;
     w2[c] = w * w;
     damp[c] = 2 * zeta * w;                                     // decay rate, 1/s (the step works out each frame's share)
@@ -193,6 +197,8 @@ export class Cloth {
   private pR = new THREE.Matrix3(); private pT = new THREE.Vector3(); private pS = 1;
   private started = false;
   private off: Float32Array; private shift: Float32Array;
+  /** the velocity the garment's own motion gives each particle this frame (world, m/s) */
+  private carry: Float32Array;
   private G: Float32Array; private S: Float32Array;
 
   constructor(net: Net, public tex: THREE.DataTexture, public slopes: THREE.DataTexture[] | null = null) {
@@ -200,7 +206,7 @@ export class Cloth {
     this.ea = net.ea; this.eb = net.eb; this.el = net.el;
     this.w2 = net.w2; this.damp = net.damp; this.inv = net.inv; this.mob = net.mob; this.pin = net.pin;
     this.x = new Float32Array(this.rest); this.xp = new Float32Array(this.rest);
-    this.off = new Float32Array(3 * this.n); this.shift = new Float32Array(3 * this.n);
+    this.off = new Float32Array(3 * this.n); this.shift = new Float32Array(3 * this.n); this.carry = new Float32Array(3 * this.n);
     this.G = new Float32Array(9 * this.n); this.S = new Float32Array(this.n);
   }
 
@@ -222,8 +228,9 @@ export class Cloth {
       d[3 * c] = dx; d[3 * c + 1] = dy; d[3 * c + 2] = dz;
       vmax = Math.max(vmax, Math.hypot(dx, dy, dz));
     }
-    const v = vmax / Math.max(dt, 1e-3), felt = this.inertia / (1 + (v / this.inertiaV) ** 2), k = 1 - felt;
+    const v = vmax / Math.max(dt, 1e-3), felt = this.inertia / (1 + (v / this.inertiaV) ** 2), k = 1 - felt, idt = 1 / Math.max(dt, 1e-3);
     for (let c = 0; c < this.n; c++) {
+      for (let j = 0; j < 3; j++) this.carry[3 * c + j] = d[3 * c + j] * k * idt;
       if (this.pin[c]) continue;
       for (let j = 0; j < 3; j++) { const m = d[3 * c + j] * k; this.x[3 * c + j] += m; this.xp[3 * c + j] += m; }
     }
@@ -278,19 +285,20 @@ export class Cloth {
         const i = 3 * c;
         if (this.pin[c]) { for (let k = 0; k < 3; k++) { xp[i + k] = x[i + k]; x[i + k] = p[k]; } continue; }
         const vx = (x[i] - xp[i]) / this.hPrev, vy = (x[i + 1] - xp[i + 1]) / this.hPrev, vz = (x[i + 2] - xp[i + 2]) / this.hPrev;
-        let ax = 0, ay = 0, az = 0;
+        // the air: the breeze (gusts arrive as waves crossing the garment, a long one and a shorter one at an
+        // angle), less the cloth's own velocity through it, the turn included, so turning meets the air too
+        let W = 0;
         if (G > 0) {
-          // gusts arrive as slow waves crossing the garment, a long one and a shorter one at an angle
           const along = x[i] * wx + x[i + 2] * wz, across = x[i + 1] * 0.8 + (x[i + 2] * wx - x[i] * wz) * 0.6;
-          const f = 1 + 0.5 * Math.sin(TAU * (along / 0.45 - 0.7 * t)) + 0.25 * Math.sin(TAU * (across / 0.3 - 1.1 * t) + 1.7);
-          const W = BREEZE * G * f;
-          // the air pushes along the patch's normal, by how fast it moves past the patch (so it also damps)
-          const ux = W * wx - vx, uy = W * 0.04 - vy, uz = W * wz - vz;
-          const lx = this.nrm[i], ly = this.nrm[i + 1], lz = this.nrm[i + 2];
-          const nx = e[0] * lx + e[3] * ly + e[6] * lz, ny = e[1] * lx + e[4] * ly + e[7] * lz, nz = e[2] * lx + e[5] * ly + e[8] * lz;
-          const u = ux * nx + uy * ny + uz * nz, push = AIR * Math.abs(u) * u;
-          ax = push * nx; ay = push * ny; az = push * nz;
+          W = BREEZE * G * (1 + 0.5 * Math.sin(TAU * (along / 0.45 - 0.7 * t)) + 0.25 * Math.sin(TAU * (across / 0.3 - 1.1 * t) + 1.7));
         }
+        const cv = this.carry;
+        const ux = W * wx - vx - cv[i], uy = W * 0.04 - vy - cv[i + 1], uz = W * wz - vz - cv[i + 2];
+        // it pushes along the patch's normal, as pressure on a sheet
+        const lx = this.nrm[i], ly = this.nrm[i + 1], lz = this.nrm[i + 2];
+        const nx = e[0] * lx + e[3] * ly + e[6] * lz, ny = e[1] * lx + e[4] * ly + e[7] * lz, nz = e[2] * lx + e[5] * ly + e[8] * lz;
+        const u = ux * nx + uy * ny + uz * nz, push = AIR * Math.abs(u) * u;
+        const ax = push * nx, ay = push * ny, az = push * nz;
         // the pull home stiffens smoothly as the cloth strays (it meets the form and its own seams): no wall
         const ox = x[i] - p[0], oy = x[i + 1] - p[1], oz = x[i + 2] - p[2];
         const r2 = (ox * ox + oy * oy + oz * oz) / (SOFT_OFF * SOFT_OFF);
