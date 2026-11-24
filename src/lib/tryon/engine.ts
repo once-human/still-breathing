@@ -121,8 +121,8 @@ export class TryOn {
     // your head and neck throw a soft shadow on the collar and chest: the strongest cue that the tee is on a body
     this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.key.castShadow = true; this.key.shadow.mapSize.set(1024, 1024);
-    Object.assign(this.key.shadow.camera, { left: -0.6, right: 0.6, top: 0.6, bottom: -0.6, near: 0.2, far: 8 });
-    this.key.shadow.bias = -0.0004; this.key.shadow.normalBias = 0.015; this.key.shadow.radius = 5;
+    Object.assign(this.key.shadow.camera, { left: -0.9, right: 0.9, top: 0.9, bottom: -0.9, near: 0.2, far: 8 });
+    this.key.shadow.bias = -0.0006; this.key.shadow.normalBias = 0.02; this.key.shadow.radius = 5;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.scene.add(this.key, this.key.target, this.fill, this.rig);
     this.probe.canvas.width = 16; this.probe.canvas.height = 9;
@@ -199,11 +199,16 @@ export class TryOn {
     });
     if (!teeMesh) throw new Error("try-on rig has no tee");
     const tm = teeMesh as THREE.SkinnedMesh;
-    tm.material = outer; tm.frustumCulled = false; tm.receiveShadow = true;
+    tm.material = outer; tm.frustumCulled = false; tm.receiveShadow = true; tm.castShadow = true;
     if (occ) {
       // the body the tee was draped on: depth only, drawn first, and it throws the head and neck's shadow
       const om = occ as THREE.SkinnedMesh;
       om.material = this.occMat; om.renderOrder = -1; om.frustumCulled = false; om.castShadow = true;
+      // and a second skin of it, drawn after the tee, that shows only the shadows falling on you: the hem's on
+      // your trousers, the collar's on your neck, the sleeves' on your arms. The tee sits on you, not over you
+      const catcher = new THREE.SkinnedMesh(om.geometry, new THREE.ShadowNodeMaterial({ opacity: 0.4, depthWrite: false }));
+      catcher.bind(om.skeleton, om.bindMatrix); catcher.receiveShadow = true; catcher.frustumCulled = false; catcher.renderOrder = 2;
+      om.parent!.add(catcher); catcher.position.copy(om.position); catcher.quaternion.copy(om.quaternion); catcher.scale.copy(om.scale);
     }
     this.rig.add(gltf.scene);
     this.rig.updateMatrixWorld(true);
