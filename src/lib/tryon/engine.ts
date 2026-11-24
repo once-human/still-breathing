@@ -11,8 +11,7 @@
 // 4. The tee. The shop tee, the same simulated garment and textures as the viewer, is set on that frame at its
 //    real size for the size you pick: the collar at the base of your neck, its depth centred on your chest.
 //    Each sleeve hangs from a bone at the shoulder that turns toward your upper arm, blended smoothly into the
-//    yoke (normals turn with it, so the light stays right). The cloth simulation runs on top: the hem trails
-//    when you turn, and folds rise where it twists.
+//    yoke (normals turn with it, so the light stays right). The shape is the real draped fit, held steady on the body.
 // 5. In front and behind. Your neck and head are invisible occluders, so the collar wraps behind your neck and
 //    your chin can come down over it. Forearms in front of you are cut from the video and laid back on top.
 // 6. Light. The room is read from the video (how bright, what colour, which side the light comes from) and
@@ -31,7 +30,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import type { PoseLandmarker, NormalizedLandmark, Landmark } from "@mediapipe/tasks-vision";
-import { Cloth, buildNetAsync, offsetTexture, slopeTextures, clothNodes } from "@/lib/viewer/cloth";
+import { offsetTexture, slopeTextures, clothNodes } from "@/lib/viewer/cloth";
 import { KNIT_REPEAT } from "@/lib/viewer/scene";
 import { SIZES, type Size } from "@/content/tee";
 
@@ -84,7 +83,6 @@ export class TryOn {
   private camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.05, 20);
   private rig = new THREE.Group();
   private pose: PoseLandmarker | null = null;
-  private cloth: Cloth | null = null;
   private offsets = offsetTexture();
   private slopes = slopeTextures();
   private key = new THREE.DirectionalLight(0xffffff, 1);
@@ -144,7 +142,7 @@ export class TryOn {
     // a soft room-like environment; its strength and colour follow the video
     this.scene.environment = new THREE.PMREMGenerator(this.renderer).fromScene(new RoomEnvironment(), 0.04).texture;
     this.onStatus("camera");
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } }, audio: false });
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 30, max: 30 } }, audio: false });
     if (this.dead) { stream.getTracks().forEach((t) => t.stop()); return; }
     this.video.srcObject = stream;
     await this.video.play();
@@ -246,16 +244,6 @@ export class TryOn {
       this.restArm[s].copy(cnt[s] ? sums[s].divideScalar(cnt[s]).sub(joints[s]).normalize() : new THREE.Vector3(s ? -0.64 : 0.64, -0.77, 0));
     }
     this.rig.visible = false;
-    // the cloth net builds in a worker; until it's ready the tee is simply at rest
-    buildNetAsync(parts.map((p) => ({ pos: p.pos, idx: p.idx }))).then((net) => {
-      if (this.dead) return;
-      parts.forEach((p, i) => {
-        const I = p.geo.attributes.sbI as THREE.BufferAttribute, W = p.geo.attributes.sbW as THREE.BufferAttribute;
-        (I.array as Float32Array).set(net.skins[i].I); (W.array as Float32Array).set(net.skins[i].W); I.needsUpdate = W.needsUpdate = true;
-      });
-      this.cloth = new Cloth(net, this.offsets, this.slopes);
-      this.cloth.wind = false;
-    }).catch(() => {});
   }
 
   /** a different design on the same tee */
@@ -272,7 +260,7 @@ export class TryOn {
   }
 
   resize() {
-    const r = this.canvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
+    const r = this.canvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 1.5);
     this.renderer.setPixelRatio(dpr); this.renderer.setSize(r.width, r.height, false);
     this.arms.width = Math.round(r.width * dpr); this.arms.height = Math.round(r.height * dpr);
   }
@@ -288,11 +276,8 @@ export class TryOn {
     const r = this.pose.detectForVideo(fc, now);
     this.place(r.landmarks[0] ?? null, r.worldLandmarks[0] ?? null, t, dt);
     if (this.frameN++ % 10 === 0) this.light(dt * 10);
-    if (this.cloth && this.rig.visible) {
-      const m3 = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(this.rig.quaternion));
-      this.cloth.setPose(m3, this.rig.position, this.sizeScale.x, dt);
-      this.cloth.step(dt);
-    }
+    // the cloth simulation is not run here: the tee is the draped shape from the real fit, held on the body.
+    // It cost a CPU pass over the whole net and a texture upload every frame for a few millimetres of hem.
     this.renderer.render(this.scene, this.camera);
     this.drawArms();
     if (!this.shown) { this.shown = true; v.style.opacity = "0"; }
