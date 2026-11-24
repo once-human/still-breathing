@@ -9,8 +9,8 @@ on:
         options: [turntable, stills]
         default: turntable
       tees:
-        description: "colourways, comma separated"
-        default: "black,cream"
+        description: "design-colour pairs, comma separated (each shirt comes in one colour)"
+        default: "B-black,A-cream"
       samples:
         description: "Cycles samples per pixel"
         default: "64"
@@ -33,7 +33,7 @@ jobs:
           import json, os
           tees = [t.strip() for t in "${{ inputs.tees }}".split(",") if t.strip()]
           views = [f"a{a}" for a in range(0, 360, 30)] if "${{ inputs.kind }}" == "turntable" else ["front", "q", "back"]
-          print("matrix=" + json.dumps({"include": [{"tee": t, "view": v} for t in tees for v in views]}))
+          print("matrix=" + json.dumps({"include": [{"design": t.split("-")[0], "tee": t.split("-")[1], "view": v} for t in tees for v in views]}))
           EOF
 
   frame:
@@ -56,15 +56,20 @@ jobs:
             curl -sSL "https://download.blender.org/release/Blender${BLENDER%.*}/blender-${BLENDER}-linux-x64.tar.xz" | tar -xJ -C ~/blender --strip-components=1
           fi
           sudo apt-get -qq update && sudo apt-get -qq install -y libxi6 libxxf86vm1 libxfixes3 libxrender1 libgl1 libxkbcommon0 libsm6 > /dev/null
-      - name: Render ${{ matrix.tee }} ${{ matrix.view }}
+      - name: Print files for ${{ matrix.design }} ${{ matrix.tee }}
+        working-directory: pipeline
+        run: pip install -q numpy pillow && python3 texture.py ${{ matrix.design }} ${{ matrix.tee }} && SIZE=M python3 texture.py detail
+      - name: Render ${{ matrix.design }} ${{ matrix.tee }} ${{ matrix.view }}
         run: |
-          mkdir -p out
+          mkdir -p out; N="${{ matrix.design }}-${{ matrix.tee }}-${{ matrix.view }}"
           if [ "${{ inputs.kind }}" = "turntable" ]; then export W=880 H=1120 TRANSPARENT=1; fi
-          THREADS=$(nproc) ~/blender/blender -b pipeline/tee-drape.blend -P pipeline/render.py -- B ${{ matrix.tee }} ${{ matrix.view }} "$PWD/out/${{ matrix.tee }}-${{ matrix.view }}.png" ${{ inputs.samples }} | grep -E "Fra:|Saved|Error" | tail -3
-          test -s "out/${{ matrix.tee }}-${{ matrix.view }}.png"
+          # the shop tee: size M sewn onto the ghost form by fit.yml
+          GLB="$PWD/public/tee/fit/form-M/stand.glb" THREADS=$(nproc) ~/blender/blender -b --factory-startup -P pipeline/render.py -- \
+            ${{ matrix.design }} ${{ matrix.tee }} ${{ matrix.view }} "$PWD/out/$N.png" ${{ inputs.samples }} | grep -E "Fra:|Saved|Error|Traceback" | tail -5
+          test -s "out/$N.png"
       - uses: actions/upload-artifact@v4
         with:
-          name: frame-${{ matrix.tee }}-${{ matrix.view }}
+          name: frame-${{ matrix.design }}-${{ matrix.tee }}-${{ matrix.view }}
           path: out/*.png
           retention-days: 7
 
@@ -83,9 +88,9 @@ jobs:
         run: |
           n=0
           for f in frames/*.png; do
-            b=$(basename "$f" .png); tee=${b%%-*}; view=${b#*-}
-            if [ "${{ inputs.kind }}" = "turntable" ]; then d=public/tee/fred-b-$tee/turntable; mkdir -p $d; cp "$f" $d/$view.png
-            else d=previews; mkdir -p $d; cp "$f" $d/3d-B-$tee-$view.png; fi
+            b=$(basename "$f" .png); design=${b%%-*}; view=${b##*-}
+            if [ "${{ inputs.kind }}" = "turntable" ]; then d=public/tee/still/$(echo $design | tr A-Z a-z); mkdir -p $d; cp "$f" $d/$view.png
+            else d=previews; mkdir -p $d; cp "$f" $d/3d-$b.png; fi
             n=$((n+1))
           done
           git config user.name "once-human"
@@ -93,4 +98,4 @@ jobs:
           git add -A public previews
           git diff --cached --quiet && { echo "nothing new"; exit 0; }
           git commit -m "Render ${{ inputs.kind }}: $n frames (${{ inputs.tees }}, ${{ inputs.samples }} spp)"
-          git push
+          git pull --rebase -q && git push

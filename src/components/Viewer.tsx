@@ -154,7 +154,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
 
       // ---------- loop ----------
       let raf = 0, shown = -1;
-      const STILL = (t: Colour, a: number) => `/tee/fred-b-${t}/turntable/a${a}.png`;
+      const STILL = (d: string, a: number) => `/tee/still/${d}/a${a}.png`;
       const loop = () => {
         raf = requestAnimationFrame(loop);
       if (process.env.NODE_ENV !== "production") Object.assign(window, { __sb: { pt, raster, s, SCENES } });
@@ -176,9 +176,9 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         if (!pt) {
           // no WebGPU: show the offline path-traced frame whenever the view lands on one
           const y = ((s.yaw % 360) + 360) % 360, near = (Math.round(y / 30) * 30) % 360;
-          const ok = s.design === "b" && !s.variant.body && !moving && Math.abs(y - near) < 0.5 && s.crop[2] === 1;
-          img.style.opacity = ok ? "1" : "0";
-          if (ok && !img.src.endsWith(STILL(s.tee, near))) img.src = STILL(s.tee, near);
+          const ok = !s.variant.body && !moving && Math.abs(y - near) < 0.5 && s.crop[2] === 1;
+          if (ok && !img.src.endsWith(STILL(s.design, near))) img.src = STILL(s.design, near);
+          img.style.opacity = ok && img.complete && img.naturalWidth > 0 ? "1" : "0";
           return;
         }
         if (s.photo || s.loading || moving || busy || pt.clean) return;
