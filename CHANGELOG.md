@@ -2,6 +2,29 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.5.0 — 2026-11-25
+A try-on that moves like a shirt on you, and three real places to see it in.
+
+### Try-on
+- Reacts sooner: where you stand, your turn, your hips and your arms follow quick movement almost at once, and holding still stays as steady as before.
+- The tee stays on your shoulders when you move fast.
+- Shrug one shoulder and only that side of the tee rises; the hem stays level.
+- Raise your arms and the tee rides up on that side, as on a person, and settles back as you lower them.
+- Sit down and the hips stay upright.
+- No gaps at the shoulders, and no shadows across your face.
+
+### Viewer
+- Three places, each its own: a white studio, a sunny living room and the show's hall. Each wraps all the way round you and lights the tee and the person from every side.
+- The show is lit the way a crowd is: a warm and a cool light over the stage, a follow spot from the side, the front-of-house spots behind.
+- The body is solid: a gust no longer pushes the tee through the chest.
+- The person looks like one: denim jeans, eyes with a shine, relaxed hands and an easy stance.
+
+### Shirts
+- 01 crowd: the voice-note line under again.. is gone.
+
+### Fixes
+- The version at the foot of the page was stuck at 0.3.1. It now matches the release.
+
 ## 0.4.0 — 2026-11-24
 Three shirts: the crowd for the whole tour, a map for each city. And a viewer you can get close to.
 
