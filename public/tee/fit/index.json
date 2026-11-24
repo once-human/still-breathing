@@ -179,6 +179,36 @@
    }
   }
  },
+ "fa163-S": {
+  "size": "S",
+  "body": {
+   "height_cm": 163,
+   "chest_cm": 97
+  },
+  "chest_ease_cm": 10,
+  "poses": {
+   "stand": {
+    "hem_below_crotch_cm": 5,
+    "sleeve_above_elbow_cm": 5,
+    "hem_vs_waistband_cm": -19,
+    "frame": 200,
+    "lift_m": 0.0
+   },
+   "up": {
+    "hem_rise_cm": 7,
+    "hem_vs_waistband_cm": -12,
+    "frame": 300,
+    "lift_m": 0.0
+   },
+   "sit": {
+    "back_hem_vs_waistband_cm": -15,
+    "front_hem_vs_waistband_cm": -15,
+    "seat_cm": 36,
+    "frame": 430,
+    "lift_m": -0.394
+   }
+  }
+ },
  "form-M": {
   "size": "M",
   "body": {
@@ -463,6 +493,36 @@
     "seat_cm": 40,
     "frame": 430,
     "lift_m": -0.433
+   }
+  }
+ },
+ "ma175-M": {
+  "size": "M",
+  "body": {
+   "height_cm": 174,
+   "chest_cm": 92
+  },
+  "chest_ease_cm": 19,
+  "poses": {
+   "stand": {
+    "hem_below_crotch_cm": 5,
+    "sleeve_above_elbow_cm": 7,
+    "hem_vs_waistband_cm": -18,
+    "frame": 200,
+    "lift_m": 0.0
+   },
+   "up": {
+    "hem_rise_cm": 6,
+    "hem_vs_waistband_cm": -12,
+    "frame": 300,
+    "lift_m": 0.0
+   },
+   "sit": {
+    "back_hem_vs_waistband_cm": -14,
+    "front_hem_vs_waistband_cm": -14,
+    "seat_cm": 39,
+    "frame": 430,
+    "lift_m": -0.4378
    }
   }
  }
