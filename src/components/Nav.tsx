@@ -26,7 +26,7 @@ export function Nav() {
       {ITEMS.map((i) => (
         <a key={i.id} href={`#${i.id}`} onClick={go(i.id)} className={`${cell} ${SHOW[i.show]}`}>{i.label}</a>
       ))}
-      <span className={`${cell} ${SHOW.lg}`} aria-hidden />
+      <a href="/made" className={`${cell} ${SHOW.lg} text-quiet hover:text-ink`}>how it&apos;s made</a>
       <span className={`${cell} tnum text-right md:text-left`}><Countdown short /></span>
     </nav>
   );

@@ -76,7 +76,7 @@ export default function Home() {
       <footer className="mt-32 grid grid-cols-2 gap-3 px-4 pb-4 text-[13px] md:grid-cols-4">
         <span className="border-t border-line pt-1.5">still breathing, lineup 01</span>
         <span className="border-t border-line pt-1.5 text-quiet">made to order</span>
-        <span className="hidden border-t border-line pt-1.5 text-quiet md:block">made in india</span>
+        <a href="/made" className="border-t border-line pt-1.5 text-quiet hover:text-ink">how it&apos;s made</a>
         <span className="hidden border-t border-line pt-1.5 text-right text-quiet md:block">v{pkg.version}</span>
       </footer>
     </>
