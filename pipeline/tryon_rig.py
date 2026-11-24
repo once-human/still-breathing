@@ -115,6 +115,41 @@ dt.layers_vgroup_select_src = "ALL"; dt.layers_vgroup_select_dst = "NAME"
 bpy.ops.object.datalayout_transfer(modifier="w")
 bpy.ops.object.modifier_apply(modifier="w")
 tidy(tee, smooth=SMOOTH)
+# ---- the hem: eight spring bones round the body, from the waist to the hem, each owning its slice of the tee ----
+# (the engine hangs them under gravity and swings them with your movement, as a game does a character's coat)
+HEM = 8
+V = np.array([v.co[:] for v in me.vertices]); yc = V[(V[:, 2] > V[:, 2].max() - 0.16) & (np.abs(V[:, 0]) < 0.1), 1].mean()
+zt, zb = V[:, 2].max(), V[:, 2].min()
+waist = (skel.matrix_world @ skel.data.bones["root"].head_local).z + 0.12
+ang = np.arctan2(V[:, 0], -(V[:, 1] - yc)); rad = np.hypot(V[:, 0], V[:, 1] - yc)
+select_only(skel); bpy.ops.object.mode_set(mode="EDIT")
+eb = skel.data.edit_bones
+for k in range(HEM):
+    th = 2 * math.pi * k / HEM
+    sec = np.abs(np.angle(np.exp(1j * (ang - th)))) < math.pi / HEM
+    def ring(z0, z1):
+        m = sec & (V[:, 2] > z0) & (V[:, 2] < z1)
+        return float(np.percentile(rad[m], 90)) if m.any() else 0.15
+    rw, rh = ring(waist - 0.03, waist + 0.03), ring(zb, zb + 0.04)
+    b = eb.new(f"hem{k}"); b.parent = eb["root"]; b.use_deform = True
+    b.head = Vector((rw * math.sin(th), yc - rw * math.cos(th), waist)); b.tail = Vector((rh * math.sin(th), yc - rh * math.cos(th), zb))
+    e = eb.new(f"hem{k}end"); e.parent = b; e.use_deform = True; e.head = b.tail; e.tail = b.tail + Vector((0, 0, -0.02))  # marks the tail
+bpy.ops.object.mode_set(mode="OBJECT"); select_only(tee)
+for k in range(HEM): tee.vertex_groups.new(name=f"hem{k}")
+G = list(tee.vertex_groups); gi = {g.name: i for i, g in enumerate(G)}; W = np.zeros((len(V), len(G)), np.float32)
+for v in me.vertices:
+    for g in v.groups: W[v.index, g.group] = g.weight
+t = np.clip((waist - V[:, 2]) / max(1e-3, waist - zb), 0, 1); hw = t * t * (3 - 2 * t)
+f = (ang % (2 * math.pi)) / (2 * math.pi) * HEM; k0 = np.floor(f).astype(int) % HEM; a1 = f - np.floor(f)
+W *= (1 - hw)[:, None]
+for k in range(HEM):
+    W[:, gi[f"hem{k}"]] += hw * ((k0 == k) * (1 - a1) + (((k0 + 1) % HEM) == k) * a1)
+top = np.argsort(-W, axis=1)[:, 4:]; np.put_along_axis(W, top, 0, axis=1)
+W[W < 0.01] = 0; W /= np.maximum(W.sum(1, keepdims=True), 1e-6)
+for i, g in enumerate(G):
+    g.remove(list(range(len(V))))
+    for j in np.nonzero(W[:, i])[0]: g.add([int(j)], float(W[j, i]), "REPLACE")
+print("hem bones", HEM, "waist", round(waist, 3), "hem", round(zb, 3))
 am = tee.modifiers.new("skel", "ARMATURE"); am.object = skel; tee.parent = skel
 
 # ---- the occluder: the body from mid-thigh up, light enough to skin every frame ----

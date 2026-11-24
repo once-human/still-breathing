@@ -99,6 +99,7 @@ export class TryOn {
   private teeGeo: THREE.BufferGeometry | null = null; private basePos: Float32Array | null = null;
   private dims = { yTop: 0, zc: 0 };
   private mid = new THREE.Vector3();
+  private hem: { name: string; b: THREE.Bone; dir: THREE.Vector3; out: THREE.Vector3; len: number; p: THREE.Vector3; v: THREE.Vector3; live: boolean }[] = [];
   private filt = new Map<number, Euro3>();
   private tFilt = new Euro3(1.0, 2, 0.35, 0.8);   // where the body stands; distance smoothed hardest
   private armOn = [false, false];
@@ -212,6 +213,11 @@ export class TryOn {
       this.restP.set(name, b.getWorldPosition(new THREE.Vector3()));
     }
     const sL = this.bp("upperarm01.L"), sR = this.bp("upperarm01.R"), root = this.bp("root");
+    const axisZ = this.bp("spine01").z;
+    for (let k = 0; this.bone(`hem${k}`); k++) {
+      const name = `hem${k}`, b = this.bone(name)!, head = this.bp(name), tail = this.bp(`hem${k}end`), d = tail.clone().sub(head);
+      this.hem.push({ name, b, dir: d.clone().normalize(), len: d.length(), out: new THREE.Vector3(head.x, 0, head.z - axisZ).normalize(), p: new THREE.Vector3(), v: new THREE.Vector3(), live: false });
+    }
     this.modelShoulder = sL.distanceTo(sR);
     const xR = sL.clone().sub(sR).normalize(), yR = sL.clone().add(sR).multiplyScalar(0.5).sub(root).normalize();
     const zR = new THREE.Vector3().crossVectors(xR, yR).normalize(); yR.crossVectors(zR, xR);
@@ -234,6 +240,50 @@ export class TryOn {
       outer.maskNode = collar.and(inward).not();
     }
     this.rig.visible = false;
+  }
+
+  /** turn a bone so that, in the model's space, it sits at its rest orientation turned by delta */
+  private setBone(name: string, delta: THREE.Quaternion, ease = 1) {
+    const b = this.bone(name); if (!b) return;
+    const pq = b.parent ? b.parent.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion();
+    const local = pq.invert().multiply(delta.clone().multiply(this.restQ.get(b.name)!));
+    if (ease >= 1) b.quaternion.copy(local); else b.quaternion.slerp(local, ease);
+    b.updateMatrixWorld(true);
+  }
+  /** how far a bone's parent has turned from rest: what the bone carries before it turns itself */
+  private carried(name: string) {
+    const p = this.bone(name)?.parent as THREE.Bone | undefined;
+    if (!p || !this.restQ.has(p.name)) return new THREE.Quaternion();
+    return p.getWorldQuaternion(new THREE.Quaternion()).multiply(this.restQ.get(p.name)!.clone().invert());
+  }
+
+  /**
+   * The hem hangs like cloth. Eight spring bones run from the waist to the hem; each is a damped pendulum whose
+   * tip is pulled toward where the body would carry it, while gravity and its own momentum act on it. Lean forward
+   * and the front falls away from you; turn and the hem swings, then settles. It never goes further into the body
+   * than it hangs at rest. Stiffness and damping are set for 240 GSM jersey: about one slow swing, no bounce.
+   */
+  private hang(dt: number) {
+    const K = 55, C = 7, G = new THREE.Vector3(0, -9.81, 0), s = this.rig.scale.x;
+    for (const h of this.hem) {
+      const head = h.b.getWorldPosition(new THREE.Vector3()), D = this.carried(h.name);
+      const rest = h.dir.clone().applyQuaternion(D), out = h.out.clone().applyQuaternion(D), L = h.len * s;
+      const T = head.clone().addScaledVector(rest, L);
+      // the drape already hangs under gravity as you stand: only the change in gravity relative to the body pulls
+      const g = G.clone().sub(G.clone().applyQuaternion(D));
+      if (!h.live || h.p.distanceTo(T) > 0.5) { h.p.copy(T); h.v.set(0, 0, 0); h.live = true; }
+      const n = 2, st = Math.min(dt, 0.05) / n;
+      for (let i = 0; i < n; i++) {
+        const a = T.clone().sub(h.p).multiplyScalar(K).add(g).addScaledVector(h.v, -C);
+        h.v.addScaledVector(a, st); h.p.addScaledVector(h.v, st);
+        const d = h.p.clone().sub(head).normalize();
+        const inside = d.dot(out) - rest.dot(out);
+        if (inside < -0.03) { d.addScaledVector(out, -0.03 - inside).normalize(); h.v.addScaledVector(out, -Math.min(0, h.v.dot(out))); }
+        h.p.copy(head).addScaledVector(d, L);
+      }
+      const dir = h.p.clone().sub(head).normalize();
+      this.setBone(h.name, new THREE.Quaternion().setFromUnitVectors(rest, dir).multiply(D));
+    }
   }
 
   /** a bone's rest head position in the model's space (names as in Blender; the loader drops the dots) */
@@ -331,7 +381,7 @@ export class TryOn {
   private place(l: NormalizedLandmark[] | null, w: Landmark[] | null, t: number, dt: number) {
     const ok = l && w && (l[L_SH].visibility ?? 0) > 0.55 && (l[R_SH].visibility ?? 0) > 0.55;
     if (!ok) {
-      if (++this.lost > 6) { this.rig.visible = false; this.placed = false; this.lms = null; this.filt.forEach((f) => f.reset()); this.tFilt.reset(); this.midU.reset(); this.midV.reset(); this.body = 0; this.onStatus("nobody"); }
+      if (++this.lost > 6) { this.rig.visible = false; this.placed = false; this.hem.forEach((h) => (h.live = false)); this.lms = null; this.filt.forEach((f) => f.reset()); this.tFilt.reset(); this.midU.reset(); this.midV.reset(); this.body = 0; this.onStatus("nobody"); }
       return;
     }
     this.lost = 0;
@@ -419,19 +469,7 @@ export class TryOn {
     this.rig.position.set(0, 0, 0); this.rig.scale.setScalar(this.body); this.rig.updateMatrixWorld(true);
     const inv = this.restTorso.clone().invert();
     const dC = this.torsoQ.clone().multiply(inv), dH = this.hipQ.clone().multiply(inv);
-    const set = (name: string, delta: THREE.Quaternion, ease = 1) => {
-      const b = this.bone(name); if (!b) return;
-      const pq = b.parent ? b.parent.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion();
-      const local = pq.invert().multiply(delta.clone().multiply(this.restQ.get(b.name)!));
-      if (ease >= 1) b.quaternion.copy(local); else b.quaternion.slerp(local, ease);
-      b.updateMatrixWorld(true);
-    };
-    // how far a bone's parent has turned from rest: what the bone carries before it turns itself
-    const carried = (name: string) => {
-      const p = this.bone(name)?.parent as THREE.Bone | undefined;
-      if (!p || !this.restQ.has(p.name)) return new THREE.Quaternion();
-      return p.getWorldQuaternion(new THREE.Quaternion()).multiply(this.restQ.get(p.name)!.clone().invert());
-    };
+    const set = (name: string, delta: THREE.Quaternion, ease = 1) => this.setBone(name, delta, ease), carried = (name: string) => this.carried(name);
     set("root", dH);
     const spine = ["spine05", "spine04", "spine03", "spine02"];
     spine.forEach((nm, i) => set(nm, dH.clone().slerp(dC, (i + 1) / (spine.length + 1))));
@@ -465,6 +503,7 @@ export class TryOn {
     this.rig.position.copy(mid).sub(jm);
     this.rig.updateMatrixWorld(true);
     this.key.target.position.copy(mid); this.key.position.copy(mid).add(this.keyOff);
+    this.hang(dt);
 
     this.placed = true;
     if (!this.rig.visible) { this.rig.visible = true; this.onStatus("ready"); }
