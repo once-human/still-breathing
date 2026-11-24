@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Colour, Design } from "@/content/tee";
+import { COLOURS, DESIGNS, type Colour, type Design } from "@/content/tee";
+import type { Format, Look, PhotoJob } from "@/lib/viewer/photo";
 
 type Engine = {
   setLook: (d: Design, t: Colour) => void;
   turnTo: (deg: number) => void;
   setMagnify: (on: boolean) => void;
   setScene: (id: string) => void;
+  photo: (job: PhotoJob) => Promise<Blob>;
   dispose: () => void;
 };
 
@@ -23,6 +25,9 @@ const SCENE_LIST = [
   { id: "studio", label: "studio" }, { id: "window", label: "window" }, { id: "overcast", label: "overcast" },
   { id: "tube", label: "tube light" }, { id: "flash", label: "phone flash" }, { id: "concert", label: "the show" },
 ];
+const PHOTO_SPP = 256;
+const FORMAT_LIST: { id: Format; label: string }[] = [{ id: "story", label: "story 9:16" }, { id: "post", label: "post 4:5" }];
+const LOOK_LIST: Look[] = ["clean", "film"];
 
 /**
  * The tee on a seamless sweep. Drag to turn it; let go and the browser path-traces the exact view
@@ -40,6 +45,12 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
   const lookRef = useRef({ design, tee });
   const sceneRef = useRef("studio");
   const [sceneId, setSceneId] = useState("studio");
+  const [canPhoto, setCanPhoto] = useState(false);
+  const [format, setFormat] = useState<Format>("story");
+  const [look, setLook] = useState<Look>("film");
+  const [developing, setDeveloping] = useState<number | null>(null);
+  const [photo, setPhoto] = useState<{ url: string; blob: Blob; name: string } | null>(null);
+  const stopPhoto = useRef<AbortController | null>(null);
 
   useEffect(() => {
     let dead = false;
@@ -58,7 +69,7 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
       if (PathTracer.supported()) {
         try { pt = new PathTracer(); await pt.init(tc); } catch (e) { console.warn("path tracer off", e); pt = null; }
       }
-      const s = { design: lookRef.current.design, tee: lookRef.current.tee, yaw: 0, goal: null as number | null, vel: 0, drag: false, crop: [0, 0, 1] as [number, number, number], magnify: false, moving: true, dirty: true };
+      const s = { design: lookRef.current.design, tee: lookRef.current.tee, yaw: 0, goal: null as number | null, vel: 0, drag: false, crop: [0, 0, 1] as [number, number, number], magnify: false, moving: true, dirty: true, photo: false };
 
       setStatus("loading the tee");
       const geo = await raster.load(s.design, s.tee);
@@ -154,7 +165,7 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
           if (ok && !img.src.endsWith(STILL(s.tee, near))) img.src = STILL(s.tee, near);
           return;
         }
-        if (moving || busy || pt.frame >= MAX_SPP) return;
+        if (s.photo || moving || busy || pt.frame >= MAX_SPP) return;
         busy = true;
         // as many samples as fit in ~20 ms, so the page stays responsive while the light settles
         const n = pt.lastMs > 0 ? clamp(Math.floor(20 / pt.lastMs), 1, 8) : 1;
@@ -182,6 +193,18 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
           raster.setScene(scene, s.tee === "cream"); pt?.setScene(scene, FABRIC[s.tee], s.tee === "cream");
           s.dirty = true; lastSig = "";
         },
+        photo: async (job) => {
+          if (!pt) throw new Error("photos need WebGPU");
+          s.photo = true;
+          while (busy) await new Promise((r) => setTimeout(r, 16));
+          const { renderPhoto } = await import("@/lib/viewer/photo");
+          try { return await renderPhoto(pt, job); }
+          finally {
+            s.photo = false; size();
+            pt.setView({ yaw: s.yaw, crop: [...s.crop], knit: true });
+            s.dirty = true; lastSig = "";
+          }
+        },
         setMagnify: (on) => { s.magnify = on; if (!on) s.crop = [0, 0, 1]; s.dirty = true; },
         dispose: () => {
           cancelAnimationFrame(raf); ro.disconnect();
@@ -191,6 +214,7 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
           raster.renderer.dispose(); pt?.device.destroy();
         },
       };
+      setCanPhoto(!!pt);
       const want = lookRef.current;
       if (want.tee !== s.tee || want.design !== s.design) engine.current.setLook(want.design, want.tee);
     })().catch((e) => { console.error(e); setStatus("the 3D view could not start"); });
@@ -198,6 +222,29 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
   }, []);
 
   useEffect(() => { lookRef.current = { design, tee }; engine.current?.setLook(design, tee); }, [design, tee]);
+  useEffect(() => () => { if (photo) URL.revokeObjectURL(photo.url); }, [photo]);
+
+  const makePhoto = async () => {
+    if (!engine.current || developing !== null) return;
+    const ac = new AbortController(); stopPhoto.current = ac;
+    const d = DESIGNS[design], sc = SCENE_LIST.find((x) => x.id === sceneId)!;
+    setDeveloping(0);
+    try {
+      const blob = await engine.current.photo({
+        format, look, spp: PHOTO_SPP, signal: ac.signal,
+        caption: { title: "again.. mumbai", line: `${d.no} ${d.name} · ${COLOURS[tee].name} · ${sc.label}`, foot: "mumbai 08+09.12 · fan made, not for sale" },
+        onProgress: (n, t) => setDeveloping(n / t),
+      });
+      setPhoto({ url: URL.createObjectURL(blob), blob, name: `still-breathing-${d.name}-${tee}-${sceneId}-${format}.jpg` });
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") { console.error(e); setStatus("the photo could not be made"); }
+    } finally { setDeveloping(null); stopPhoto.current = null; }
+  };
+  const share = async () => {
+    if (!photo) return;
+    const file = new File([photo.blob], photo.name, { type: "image/jpeg" });
+    if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], title: "still breathing" }); } catch { /* closed */ } }
+  };
 
   return (
     <div>
@@ -232,6 +279,39 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
           </button>
         ))}
       </div>
+      {canPhoto ? (
+        <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-line pt-1.5 text-[13px]" role="group" aria-label="Photo">
+          <span className="text-quiet">photo</span>
+          {FORMAT_LIST.map((x) => (
+            <button key={x.id} onClick={() => setFormat(x.id)} className={x.id === format ? "font-semibold" : "text-quiet hover:text-ink"}>{x.label}</button>
+          ))}
+          <span className="text-line" aria-hidden>/</span>
+          {LOOK_LIST.map((x) => (
+            <button key={x} onClick={() => setLook(x)} className={x === look ? "font-semibold" : "text-quiet hover:text-ink"}>{x}</button>
+          ))}
+          {developing === null ? (
+            <button onClick={makePhoto} className="ml-auto font-semibold text-blue hover:text-ink">make the photo →</button>
+          ) : (
+            <span className="ml-auto tnum">
+              developing · {Math.round(developing * 100)}%{" "}
+              <button onClick={() => stopPhoto.current?.abort()} className="text-quiet underline hover:text-ink">stop</button>
+            </span>
+          )}
+        </div>
+      ) : null}
+      {photo ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" role="dialog" aria-label="Your photo" onClick={() => setPhoto(null)}>
+          <div className="flex max-h-full flex-col items-center gap-3" onClick={(e) => e.stopPropagation()}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={photo.url} alt="The tee, path traced" className="max-h-[80vh] w-auto max-w-full" />
+            <div className="flex gap-6 text-[14px]">
+              <a href={photo.url} download={photo.name} className="font-semibold text-ink hover:text-blue">save</a>
+              {typeof navigator !== "undefined" && "share" in navigator ? <button onClick={share} className="text-ink hover:text-blue">share</button> : null}
+              <button onClick={() => setPhoto(null)} className="text-quiet hover:text-ink">close</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {magnify ? <p className="mt-1 text-[12px] text-quiet">click to look close, scroll to zoom up to 12×, drag to move. it re-renders the cloth at that size, nothing is stretched.</p> : null}
     </div>
   );

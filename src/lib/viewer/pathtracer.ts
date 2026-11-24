@@ -21,24 +21,34 @@ export class PathTracer {
   private ubuf!: GPUBuffer;
   private dims!: GPUBuffer;
   private accum: GPUBuffer | null = null;
-  /** debug: mean displayed sRGB (0-255) of a box given in 0..1 frame coordinates, after the same view transform */
-  async probe(x0: number, y0: number, x1: number, y1: number) {
+  /** the accumulated linear image (rgb + sample weight per pixel) */
+  async readAccum() {
     const d = this.device, size = this.w * this.h * 16;
     const rb = d.createBuffer({ size, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
     const enc = d.createCommandEncoder(); enc.copyBufferToBuffer(this.accum!, 0, rb, 0, size); d.queue.submit([enc.finish()]);
     await rb.mapAsync(GPUMapMode.READ);
     const a = new Float32Array(rb.getMappedRange().slice(0)); rb.unmap(); rb.destroy();
-    const neutral = (c: number[]) => {
-      const x = Math.min(...c), off = x < 0.08 ? x - 6.25 * x * x : 0.04; c = c.map((v) => v - off);
-      const peak = Math.max(...c), st = 0.76; if (peak < st) return c;
-      const dd = 1 - st, np = 1 - (dd * dd) / (peak + dd - st); c = c.map((v) => (v * np) / peak);
-      const g = 1 - 1 / (0.15 * (peak - np) + 1); return c.map((v) => v + (np - v) * g);
-    };
-    const srgb = (v: number) => 255 * (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055);
+    return a;
+  }
+  /** the finished frame as 8-bit sRGB, through the same view transform the screen uses */
+  async toImageData() {
+    const a = await this.readAccum(), n = this.w * this.h, out = new ImageData(this.w, this.h), o = out.data;
+    const c = [0, 0, 0];
+    for (let i = 0; i < n; i++) {
+      const w = a[i * 4 + 3] || 1;
+      c[0] = a[i * 4] / w; c[1] = a[i * 4 + 1] / w; c[2] = a[i * 4 + 2] / w;
+      const m = neutral(c);
+      o[i * 4] = srgb8(m[0]); o[i * 4 + 1] = srgb8(m[1]); o[i * 4 + 2] = srgb8(m[2]); o[i * 4 + 3] = 255;
+    }
+    return out;
+  }
+  /** debug: mean displayed sRGB (0-255) of a box given in 0..1 frame coordinates, after the same view transform */
+  async probe(x0: number, y0: number, x1: number, y1: number) {
+    const a = await this.readAccum();
     const out = [0, 0, 0], lin = [0, 0, 0]; let n = 0;
     for (let y = Math.floor(y0 * this.h); y < y1 * this.h; y++) for (let x = Math.floor(x0 * this.w); x < x1 * this.w; x++) {
       const i = (y * this.w + x) * 4, w = a[i + 3] || 1, c = [a[i] / w, a[i + 1] / w, a[i + 2] / w];
-      const m = neutral(c).map((v) => srgb(Math.min(1, Math.max(0, v))));
+      const m = neutral(c).map(srgb8);
       for (let k = 0; k < 3; k++) { out[k] += m[k]; lin[k] += c[k]; } n++;
     }
     return { srgb: out.map((v) => Math.round(v / n)), linear: lin.map((v) => +(v / n).toFixed(4)), spp: this.frame };
@@ -53,6 +63,8 @@ export class PathTracer {
   private k = 1;
   private view: View = { yaw: 0, crop: [0, 0, 1], knit: true };
   lastMs = 0;
+  /** photo mode: a different frame shape from the same camera position (so perspective, and the tee, never change) */
+  optics: { aspect: number; tanHalf: number } | null = null;
   /** fitted against the Cycles turntable frames (black and off white, three patches each) */
   sheenK = 0.06;
 
@@ -146,8 +158,8 @@ export class PathTracer {
     const { f: F, r: R, u: Up } = cameraBasis();
     const set = (o: number, v: V3, w: number) => { f[o] = v[0]; f[o + 1] = v[1]; f[o + 2] = v[2]; f[o + 3] = w; };
     set(0, CAMERA.pos, (CAMERA.lensMm / CAMERA.fstop / 2) / 1000);
-    set(4, R, Math.tan(VFOV / 2));
-    set(8, Up, ASPECT);
+    set(4, R, this.optics?.tanHalf ?? Math.tan(VFOV / 2));
+    set(8, Up, this.optics?.aspect ?? ASPECT);
     set(12, F, CAMERA.focus);
     const [cx, cy, z] = this.view.crop; f[16] = cx; f[17] = cy; f[18] = z; f[19] = this.sheenK;
     const yr = (this.view.yaw * Math.PI) / 180; f[20] = Math.cos(yr); f[21] = Math.sin(yr);
@@ -174,7 +186,7 @@ export class PathTracer {
   get ready() { return !!(this.geo && this.tex.color && this.accum && this.scene); }
 
   /** Trace `spp` samples per pixel and present. Resolves when the GPU has finished. */
-  async step(spp = 1) {
+  async step(spp = 1, present = true) {
     if (!this.ready) return;
     const d = this.device;
     if (!this.traceBG) {
@@ -209,6 +221,7 @@ export class PathTracer {
       d.queue.submit([enc.finish()]);
       this.frame++;
     }
+    if (!present) { await d.queue.onSubmittedWorkDone(); this.lastMs = (performance.now() - t0) / spp; return; }
     const enc = d.createCommandEncoder();
     const rp = enc.beginRenderPass({ colorAttachments: [{ view: this.ctx.getCurrentTexture().createView(), loadOp: "clear", storeOp: "store", clearValue: [0, 0, 0, 1] }] });
     rp.setPipeline(this.show); rp.setBindGroup(0, this.showBG); rp.draw(3); rp.end();
@@ -216,4 +229,20 @@ export class PathTracer {
     await d.queue.onSubmittedWorkDone();
     this.lastMs = (performance.now() - t0) / spp;
   }
+}
+
+/** Khronos PBR Neutral, the same curve as the display shader */
+function neutral(c: number[]) {
+  const x = Math.min(c[0], c[1], c[2]), off = x < 0.08 ? x - 6.25 * x * x : 0.04;
+  let r = c[0] - off, g = c[1] - off, b = c[2] - off;
+  const peak = Math.max(r, g, b), st = 0.76;
+  if (peak < st) return [r, g, b];
+  const dd = 1 - st, np = 1 - (dd * dd) / (peak + dd - st);
+  r = (r * np) / peak; g = (g * np) / peak; b = (b * np) / peak;
+  const k = 1 - 1 / (0.15 * (peak - np) + 1);
+  return [r + (np - r) * k, g + (np - g) * k, b + (np - b) * k];
+}
+function srgb8(v: number) {
+  v = Math.min(1, Math.max(0, v));
+  return Math.round(255 * (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055));
 }
