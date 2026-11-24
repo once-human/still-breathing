@@ -49,15 +49,17 @@ type Shot = {
   pan: boolean;
   /** up close: the prints it frames, the first one first */
   spots?: Spot[];
+  /** its little preview: a rendered frame (angle) and the crop of it */
+  thumb: { a: number; crop: [number, number, number] };
 };
 const SHOTS: Shot[] = [
-  { id: "tee", label: "the tee", who: "alone", paper: true, yaw: 210, turn: true, spin: true, zoom: [1, 1], pan: false },
-  { id: "worn", label: "worn", who: "worn", paper: false, yaw: null, turn: true, spin: true, zoom: [1, 5], pan: true },
+  { id: "tee", label: "the tee", who: "alone", paper: true, yaw: 210, turn: true, spin: true, zoom: [1, 1], pan: false, thumb: { a: 210, crop: [1.35, 0, 0.1] } },
+  { id: "worn", label: "worn", who: "worn", paper: false, yaw: null, turn: true, spin: true, zoom: [1, 5], pan: true, thumb: { a: 0, crop: [1, 0, 0] } },
   {
-    id: "close", label: "up close", who: "alone", paper: true, yaw: 180, turn: false, spin: false, zoom: [1.85, 7], pan: true,
+    id: "close", label: "up close", who: "alone", paper: true, yaw: 180, turn: false, spin: false, zoom: [1.85, 7], pan: true, thumb: { a: 180, crop: [1.85, 0, 0.07] },
     spots: [
-      { label: "back print", yaw: 180, open: [1.85, 0, 0.07], zoom: [1.85, 7] },
-      { label: "chest print", yaw: 0, open: [3.6, 0.176, 0.3], zoom: [3.6, 7] },
+      { label: "back", yaw: 180, open: [1.85, 0, 0.07], zoom: [1.85, 7] },
+      { label: "front", yaw: 0, open: [3.6, 0.176, 0.3], zoom: [3.6, 7] },
     ],
   },
 ];
@@ -624,7 +626,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           const side = k < 0 ? "l" : "r", on = edge === side, to = SHOTS[(shotI + k + SHOTS.length) % SHOTS.length];
           return (
             <div key={side}>
-              <div aria-hidden className={`pointer-events-none absolute inset-y-0 z-10 w-2/5 transition-opacity duration-500 ${k < 0 ? "left-0 bg-[radial-gradient(ellipse_100%_75%_at_0%_50%,rgba(0,0,0,0.4),transparent_72%)]" : "right-0 bg-[radial-gradient(ellipse_100%_75%_at_100%_50%,rgba(0,0,0,0.4),transparent_72%)]"} ${on ? "opacity-100" : "opacity-0"}`} />
+              <div aria-hidden className={`pointer-events-none absolute inset-y-0 z-10 w-[45%] transition-opacity duration-700 ease-out ${k < 0 ? "left-0 bg-[radial-gradient(ellipse_100%_75%_at_0%_50%,rgba(0,0,0,0.62),transparent_74%)]" : "right-0 bg-[radial-gradient(ellipse_100%_75%_at_100%_50%,rgba(0,0,0,0.62),transparent_74%)]"} ${on ? "opacity-100" : "opacity-0"}`} />
               <button
                 onClick={() => void goShot(shotI + k)} aria-label={`${k < 0 ? "Previous" : "Next"} view: ${to.label}`}
                 className={`group/arrow absolute top-1/2 z-20 flex -translate-y-1/2 flex-col gap-0.5 p-3 text-ink transition-[opacity,scale] duration-300 ease-out [filter:drop-shadow(0_1px_3px_rgba(0,0,0,0.6))] ${k < 0 ? "left-1 origin-left items-start" : "right-1 origin-right items-end"} ${on ? "scale-100 opacity-100" : "scale-[0.72] opacity-55"}`}
@@ -639,7 +641,19 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
             </div>
           );
         })}
-        <p className={`pointer-events-none absolute right-3 bottom-3 z-20 text-[12px] tnum ${dark ? "text-white/70" : "text-black/55"}`}>{shotI + 1} / {SHOTS.length}</p>
+        {/* the views as little pictures, like a photo app's strip: see what's there, tap to go */}
+        <div className="absolute right-3 bottom-3 z-20 flex gap-1.5" role="group" aria-label="Views">
+          {SHOTS.map((x, i) => (
+            <button
+              key={x.id} onClick={() => void goShot(i)} aria-label={x.label} aria-current={i === shotI}
+              className={`relative size-10 overflow-hidden rounded-[3px] bg-studio shadow-[0_1px_4px_rgba(0,0,0,0.35)] transition duration-300 sm:size-11 ${i === shotI ? "opacity-100 ring-[1.5px] ring-ink" : "opacity-55 hover:opacity-100"}`}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={STILL(design, x.thumb.a)} alt="" draggable={false} loading="lazy" className="absolute inset-0 h-full w-full object-cover"
+                style={{ transform: `scale(${x.thumb.crop[0]}) translate(${-x.thumb.crop[1] * 50}%, ${x.thumb.crop[2] * 50}%)` }} />
+            </button>
+          ))}
+        </div>
         <p className="pointer-events-none absolute bottom-3 left-3 text-[12px] text-black/60 tnum">{status}</p>
       </div>
       <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[13px]" role="tablist" aria-label="Views">

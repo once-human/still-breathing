@@ -2,6 +2,12 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.12.0 — 2026-11-25
+### Studio
+- The view counter is a strip of three little pictures in the corner of the stage, one per view, like a photo app's: see what each shows, tap to go.
+- Up close picks between the back and the front.
+- The shade near an edge is deeper and comes up more slowly, so the arrow on it reads clearly.
+
 ## 0.11.0 — 2026-11-25
 ### Studio
 - The carousel is three views now. **The tee** opens first: the shirt alone on paper, turning slowly; drag to turn it, or pick front or back. **Worn**: someone in it at the place you pick, with front, ¾, side and back, zoom, the light and the photo. **Up close**: framed on the whole back print, or the chest print, with the cloth still moving; zoom right in and slide along it. ¾ back, flat and the art are gone.
