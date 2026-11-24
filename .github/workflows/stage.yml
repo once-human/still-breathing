@@ -1,0 +1,83 @@
+# The show behind the person in the shop viewer: one 360 degree picture of a dark hall and its stage, rendered in
+# Cycles in horizontal strips across the farm, then stitched, lens-blurred and committed to the site.
+name: stage
+on:
+  workflow_dispatch:
+    inputs:
+      width:
+        description: "panorama width in pixels (height is half)"
+        default: "2048"
+      samples:
+        description: "Cycles samples per pixel"
+        default: "48"
+      strips:
+        description: "horizontal strips, one runner each"
+        default: "16"
+
+permissions:
+  contents: write
+
+env:
+  BLENDER: "5.3.0"
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - id: m
+        run: echo "matrix={\"strip\":[$(seq -s, 0 $(( ${{ inputs.strips }} - 1 )))]}" >> "$GITHUB_OUTPUT"
+
+  strip:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/blender
+          key: blender-${{ env.BLENDER }}
+      - name: Blender ${{ env.BLENDER }}
+        run: |
+          if [ ! -x ~/blender/blender ]; then
+            mkdir -p ~/blender
+            curl -sSL "https://download.blender.org/release/Blender${BLENDER%.*}/blender-${BLENDER}-linux-x64.tar.xz" | tar -xJ -C ~/blender --strip-components=1
+          fi
+          sudo apt-get -qq update && sudo apt-get -qq install -y libxi6 libxxf86vm1 libxfixes3 libxrender1 libgl1 libxkbcommon0 libsm6 > /dev/null
+      - name: Render strip ${{ matrix.strip }}
+        run: |
+          mkdir -p out; N=$(printf "s%02d" ${{ matrix.strip }})
+          ~/blender/blender -b --factory-startup -P pipeline/stage.py -- "$PWD/out/$N.exr" ${{ matrix.strip }} ${{ inputs.strips }} ${{ inputs.samples }} ${{ inputs.width }} \
+            | grep -E "Fra:.*Sample [0-9]+/[0-9]+$|saved|Error|Traceback" | tail -5
+          test -s "out/$N.npy"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: strip-${{ matrix.strip }}
+          path: out/*.npy
+          retention-days: 7
+
+  publish:
+    needs: strip
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { path: got, pattern: strip-*, merge-multiple: true }
+      - name: Develop and commit
+        run: |
+          pip install -q numpy pillow
+          mkdir -p public/tee/stage
+          python3 pipeline/stage_post.py public/tee/stage/show.webp $(ls got/s*.npy | sort)
+          ls -la public/tee/stage
+          git config user.name "once-human"
+          git config user.email "121476278+once-human@users.noreply.github.com"
+          git add public/tee/stage
+          git diff --cached --quiet && { echo "nothing new"; exit 0; }
+          git commit -m "Stage: the show around the person, 360 degrees, rendered on the farm"
+          git pull --rebase -q && git push
