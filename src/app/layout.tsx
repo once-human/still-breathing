@@ -3,7 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { SmoothScroll } from "@/components/SmoothScroll";
 
-const description = "again..: shirts for the December shows in India. The crowd, for the whole tour, and a map of the ground for each city: Mumbai and Bengaluru. Lineup 01 of Still Breathing.";
+const description = "again..: shirts for the December shows in India. The crowd, for the whole tour, a map of the ground for each city, Mumbai and Bengaluru, and two more for Bengaluru: breath and end of the line. Lineup 01 of Still Breathing.";
 
 export const metadata: Metadata = {
   title: "still breathing",

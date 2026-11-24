@@ -2,6 +2,14 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.8.0 — 2026-11-25
+Breath and end of the line are back.
+
+### Shirts
+- 04 breath (black): the crowd through a heat camera on a cold December night, hands up, every breath rising.
+- 05 end of the line (off white): the Green Line out to Madavara, its last station, where the show is.
+- Both sit in the Bengaluru row next to its map, and you can turn them in the viewer and try them on.
+
 ## 0.7.1 — 2026-11-25
 ### Viewer
 - The tee turns half as fast on its own: one slow turn in about 51 seconds.
