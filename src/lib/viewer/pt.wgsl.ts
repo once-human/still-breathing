@@ -13,6 +13,8 @@ struct U {
   world: vec3f, knit: f32,
   paper: vec3f, showPaper: f32,
   fabric: vec3f, grain: f32,
+  skin: vec3f, _s: f32,
+  knitRep: vec4f,
   size: vec4u,
   lights: array<Light, 4>,
 };
@@ -28,10 +30,11 @@ struct U {
 @group(0) @binding(8) var texOrm: texture_2d<f32>;
 @group(0) @binding(9) var texNormal: texture_2d<f32>;
 @group(0) @binding(10) var texKnit: texture_2d<f32>;
+// first-hit guides for the denoiser, summed over samples: [normal.xyz, depth], [albedo.rgb, count]
+@group(0) @binding(11) var<storage, read_write> gbuf: array<vec4f>;
 
 const PI = 3.14159265359;
 const INF = 1e30;
-const KNIT_REPEAT = vec2f(175.43859649, 68.46846847);   // atlas 200 x 76 cm over an 11.4 x 11.1 mm loop tile
 
 var<private> seed: u32;
 fn pcg(v: u32) -> u32 { let s = v * 747796405u + 2891336453u; let w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u; return (w >> 22u) ^ w; }
@@ -162,7 +165,7 @@ fn teeSurf(h: Hit, ro: vec3f, rd: vec3f) -> Surf {
     var T = (e1 * d2.y - e2 * d1.y) * r; var B = (e2 * d1.x - e1 * d2.x) * r;
     T = normalize(T - n * dot(n, T)); B = normalize(B - n * dot(n, B) - T * dot(T, B));
     var mn = textureSampleLevel(texNormal, samp, uv, 0.0).xyz * 2.0 - 1.0;
-    var kn = textureSampleLevel(texKnit, samp, uv * KNIT_REPEAT, 0.0).xyz * 2.0 - 1.0;
+    var kn = textureSampleLevel(texKnit, samp, uv * u.knitRep.xy, 0.0).xyz * 2.0 - 1.0;
     kn = vec3f(kn.xy * u.knit, kn.z);
     mn = normalize(vec3f(mn.xy + kn.xy, mn.z * kn.z));
     let np = normalize(T * mn.x + B * mn.y + n * mn.z);
@@ -171,6 +174,9 @@ fn teeSurf(h: Hit, ro: vec3f, rd: vec3f) -> Surf {
     let g = mix(0.93, 1.06, vnoise(pObj * 900.0)) * u.grain + (1.0 - u.grain);
     S.base = textureSampleLevel(texColor, samp, uv, 0.0).rgb * g;
     S.rough = orm.g; S.sheen = 0.35 * (1.0 - orm.b); S.spec = 0.02;
+  } else if (iv.w == 2u) {
+    // skin (fit mode): diffuse-dominant, a soft sheen of oil, no subsurface (too costly here, too small to read)
+    S.base = u.skin; S.rough = 0.48; S.sheen = 0.0; S.spec = 0.028;
   } else {
     S.base = u.fabric; S.rough = 0.95; S.sheen = 0.35; S.spec = 0.02;
   }
@@ -265,11 +271,13 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   var ro = u.camPos + u.camR * (lr * cos(la)) + u.camU * (lr * sin(la));
   var rd = normalize(fp - ro);
   var L = vec3f(0.0); var tp = vec3f(1.0);
+  var gN = vec3f(0.0); var gZ = 100.0; var gA = vec3f(1.0);
   for (var bounce = 0; bounce < 6; bounce++) {
     let h = trace(ro, rd, INF, false);
     if (h.kind == 0u) { L += tp * u.world; break; }
     var S: Surf;
     if (h.kind == 1u) { S = teeSurf(h, ro, rd); } else { S = sweepSurf(h, ro, rd); }
+    if (bounce == 0) { gN = S.n; gZ = h.t; gA = S.base; }
     let wo = -rd;
     L += tp * directLight(S, wo);
     let b = sampleBsdf(S, wo);
@@ -279,8 +287,12 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     ro = S.p + S.ng * 2e-4; rd = b.wi;
   }
   L = min(L, vec3f(20.0));   // firefly clamp
-  let prev = select(vec4f(0.0), accum[pix], u.size.z > 0u);
+  let first = u.size.z == 0u;
+  let prev = select(accum[pix], vec4f(0.0), first);
   accum[pix] = prev + vec4f(L, 1.0);
+  let g0 = select(gbuf[pix * 2u], vec4f(0.0), first); let g1 = select(gbuf[pix * 2u + 1u], vec4f(0.0), first);
+  gbuf[pix * 2u] = g0 + vec4f(gN, gZ);
+  gbuf[pix * 2u + 1u] = g1 + vec4f(gA, 1.0);
 }
 `;
 
@@ -314,5 +326,52 @@ fn srgb(c: vec3f) -> vec3f { return select(1.055 * pow(c, vec3f(1.0 / 2.4)) - 0.
   let a = accum[y * dims.x + x];
   let c = a.rgb / max(a.w, 1.0);
   return vec4f(srgb(clamp(neutral(max(c, vec3f(0.0))), vec3f(0.0), vec3f(1.0))), 1.0);
+}
+`;
+
+// Edge-avoiding a-trous wavelet denoiser (Dammertz et al. 2010): the light is divided by the surface colour,
+// smoothed with a widening 5x5 B3 kernel that stops at changes in normal and depth, then multiplied back,
+// so the print and the knit keep every pixel of their detail while the sampling noise goes.
+export const DENOISE_WGSL = /* wgsl */ `
+struct P { w: u32, h: u32, step: u32, mode: u32 };   // mode 0 first (reads the samples), 1 middle, 2 last
+@group(0) @binding(0) var<uniform> p: P;
+@group(0) @binding(1) var<storage, read> accum: array<vec4f>;
+@group(0) @binding(2) var<storage, read> gbuf: array<vec4f>;
+@group(0) @binding(3) var<storage, read> src: array<vec4f>;
+@group(0) @binding(4) var<storage, read_write> dst: array<vec4f>;
+
+fn albedo(i: u32) -> vec3f { let g = gbuf[i * 2u + 1u]; return max(g.rgb / max(g.w, 1.0), vec3f(0.01)); }
+fn guide(i: u32) -> vec4f { let g = gbuf[i * 2u]; let c = max(gbuf[i * 2u + 1u].w, 1.0); let n = g.xyz / c; let l = length(n); return vec4f(select(vec3f(0.0), n / l, l > 0.1), g.w / c); }
+fn light(i: u32) -> vec3f {
+  if (p.mode == 0u) { let a = accum[i]; return (a.rgb / max(a.w, 1.0)) / albedo(i); }
+  return src[i].rgb;
+}
+
+@compute @workgroup_size(8, 8)
+fn main(@builtin(global_invocation_id) gid: vec3u) {
+  if (gid.x >= p.w || gid.y >= p.h) { return; }
+  let i = gid.y * p.w + gid.x;
+  let gp = guide(i);
+  let lp = dot(light(i), vec3f(0.2126, 0.7152, 0.0722));
+  let k = array<f32, 5>(0.0625, 0.25, 0.375, 0.25, 0.0625);
+  var sum = vec3f(0.0); var wsum = 0.0;
+  for (var dy = -2; dy <= 2; dy++) {
+    for (var dx = -2; dx <= 2; dx++) {
+      let x = i32(gid.x) + dx * i32(p.step); let y = i32(gid.y) + dy * i32(p.step);
+      if (x < 0 || y < 0 || x >= i32(p.w) || y >= i32(p.h)) { continue; }
+      let j = u32(y) * p.w + u32(x);
+      let gq = guide(j);
+      let wn = select(pow(max(dot(gp.xyz, gq.xyz), 0.0), 128.0), 1.0, dot(gp.xyz, gp.xyz) < 0.5 && dot(gq.xyz, gq.xyz) < 0.5);
+      let wz = exp(-abs(gp.w - gq.w) / (0.003 * f32(p.step) * gp.w + 1e-4));
+      let lq3 = light(j); let lq = dot(lq3, vec3f(0.2126, 0.7152, 0.0722));
+      // after the first pass the light is smooth enough to trust: keep fold shading and shadow edges
+      let wl = select(1.0, exp(-abs(lp - lq) / (0.3 * max(lp, lq) + 0.004)), p.mode != 0u);
+      let w = k[dx + 2] * k[dy + 2] * wn * wz * wl;
+      sum += lq3 * w; wsum += w;
+    }
+  }
+  var c = sum / max(wsum, 1e-6);
+  if (p.mode == 2u) { c *= albedo(i); }
+  dst[i] = vec4f(c, 1.0);
 }
 `;

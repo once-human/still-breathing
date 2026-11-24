@@ -44,6 +44,7 @@ export class Raster {
   lights: THREE.RectAreaLight[] = [];
   hemi = new THREE.HemisphereLight(0xf4f2ee, 0x6d6a64, 0.15);
   paperMat = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0 });
+  sweep: THREE.Mesh;
   outer: THREE.MeshPhysicalNodeMaterial | null = null;
   inner = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0 });
   knit = uniform(0.55);
@@ -57,7 +58,7 @@ export class Raster {
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.scene.add(this.pivot, this.hemi);
-    this.scene.add(new THREE.Mesh(sweepGeometry(), this.paperMat));
+    this.sweep = new THREE.Mesh(sweepGeometry(), this.paperMat); this.scene.add(this.sweep);
     this.camera.position.set(...CAMERA.pos);
     this.camera.lookAt(...CAMERA.target);
   }
@@ -81,6 +82,8 @@ export class Raster {
       return rl;
     });
     this.paperMat.color.setRGB(...s.paper, THREE.LinearSRGBColorSpace);
+    this.sweep.visible = !s.open;
+    this.scene.background = new THREE.Color().setRGB(...s.world, THREE.LinearSRGBColorSpace);
     // uniform world light: irradiance pi * W, as the path tracer integrates it
     const w = Math.max(...s.world, 1e-6);
     this.hemi.color.setRGB(s.world[0] / w, s.world[1] / w, s.world[2] / w, THREE.LinearSRGBColorSpace);

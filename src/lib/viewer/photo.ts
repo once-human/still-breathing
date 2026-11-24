@@ -41,6 +41,7 @@ export async function renderPhoto(pt: PathTracer, job: PhotoJob): Promise<Blob> 
       // let the page breathe between batches
       if (performance.now() - lastYield > 200) { await new Promise((r) => setTimeout(r, 0)); lastYield = performance.now(); }
     }
+    await pt.denoise(false);
     const img = await pt.toImageData();
     return await develop(img, job.look, job.caption);
   } finally {

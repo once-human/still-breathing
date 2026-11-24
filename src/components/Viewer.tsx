@@ -19,13 +19,11 @@ const VIEWS = [
   { label: "side", yaw: 90 },
   { label: "back", yaw: 180 },
 ];
-const MAX_SPP = 256;
+// samples before the denoiser runs and the traced frame replaces the real-time one: enough for clean soft shadows
+const MAX_SPP = 40;
 // labels only; the rigs live in lib/viewer/scene.ts (kept out of the page bundle until the viewer loads)
-const SCENE_LIST = [
-  { id: "studio", label: "studio" }, { id: "window", label: "window" }, { id: "overcast", label: "overcast" },
-  { id: "tube", label: "tube light" }, { id: "flash", label: "phone flash" }, { id: "concert", label: "the show" },
-];
-const PHOTO_SPP = 256;
+const SCENE_LIST = [{ id: "studio", label: "studio" }, { id: "window", label: "window" }, { id: "show", label: "the show" }];
+const PHOTO_SPP = 64;
 const FORMAT_LIST: { id: Format; label: string }[] = [{ id: "story", label: "story 9:16" }, { id: "post", label: "post 4:5" }];
 const LOOK_LIST: Look[] = ["clean", "film"];
 
@@ -155,7 +153,7 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
           if (sig !== lastSig) pt?.setView({ yaw: s.yaw, crop: [...s.crop], knit: true });
           lastSig = sig; s.dirty = false;
           tc.style.opacity = "0"; shown = -1;
-          setStatus(moving ? (s.magnify ? "moving the loupe" : "turning") : pt ? "tracing light" : "real-time");
+          setStatus("");
         }
         if (!pt) {
           // no WebGPU: show the offline path-traced frame whenever the view lands on one
@@ -165,17 +163,15 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
           if (ok && !img.src.endsWith(STILL(s.tee, near))) img.src = STILL(s.tee, near);
           return;
         }
-        if (s.photo || moving || busy || pt.frame >= MAX_SPP) return;
+        if (s.photo || moving || busy || pt.clean) return;
         busy = true;
-        // as many samples as fit in ~20 ms, so the page stays responsive while the light settles
-        const n = pt.lastMs > 0 ? clamp(Math.floor(20 / pt.lastMs), 1, 8) : 1;
-        pt.step(n).then(() => {
+        // traced out of sight, a few samples per frame so the page stays responsive; the real-time view stays up
+        // until the denoised frame is ready, then it fades across. No grain is ever on screen.
+        const n = pt.lastMs > 0 ? clamp(Math.floor(24 / pt.lastMs), 1, 8) : 1;
+        const go = pt.frame + n >= MAX_SPP ? pt.step(Math.max(1, MAX_SPP - pt.frame), false).then(() => pt!.denoise(true)) : pt.step(n, false);
+        go.then(() => {
           busy = false;
-          if (pt!.frame >= 6) tc.style.opacity = "1";
-          if (pt!.frame !== shown) {
-            shown = pt!.frame;
-            setStatus(pt!.frame >= MAX_SPP ? `path traced · ${MAX_SPP} samples` : `tracing light · ${pt!.frame} of ${MAX_SPP}`);
-          }
+          if (pt!.clean && shown !== pt!.frame) { shown = pt!.frame; tc.style.opacity = "1"; }
         });
       };
       raf = requestAnimationFrame(loop);

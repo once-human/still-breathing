@@ -26,6 +26,8 @@ export type Scene = {
   world: V3;
   /** light-tee power factor: render.py lowers the rig for off white so its folds don't burn out */
   creamK: number;
+  /** no backdrop: the tee hangs in open space (a show has no paper sweep, just the dark) */
+  open?: boolean;
 };
 
 export const LIGHT_AIM: V3 = [0, 1.12, 0];
@@ -59,38 +61,16 @@ export const SCENES: Scene[] = [
     paper: [0.62, 0.6, 0.56], world: [0.09, 0.1, 0.12], creamK: 0.45,
   },
   {
-    id: "overcast", label: "overcast street",
+    id: "show", label: "the show",
+    // a dark room, the stage behind and above: a cool white LED wall and one warm spot from the side catch
+    // the edges of the cotton; the front gets the warm wash from the front-of-house truss
     lights: [
-      { name: "sky", pos: [0, 4.2, 0.6], size: [6, 6], power: 1500, tint: [0.92, 0.96, 1.04] },
-      { name: "street", pos: [0.4, 0.4, 2.6], size: [4, 0.6], power: 120, tint: [0.9, 0.88, 0.85] },
+      { name: "stage", pos: [0.3, 2.9, -2.6], size: [2.2, 0.7], power: 1100, tint: [0.86, 0.91, 1] },
+      { name: "spot", pos: [-2.3, 3.3, -1.6], size: [0.22, 0.22], power: 240, tint: [1, 0.86, 0.7] },
+      // front-of-house truss across the room, high and to one side, warm tungsten-ish wash
+      { name: "foh", pos: [1.6, 3.0, 3.2], size: [1.2, 0.5], power: 85, tint: [1, 0.88, 0.74] },
     ],
-    paper: [0.21, 0.21, 0.2], world: [0.16, 0.17, 0.19], creamK: 0.5,
-  },
-  {
-    id: "tube", label: "tube light at home",
-    lights: [
-      // a 4 ft tube high on the wall in front, cool and a little green, the room warm and dim
-      { name: "tube", pos: [0.2, 2.55, 1.3], size: [1.2, 0.04], power: 34, tint: [0.9, 1.0, 0.95] },
-    ],
-    paper: [0.56, 0.5, 0.4], world: [0.035, 0.03, 0.022], creamK: 0.5,
-  },
-  {
-    id: "flash", label: "phone flash, night",
-    lights: [
-      // the flash sits just above the lens: flat light, hard shadow on the wall behind
-      { name: "flash", pos: [0.19, 1.25, 2.53], size: [0.03, 0.03], power: 42, tint: [1, 0.97, 0.93] },
-    ],
-    paper: [0.3, 0.29, 0.28], world: [0.002, 0.002, 0.003], creamK: 0.42,
-  },
-  {
-    id: "concert", label: "the show",
-    lights: [
-      { name: "wash", pos: [0, 3.6, 1.6], size: [2.4, 1.0], power: 260, tint: [0.22, 0.34, 1] },
-      { name: "pink", pos: [-1.4, 2.6, -1.3], size: [0.8, 0.8], power: 160, tint: [1, 0.18, 0.62] },
-      { name: "follow", pos: [1.5, 1.7, 2.0], size: [0.35, 0.35], power: 26, tint: [0.96, 0.96, 1] },
-      { name: "amber", pos: [1.4, 2.3, -1.4], size: [0.8, 0.8], power: 90, tint: [1, 0.55, 0.2] },
-    ],
-    paper: [0.025, 0.025, 0.03], world: [0.003, 0.003, 0.006], creamK: 0.55,
+    paper: [0, 0, 0], world: [0.0015, 0.0015, 0.002], creamK: 0.6, open: true,
   },
 ];
 

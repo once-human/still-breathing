@@ -1,6 +1,6 @@
 // Host side of the WebGPU path tracer: uploads the tee (BVH, triangles, textures), then traces one
 // sample per pixel per frame into a float buffer and shows the running average.
-import { TRACE_WGSL, SHOW_WGSL } from "./pt.wgsl";
+import { TRACE_WGSL, SHOW_WGSL, DENOISE_WGSL } from "./pt.wgsl";
 import { buildBVHAsync } from "./bvh";
 import { CAMERA, VFOV, ASPECT, cameraBasis, lightFrame, radiance, type Scene, type V3 } from "./scene";
 
@@ -21,18 +21,27 @@ export class PathTracer {
   private ubuf!: GPUBuffer;
   private dims!: GPUBuffer;
   private accum: GPUBuffer | null = null;
+  private gbuf: GPUBuffer | null = null;
+  private dn: [GPUBuffer, GPUBuffer] | null = null;
+  private dnPipe!: GPUComputePipeline;
+  private dnU: GPUBuffer[] = [];
+  private dnBG: GPUBindGroup[] | null = null;
+  private showDnBG: GPUBindGroup | null = null;
+  /** true once denoise() has run on the current samples */
+  clean = false;
   /** the accumulated linear image (rgb + sample weight per pixel) */
-  async readAccum() {
+  readAccum() { return this.readBuf(this.accum!); }
+  private async readBuf(buf: GPUBuffer) {
     const d = this.device, size = this.w * this.h * 16;
     const rb = d.createBuffer({ size, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
-    const enc = d.createCommandEncoder(); enc.copyBufferToBuffer(this.accum!, 0, rb, 0, size); d.queue.submit([enc.finish()]);
+    const enc = d.createCommandEncoder(); enc.copyBufferToBuffer(buf, 0, rb, 0, size); d.queue.submit([enc.finish()]);
     await rb.mapAsync(GPUMapMode.READ);
     const a = new Float32Array(rb.getMappedRange().slice(0)); rb.unmap(); rb.destroy();
     return a;
   }
   /** the finished frame as 8-bit sRGB, through the same view transform the screen uses */
   async toImageData() {
-    const a = await this.readAccum(), n = this.w * this.h, out = new ImageData(this.w, this.h), o = out.data;
+    const a = this.clean ? await this.readBuf(this.dn![0]) : await this.readAccum(), n = this.w * this.h, out = new ImageData(this.w, this.h), o = out.data;
     const c = [0, 0, 0];
     for (let i = 0; i < n; i++) {
       const w = a[i * 4 + 3] || 1;
@@ -65,6 +74,10 @@ export class PathTracer {
   lastMs = 0;
   /** photo mode: a different frame shape from the same camera position (so perspective, and the tee, never change) */
   optics: { aspect: number; tanHalf: number } | null = null;
+  /** skin for fit mode bodies (linear) */
+  skin: V3 = [0.32, 0.17, 0.1];
+  /** knit loop tile repeats across the atlas: atlas size in cm over an 11.4 x 11.1 mm tile */
+  knitRepeat: [number, number] = [200 / 1.14, 76 / 1.11];
   /** fitted against the Cycles turntable frames (black and off white, three patches each) */
   sheenK = 0.06;
 
@@ -86,6 +99,8 @@ export class PathTracer {
     this.trace = d.createComputePipeline({ layout: "auto", compute: { module: d.createShaderModule({ code: TRACE_WGSL }), entryPoint: "main" } });
     const sm = d.createShaderModule({ code: SHOW_WGSL });
     this.show = d.createRenderPipeline({ layout: "auto", vertex: { module: sm, entryPoint: "vs" }, fragment: { module: sm, entryPoint: "fs", targets: [{ format: this.format }] } });
+    this.dnPipe = d.createComputePipeline({ layout: "auto", compute: { module: d.createShaderModule({ code: DENOISE_WGSL }), entryPoint: "main" } });
+    this.dnU = [0, 1, 2, 3, 4].map(() => d.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }));
     this.ubuf = d.createBuffer({ size: U_SIZE, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.dims = d.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.sampler = d.createSampler({ magFilter: "linear", minFilter: "linear", addressModeU: "repeat", addressModeV: "repeat" });
@@ -142,14 +157,15 @@ export class PathTracer {
 
   setScene(scene: Scene, fabric: V3, cream: boolean) { this.scene = scene; this.fabric = fabric; this.k = cream ? scene.creamK : 1; this.reset(); }
   setView(v: View) { this.view = v; this.reset(); }
-  reset() { this.frame = 0; }
+  reset() { this.frame = 0; this.clean = false; }
 
   resize(w: number, h: number) {
     if (w === this.w && h === this.h) return;
     this.w = w; this.h = h;
-    this.accum?.destroy();
-    this.accum = this.device.createBuffer({ size: w * h * 16, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
-    this.traceBG = null; this.showBG = null; this.reset();
+    this.accum?.destroy(); this.gbuf?.destroy(); this.dn?.forEach((b) => b.destroy());
+    const mk = (bytes: number) => this.device.createBuffer({ size: bytes, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    this.accum = mk(w * h * 16); this.gbuf = mk(w * h * 32); this.dn = [mk(w * h * 16), mk(w * h * 16)];
+    this.traceBG = null; this.showBG = null; this.dnBG = null; this.showDnBG = null; this.reset();
     this.device.queue.writeBuffer(this.dims, 0, new Uint32Array([w, h, 0, 0]));
   }
 
@@ -165,15 +181,17 @@ export class PathTracer {
     const yr = (this.view.yaw * Math.PI) / 180; f[20] = Math.cos(yr); f[21] = Math.sin(yr);
     const s = this.scene;
     set(24, s.world, this.view.knit ? 0.55 : 0);
-    set(28, s.paper, 1);
+    set(28, s.paper, s.open ? 0 : 1);
     set(32, this.fabric, 1);
+    set(36, this.skin, 0);
+    f[40] = this.knitRepeat[0]; f[41] = this.knitRepeat[1];
     const L = s.lights.slice(0, 4);
-    u[36] = this.w; u[37] = this.h; u[38] = this.frame; u[39] = L.length;
+    u[44] = this.w; u[45] = this.h; u[46] = this.frame; u[47] = L.length;
     // light selection by emitted power, so the key gets most of the shadow rays
     const pw = L.map((l) => l.power * (l.tint[0] + l.tint[1] + l.tint[2])), tot = pw.reduce((a, b) => a + b, 0) || 1;
     let cdf = 0;
     L.forEach((l, i) => {
-      const o = 40 + i * 20, fr = lightFrame(l), rad = radiance(l, this.k), p = pw[i] / tot; cdf += p;
+      const o = 48 + i * 20, fr = lightFrame(l), rad = radiance(l, this.k), p = pw[i] / tot; cdf += p;
       set(o, l.pos, i === L.length - 1 ? 1 : cdf);
       set(o + 4, fr.ex, fr.area);
       set(o + 8, fr.ey, p);
@@ -204,6 +222,7 @@ export class PathTracer {
           { binding: 8, resource: this.tex.orm.createView() },
           { binding: 9, resource: this.tex.normal.createView() },
           { binding: 10, resource: this.tex.knit.createView() },
+          { binding: 11, resource: { buffer: this.gbuf! } },
         ],
       });
     }
@@ -221,13 +240,52 @@ export class PathTracer {
       d.queue.submit([enc.finish()]);
       this.frame++;
     }
-    if (!present) { await d.queue.onSubmittedWorkDone(); this.lastMs = (performance.now() - t0) / spp; return; }
-    const enc = d.createCommandEncoder();
-    const rp = enc.beginRenderPass({ colorAttachments: [{ view: this.ctx.getCurrentTexture().createView(), loadOp: "clear", storeOp: "store", clearValue: [0, 0, 0, 1] }] });
-    rp.setPipeline(this.show); rp.setBindGroup(0, this.showBG); rp.draw(3); rp.end();
-    d.queue.submit([enc.finish()]);
+    this.clean = false;
+    if (present) this.present(false);
     await d.queue.onSubmittedWorkDone();
     this.lastMs = (performance.now() - t0) / spp;
+  }
+
+  /** Smooth away the sampling noise of the samples so far (five a-trous passes, a few ms). */
+  async denoise(present = true) {
+    if (!this.ready || this.frame === 0) return;
+    const d = this.device, [A, B] = this.dn!;
+    if (!this.dnBG) {
+      // pass i reads src, writes dst: 0 accum->A, 1 A->B, 2 B->A, 3 A->B, 4 B->A (last, remodulated, ends in A)
+      const io: [GPUBuffer, GPUBuffer][] = [[A, A], [A, B], [B, A], [A, B], [B, A]];
+      this.dnBG = io.map(([src, dst], i) => d.createBindGroup({
+        layout: this.dnPipe.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: { buffer: this.dnU[i] } },
+          { binding: 1, resource: { buffer: this.accum! } },
+          { binding: 2, resource: { buffer: this.gbuf! } },
+          { binding: 3, resource: { buffer: i === 0 ? this.accum! : src } },
+          { binding: 4, resource: { buffer: dst } },
+        ],
+      }));
+      this.dnU.forEach((b, i) => d.queue.writeBuffer(b, 0, new Uint32Array([this.w, this.h, 1 << i, i === 0 ? 0 : i === 4 ? 2 : 1])));
+    }
+    const enc = d.createCommandEncoder();
+    for (const bg of this.dnBG) {
+      const pass = enc.beginComputePass();
+      pass.setPipeline(this.dnPipe); pass.setBindGroup(0, bg);
+      pass.dispatchWorkgroups(Math.ceil(this.w / 8), Math.ceil(this.h / 8)); pass.end();
+    }
+    d.queue.submit([enc.finish()]);
+    this.clean = true;
+    if (present) this.present(true);
+    await d.queue.onSubmittedWorkDone();
+  }
+
+  private present(clean: boolean) {
+    const d = this.device;
+    if (clean && !this.showDnBG) {
+      this.showDnBG = d.createBindGroup({ layout: this.show.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: this.dn![0] } }, { binding: 1, resource: { buffer: this.dims } }] });
+    }
+    const enc = d.createCommandEncoder();
+    const rp = enc.beginRenderPass({ colorAttachments: [{ view: this.ctx.getCurrentTexture().createView(), loadOp: "clear", storeOp: "store", clearValue: [0, 0, 0, 1] }] });
+    rp.setPipeline(this.show); rp.setBindGroup(0, clean ? this.showDnBG! : this.showBG!); rp.draw(3); rp.end();
+    d.queue.submit([enc.finish()]);
   }
 }
 
