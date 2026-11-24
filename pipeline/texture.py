@@ -63,9 +63,9 @@ if __name__ == "__main__":
     ROOT = os.path.join(HERE, "art")          # flat artwork from the Figma file
     OV = os.path.join(HERE, "overlays")       # lettering overlays exported from Figma
     # Mumbai (A map, B crowd): art from the Figma file plus a lettering overlay.
-    # Bengaluru C crowd: art from art-c-crowd/gen.py plus its lettering exported from Figma at print size.
-    # D end of the line: generated with its lettering included.
-    art = {"A": "art-a-map", "B": "art-b-lines", "C": "art-c-crowd", "D": "art-d-line"}[design]
+    # C, the tour crowd: art from art-crowd-tour/gen.py plus its lettering exported from Figma at print size.
+    # D, the Bengaluru map: art from art-d-map/gen.py plus its lettering exported from Figma at print size.
+    art = {"A": "art-a-map", "B": "art-b-lines", "C": "art-crowd-tour", "D": "art-d-map"}[design]
     TEE = {"black": (21, 21, 21), "cream": (255, 250, 231)}[tee]
     atlas = Image.new("RGBA", (W * 2, H), TEE + (255,)); mask = Image.new("L", (W * 2, H), 0)
     def place(img, cx_cm, top_cm, w_cm, panel):
@@ -82,12 +82,10 @@ if __name__ == "__main__":
     if design in "AB":
         back = Image.open(f"{ROOT}/{art}/art-{tee}-al3.png").convert("RGBA").resize((1200, 1600), Image.LANCZOS)
         back.alpha_composite(Image.open(f"{OV}/ov-back-{tee}.png").convert("RGBA"))
-    elif design == "C":
-        back = Image.open(f"{ROOT}/{art}/art-{tee}.png").convert("RGBA")
-        back.alpha_composite(Image.open(f"{OV}/ov-back-C-{tee}-hi.png").convert("RGBA"))
-        back = back.resize((1524, 2032), Image.BOX)
     else:
-        back = Image.open(f"{ROOT}/{art}/art-{tee}.png").convert("RGBA").resize((1524, 2032), Image.LANCZOS)
+        back = Image.open(f"{ROOT}/{art}/art-{tee}.png").convert("RGBA")
+        back.alpha_composite(Image.open(f"{OV}/ov-back-{'T' if design == 'C' else design}-{tee}-hi.png").convert("RGBA"))
+        back = back.resize((1524, 2032), Image.BOX)
     # back: the whole printable area. The blank takes up to 16 x 20 in; the art is 3:4, so it fills the height:
     # 15 x 20 in (38.1 x 50.8 cm), its top 9.5 cm under the high shoulder point (just clear of the collar rib)
     place(back, 0, NECK_Y - 9.5, 38.1, 1)
