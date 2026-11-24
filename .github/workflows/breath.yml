@@ -1,0 +1,76 @@
+# 02 breath: renders the heat-camera crowd (pipeline/art/breath/crowd.py) at print size on a runner and keeps the
+# temperatures as an artifact. The print itself is made from them with pipeline/art/breath/post.py.
+name: breath
+on:
+  workflow_dispatch:
+    inputs:
+      size:
+        description: "width height"
+        default: "4500 6000"
+      samples:
+        description: "Cycles samples per pixel"
+        default: "16"
+      unique:
+        description: "people built one by one at the front (the rest are them again, turned and mirrored)"
+        default: "70"
+      seed:
+        description: "the crowd's seed"
+        default: "1213"
+
+env:
+  BLENDER: "5.3.0"
+  MPFB: "https://extensions.blender.org/download/sha256:c075b3e9b94b8e5556a5f03f4653602d02ea306de08126e8f55ed6dee28a2dad/add-on-mpfb-v2.0.18.zip"
+  MH_PACK: "https://files.makehumancommunity.org/asset_packs/makehuman_system_assets/makehuman_system_assets_cc0.zip"
+  CLIPS: "05_02 05_12 49_09 49_02 49_03 55_01 55_02 60_01 60_03 61_01 15_04 18_15 19_15 93_06 14_20 13_29 22_16 13_10 56_02 111_37 13_26 77_02 111_28 113_21 140_06 140_07 82_08 111_32 113_23 79_33 104_12 86_05"
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/blender
+          key: blender-${{ env.BLENDER }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/sb-assets
+          key: breath-assets-v1
+      - name: Blender ${{ env.BLENDER }}
+        run: |
+          if [ ! -x ~/blender/blender ]; then
+            mkdir -p ~/blender
+            curl -sSL "https://download.blender.org/release/Blender${BLENDER%.*}/blender-${BLENDER}-linux-x64.tar.xz" | tar -xJ -C ~/blender --strip-components=1
+          fi
+          sudo apt-get -qq update && sudo apt-get -qq install -y libxi6 libxxf86vm1 libxfixes3 libxrender1 libgl1 libxkbcommon0 libsm6 > /dev/null
+      - name: People and movement (MakeHuman CC0 assets, CMU motion capture)
+        run: |
+          mkdir -p ~/sb-assets/mh-system/pack ~/sb-assets/cmu
+          if [ ! -d ~/sb-assets/mh-system/pack/clothes ]; then
+            curl -sSL -o /tmp/mh.zip "$MH_PACK" && unzip -q /tmp/mh.zip -d ~/sb-assets/mh-system/pack && rm /tmp/mh.zip
+          fi
+          for c in $CLIPS; do
+            f=~/sb-assets/cmu/$c.bvh; s=$(printf "%03d" $((10#${c%%_*})))
+            [ -s "$f" ] || curl -sSL -o "$f" "https://raw.githubusercontent.com/una-dinosauria/cmu-mocap/master/data/$s/$c.bvh"
+          done
+          ls ~/sb-assets/cmu | wc -l
+      - name: MPFB
+        run: |
+          curl -sSL -o /tmp/mpfb.zip "$MPFB"
+          ~/blender/blender --command extension install-file -r user_default -e /tmp/mpfb.zip
+          d=~/.config/blender/${BLENDER%.*}/extensions/.user/user_default/mpfb/data; mkdir -p "$d"
+          for k in clothes eyebrows eyelashes eyes hair proxymeshes skins teeth tongue; do ln -sfn ~/sb-assets/mh-system/pack/$k "$d/$k"; done
+      - name: Render
+        run: |
+          mkdir -p out
+          SB_ASSETS=~/sb-assets SEED=${{ inputs.seed }} THREADS=$(nproc) \
+            ~/blender/blender -b -P pipeline/art/breath/crowd.py -- "$PWD/out" ${{ inputs.size }} ${{ inputs.samples }} ${{ inputs.unique }} 2>&1 | grep -v Warning
+          test -s out/temp.npy
+      - uses: actions/upload-artifact@v4
+        with:
+          name: breath-${{ inputs.seed }}
+          path: |
+            out/temp.npy
+            out/scene.json
+          retention-days: 30
