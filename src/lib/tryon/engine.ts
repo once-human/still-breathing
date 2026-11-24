@@ -109,6 +109,7 @@ export class TryOn {
   private armOn = [false, false];
   private fctx: CanvasRenderingContext2D;
   private shown = false;
+  private lit = false; private lum = 0.5; private tint = new THREE.Color(1, 1, 1); private side = new THREE.Vector2();
   private P = new Map<number, THREE.Vector3>();   // filtered camera-space points (mirrored), metres
   private img: { x: number; y: number }[] = [];
   private lms: NormalizedLandmark[] | null = null;
@@ -286,7 +287,7 @@ export class TryOn {
     this.fctx.drawImage(v, 0, 0);
     const r = this.pose.detectForVideo(fc, now);
     this.place(r.landmarks[0] ?? null, r.worldLandmarks[0] ?? null, t, dt);
-    if (this.frameN++ % 10 === 0) this.light();
+    if (this.frameN++ % 10 === 0) this.light(dt * 10);
     if (this.cloth && this.rig.visible) {
       const m3 = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(this.rig.quaternion));
       this.cloth.setPose(m3, this.rig.position, this.sizeScale.x, dt);
@@ -298,7 +299,7 @@ export class TryOn {
   }
 
   /** the room: brightness, colour, and which side the light comes from */
-  private light() {
+  private light(dt: number) {
     const c = this.probe, W = 16, H = 9;
     c.drawImage(this.frameCv, 0, 0, W, H);
     const d = c.getImageData(0, 0, W, H).data;
@@ -310,12 +311,15 @@ export class TryOn {
       if (y < H / 2) top += l; else bot += l;
     }
     const n = W * H, lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / n / 255, m = Math.max(r, g, b) || 1;
-    const tint = new THREE.Color(0.35 + 0.65 * r / m, 0.35 + 0.65 * g / m, 0.35 + 0.65 * b / m);
-    this.scene.environmentIntensity = 0.3 + lum * 1.3;
-    this.key.color.copy(tint); this.key.intensity = 0.5 + lum * 2.4;
-    this.fill.color.copy(tint); this.fill.intensity = 0.15 + lum * 0.4;
     const sx = (right - left) / (right + left + 1e-3), sy = (top - bot) / (top + bot + 1e-3);
-    this.key.position.set(sx * 3, 1.5 + sy * 2, 1.5);
+    // the room is read every few frames; the tee eases toward it so a camera's auto-exposure never makes it flicker
+    const k = this.lit ? 1 - Math.exp(-dt * 3) : 1; this.lit = true;
+    this.tint.lerp(new THREE.Color(0.35 + 0.65 * r / m, 0.35 + 0.65 * g / m, 0.35 + 0.65 * b / m), k);
+    this.lum += (lum - this.lum) * k; this.side.x += (sx - this.side.x) * k; this.side.y += (sy - this.side.y) * k;
+    this.scene.environmentIntensity = 0.3 + this.lum * 1.3;
+    this.key.color.copy(this.tint); this.key.intensity = 0.5 + this.lum * 2.4;
+    this.fill.color.copy(this.tint); this.fill.intensity = 0.15 + this.lum * 0.4;
+    this.key.position.set(this.side.x * 3, 1.5 + this.side.y * 2, 1.5);
     if (this.placed) this.key.target.position.copy(this.rig.position);
   }
 
