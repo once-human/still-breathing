@@ -185,6 +185,8 @@ export class Cloth {
   settled = true;
   /** the breeze; off for people who asked their system for less motion */
   wind = true;
+  /** share of a move the cloth feels as inertia, and the speed (m/s) above which that fades; the viewer's own values by default */
+  inertia = INERTIA; inertiaV = 0.6;
   private time = 0;
   private hPrev = SUB_DT;
   private R = new THREE.Matrix3(); private t = new THREE.Vector3(); private s = 1;
@@ -220,7 +222,7 @@ export class Cloth {
       d[3 * c] = dx; d[3 * c + 1] = dy; d[3 * c + 2] = dz;
       vmax = Math.max(vmax, Math.hypot(dx, dy, dz));
     }
-    const v = vmax / Math.max(dt, 1e-3), felt = INERTIA / (1 + (v / 0.6) ** 2), k = 1 - felt;
+    const v = vmax / Math.max(dt, 1e-3), felt = this.inertia / (1 + (v / this.inertiaV) ** 2), k = 1 - felt;
     for (let c = 0; c < this.n; c++) {
       if (this.pin[c]) continue;
       for (let j = 0; j < 3; j++) { const m = d[3 * c + j] * k; this.x[3 * c + j] += m; this.xp[3 * c + j] += m; }

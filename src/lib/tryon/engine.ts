@@ -11,7 +11,7 @@
 // 4. The tee. The shop tee, the same simulated garment and textures as the viewer, is set on that frame at its
 //    real size for the size you pick: the collar at the base of your neck, its depth centred on your chest.
 //    Each sleeve hangs from a bone at the shoulder that turns toward your upper arm, blended smoothly into the
-//    yoke (normals turn with it, so the light stays right). The shape is the real draped fit, held steady on the body.
+//    yoke (normals turn with it, so the light stays right). The cloth simulation runs on top, so the hem and sleeves swing and settle as you move.
 // 5. In front and behind. Your neck and head are invisible occluders, so the collar wraps behind your neck and
 //    your chin can come down over it. Forearms in front of you are cut from the video and laid back on top.
 // 6. Light. The room is read from the video (how bright, what colour, which side the light comes from) and
@@ -30,7 +30,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import type { PoseLandmarker, NormalizedLandmark, Landmark } from "@mediapipe/tasks-vision";
-import { offsetTexture, slopeTextures, clothNodes } from "@/lib/viewer/cloth";
+import { Cloth, buildNetAsync, offsetTexture, slopeTextures, clothNodes } from "@/lib/viewer/cloth";
 import { KNIT_REPEAT } from "@/lib/viewer/scene";
 import { SIZES, type Size } from "@/content/tee";
 
@@ -89,6 +89,7 @@ export class TryOn {
   private fill = new THREE.HemisphereLight(0xffffff, 0x444444, 0.3);
   private occluders = new THREE.Group();
   private neck: THREE.Mesh; private head: THREE.Mesh;
+  private cloth: Cloth | null = null; private m3 = new THREE.Matrix3(); private m4 = new THREE.Matrix4();
   private torso: THREE.Mesh | null = null;
   private occMat = new THREE.MeshBasicNodeMaterial({ colorWrite: false });
   private probe = document.createElement("canvas").getContext("2d", { willReadFrequently: true })!;
@@ -275,6 +276,17 @@ export class TryOn {
       this.restArm[s].copy(cnt[s] ? sums[s].divideScalar(cnt[s]).sub(joints[s]).normalize() : new THREE.Vector3(s ? -0.64 : 0.64, -0.77, 0));
     }
     this.rig.visible = false;
+    // the cloth net builds in a worker; until it's ready the tee is simply held on the body
+    buildNetAsync(parts.map((p) => ({ pos: p.pos, idx: p.idx }))).then((net) => {
+      if (this.dead) return;
+      parts.forEach((p, i) => {
+        const I = p.geo.attributes.sbI as THREE.BufferAttribute, W = p.geo.attributes.sbW as THREE.BufferAttribute;
+        (I.array as Float32Array).set(net.skins[i].I); (W.array as Float32Array).set(net.skins[i].W); I.needsUpdate = W.needsUpdate = true;
+      });
+      this.cloth = new Cloth(net, this.offsets, this.slopes);
+      // worn cloth: no breeze, but it hangs free enough that the hem and sleeves swing and settle with you
+      this.cloth.wind = false; this.cloth.inertia = 0.7; this.cloth.inertiaV = 1.2;
+    }).catch(() => {});
   }
 
   /** a different design on the same tee */
@@ -316,8 +328,10 @@ export class TryOn {
     const r = this.pose.detectForVideo(fc, now);
     this.place(r.landmarks[0] ?? null, r.worldLandmarks[0] ?? null, t, dt);
     if (this.frameN++ % 10 === 0) this.light(dt * 10);
-    // the cloth simulation is not run here: the tee is the draped shape from the real fit, held on the body.
-    // It cost a CPU pass over the whole net and a texture upload every frame for a few millimetres of hem.
+    if (this.cloth && this.rig.visible) {
+      this.cloth.setPose(this.m3.setFromMatrix4(this.m4.makeRotationFromQuaternion(this.rig.quaternion)), this.rig.position, this.sizeScale.x, dt);
+      this.cloth.step(dt);
+    }
     this.renderer.render(this.scene, this.camera);
     this.drawArms();
     if (!this.shown) { this.shown = true; v.style.opacity = "0"; }
