@@ -129,20 +129,23 @@ function buildNet(meshes: { pos: Float32Array; idx: Uint32Array }[], CELL: numbe
     inv[c] = 0.15 + m;
   }
 
-  // ---- per-vertex skin: the 4 nearest particles within reach, smooth weights
+  // ---- per-vertex skin: the 4 nearest particles within reach, weights continuous across the cloth
   const R = CELL * 1.7, grid = new Map<number, number[]>();
   for (let c = 0; c < n; c++) {
     const k = H(Math.floor(rest[3 * c] / CELL), Math.floor(rest[3 * c + 1] / CELL), Math.floor(rest[3 * c + 2] / CELL));
     let l = grid.get(k); if (!l) { l = []; grid.set(k, l); } l.push(c);
   }
+  // weights fall to zero at the 5th-nearest particle's weight: as a vertex moves across the cloth and its set of
+  // 4 changes, the particle leaving the set has already faded out, so the shape never jumps (no kinks or points
+  // along an edge)
   const skins: { I: Float32Array; W: Float32Array }[] = [];
-  const bi = [0, 0, 0, 0], bw = [0, 0, 0, 0];
+  const bi = [0, 0, 0, 0, 0], bw = [0, 0, 0, 0, 0];
   for (const m of meshes) {
     const pos = m.pos, nv = pos.length / 3, I = new Float32Array(4 * nv), W = new Float32Array(4 * nv);
     for (let v = 0; v < nv; v++) {
       const x = pos[3 * v], y = pos[3 * v + 1], z = pos[3 * v + 2];
       const gx = Math.floor(x / CELL), gy = Math.floor(y / CELL), gz = Math.floor(z / CELL);
-      bw[0] = bw[1] = bw[2] = bw[3] = 0; bi[0] = bi[1] = bi[2] = bi[3] = 0;
+      bw[0] = bw[1] = bw[2] = bw[3] = bw[4] = 0; bi[0] = bi[1] = bi[2] = bi[3] = bi[4] = 0;
       for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
         const list = grid.get(H(gx + dx, gy + dy, gz + dz));
         if (!list) continue;
@@ -151,12 +154,17 @@ function buildNet(meshes: { pos: Float32Array; idx: Uint32Array }[], CELL: numbe
           const d = Math.hypot(x - rest[3 * c], y - rest[3 * c + 1], z - rest[3 * c + 2]);
           if (d >= R) continue;
           const w = (1 - d / R) * (1 - d / R);
-          let mi = 0; for (let k = 1; k < 4; k++) if (bw[k] < bw[mi]) mi = k;
+          let mi = 0; for (let k = 1; k < 5; k++) if (bw[k] < bw[mi]) mi = k;
           if (w > bw[mi]) { bw[mi] = w; bi[mi] = c; }
         }
       }
-      const s = bw[0] + bw[1] + bw[2] + bw[3] || 1;
-      for (let k = 0; k < 4; k++) { I[4 * v + k] = bi[k]; W[4 * v + k] = bw[k] / s; }
+      // the weakest of the five is the floor; the other four keep what they have above it
+      let lo = 0; for (let k = 1; k < 5; k++) if (bw[k] < bw[lo]) lo = k;
+      const floor5 = bw[lo];
+      let o = 0, sum = 0;
+      for (let k = 0; k < 5; k++) { if (k === lo) continue; const w = bw[k] - floor5; I[4 * v + o] = bi[k]; W[4 * v + o] = w; sum += w; o++; }
+      if (sum > 0) for (let k = 0; k < 4; k++) W[4 * v + k] /= sum;
+      else { W[4 * v] = 1; W[4 * v + 1] = W[4 * v + 2] = W[4 * v + 3] = 0; }
     }
     skins.push({ I, W });
   }
