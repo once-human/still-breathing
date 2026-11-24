@@ -98,10 +98,13 @@ export class PathTracer {
     this.format = navigator.gpu.getPreferredCanvasFormat();
     this.ctx.configure({ device: this.device, format: this.format, alphaMode: "opaque" });
     const d = this.device;
-    this.trace = d.createComputePipeline({ layout: "auto", compute: { module: d.createShaderModule({ code: TRACE_WGSL }), entryPoint: "main" } });
+    // compiled off the main thread: the big trace shader must never freeze the page
     const sm = d.createShaderModule({ code: SHOW_WGSL });
-    this.show = d.createRenderPipeline({ layout: "auto", vertex: { module: sm, entryPoint: "vs" }, fragment: { module: sm, entryPoint: "fs", targets: [{ format: this.format }] } });
-    this.dnPipe = d.createComputePipeline({ layout: "auto", compute: { module: d.createShaderModule({ code: DENOISE_WGSL }), entryPoint: "main" } });
+    [this.trace, this.show, this.dnPipe] = await Promise.all([
+      d.createComputePipelineAsync({ layout: "auto", compute: { module: d.createShaderModule({ code: TRACE_WGSL }), entryPoint: "main" } }),
+      d.createRenderPipelineAsync({ layout: "auto", vertex: { module: sm, entryPoint: "vs" }, fragment: { module: sm, entryPoint: "fs", targets: [{ format: this.format }] } }),
+      d.createComputePipelineAsync({ layout: "auto", compute: { module: d.createShaderModule({ code: DENOISE_WGSL }), entryPoint: "main" } }),
+    ]);
     this.dnU = [0, 1, 2, 3, 4].map(() => d.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }));
     this.ubuf = d.createBuffer({ size: U_SIZE, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.dims = d.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
@@ -112,7 +115,9 @@ export class PathTracer {
     const bvh = await buildBVHAsync(g.pos, g.idx);
     const n = bvh.order.length;
     const tris = new Float32Array(n * 12), triv = new Uint32Array(n * 4);
+    let t0 = performance.now();
     for (let i = 0; i < n; i++) {
+      if ((i & 8191) === 0 && performance.now() - t0 > 6) { await new Promise((r) => setTimeout(r, 0)); t0 = performance.now(); }
       const t = bvh.order[i], a = g.idx[t * 3], b = g.idx[t * 3 + 1], c = g.idx[t * 3 + 2];
       const o = i * 12;
       for (let k = 0; k < 3; k++) {
@@ -159,7 +164,10 @@ export class PathTracer {
 
   setScene(scene: Scene, fabric: V3, cream: boolean) { this.scene = scene; this.fabric = fabric; this.k = cream ? scene.creamK : 1; this.reset(); }
   setView(v: View) { this.view = v; this.reset(); }
-  reset() { this.frame = 0; this.clean = false; }
+  reset() { this.frame = 0; this.clean = false; this.row = 0; }
+  /** strip tracing: next row to trace, and the measured GPU cost of one row (ms, smoothed) */
+  private row = 0;
+  private msPerRow = 0;
 
   resize(w: number, h: number) {
     if (w === this.w && h === this.h) return;
@@ -181,7 +189,7 @@ export class PathTracer {
     set(8, Up, this.optics?.aspect ?? ASPECT);
     set(12, F, cam.focus);
     const [cx, cy, z] = this.view.crop; f[16] = cx; f[17] = cy; f[18] = z; f[19] = this.sheenK;
-    const yr = (this.view.yaw * Math.PI) / 180; f[20] = Math.cos(yr); f[21] = Math.sin(yr);
+    const yr = (this.view.yaw * Math.PI) / 180; f[20] = Math.cos(yr); f[21] = Math.sin(yr); f[22] = this.row;
     const s = this.scene;
     set(24, s.world, this.view.knit ? 0.55 : 0);
     set(28, s.paper, s.open ? 0 : 1);
@@ -206,9 +214,32 @@ export class PathTracer {
 
   get ready() { return !!(this.geo && this.tex.color && this.accum && this.scene); }
 
-  /** Trace `spp` samples per pixel and present. Resolves when the GPU has finished. */
-  async step(spp = 1, present = true) {
+  /**
+   * Background work in strips: traces as many rows as fit in `budgetMs` of GPU time (learned as it goes), so
+   * the page's own frames are never held up. Each pixel keeps its own sample count; a full sample completes when
+   * the strips reach the bottom. Resolves when the GPU has finished the strip.
+   */
+  async work(budgetMs: number) {
     if (!this.ready) return;
+    this.bind();
+    const d = this.device;
+    const rows = this.msPerRow > 0 ? Math.max(8, Math.min(this.h - this.row, Math.floor(budgetMs / this.msPerRow / 8) * 8)) : 16;
+    this.writeUniforms();
+    const enc = d.createCommandEncoder(), pass = enc.beginComputePass();
+    pass.setPipeline(this.trace); pass.setBindGroup(0, this.traceBG);
+    pass.dispatchWorkgroups(Math.ceil(this.w / 8), Math.ceil(rows / 8));
+    pass.end(); d.queue.submit([enc.finish()]);
+    const t0 = performance.now();
+    await d.queue.onSubmittedWorkDone();
+    const per = (performance.now() - t0) / rows;
+    this.msPerRow = this.msPerRow ? this.msPerRow * 0.7 + per * 0.3 : per;
+    this.lastMs = this.msPerRow * this.h;
+    this.row += rows;
+    if (this.row >= this.h) { this.row = 0; this.frame++; }
+    this.clean = false;
+  }
+
+  private bind() {
     const d = this.device;
     if (!this.traceBG) {
       this.traceBG = d.createBindGroup({
@@ -232,6 +263,13 @@ export class PathTracer {
     if (!this.showBG) {
       this.showBG = d.createBindGroup({ layout: this.show.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: this.accum! } }, { binding: 1, resource: { buffer: this.dims } }] });
     }
+  }
+
+  /** Trace `spp` whole samples per pixel and present (photos). Resolves when the GPU has finished. */
+  async step(spp = 1, present = true) {
+    if (!this.ready) return;
+    const d = this.device;
+    this.bind(); this.row = 0;
     const t0 = performance.now();
     for (let i = 0; i < spp; i++) {
       this.writeUniforms();

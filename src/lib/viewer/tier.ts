@@ -1,9 +1,7 @@
-// How much of the viewer this device should run. Decided once, before any 3D code is downloaded.
-//   trace  : real-time view + the browser path tracer (a real GPU with WebGPU)
-//   raster : real-time view only; at rest on a 30° angle it shows the offline-traced frame
-//   photos : the offline-traced frames only, drag to turn (no GPU worth the name, little memory, or Data Saver)
-// The tracer also measures itself once running and steps down if this guess was too generous.
-export type Tier = "trace" | "raster" | "photos";
+// Whether this device runs the live 3D view at all. One view for everyone who can: the same smooth real-time
+// tee at full sharpness, the path tracer refining it whenever it comes to rest (where WebGPU exists).
+// Only a machine with no graphics hardware (or Data Saver on, or very little memory) gets the rendered frames.
+export type Tier = "live" | "photos";
 
 type Nav = Navigator & { deviceMemory?: number; connection?: { saveData?: boolean } };
 
@@ -32,7 +30,5 @@ export async function pickTier(): Promise<Tier> {
     }
   } catch { webgl = false; }
   const softGL = !webgl || SOFTWARE.test(renderer);
-  if (softGL && softGPU) return "photos";            // neither API has real hardware behind it
-  if (softGPU || (nav.hardwareConcurrency ?? 4) <= 2) return softGL ? "photos" : "raster";
-  return "trace";
+  return softGL && softGPU ? "photos" : "live";
 }

@@ -256,7 +256,9 @@ fn directLight(S: Surf, wo: vec3f) -> vec3f {
 }
 
 @compute @workgroup_size(8, 8)
-fn main(@builtin(global_invocation_id) gid: vec3u) {
+fn main(@builtin(global_invocation_id) gid3: vec3u) {
+  // traced a strip at a time (yaw.z = the strip's first row) so no single dispatch can hold the GPU for long
+  let gid = vec2u(gid3.x, gid3.y + u32(u.yaw.z));
   let W = u.size.x; let H = u.size.y;
   if (gid.x >= W || gid.y >= H) { return; }
   let pix = gid.y * W + gid.x;
