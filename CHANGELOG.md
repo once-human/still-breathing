@@ -2,6 +2,9 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.1.2 — 2026-11-24
+- Site hosted on Vercel; every push that touches `public/` redeploys, render-farm commits included. Pipeline-only commits skip the deploy.
+
 ## 0.1.1 — 2026-11-24
 - Turntable frames for both colourways rendered on the GitHub Actions render farm (24 frames, 64 spp).
 - Real-time light rig calibrated against the Cycles frames, so the switch between them is close to invisible.
