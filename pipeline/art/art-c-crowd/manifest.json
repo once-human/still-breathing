@@ -1,0 +1,156 @@
+{
+  "concept": "line drawings of the night, a different night: a cool december night on the city's north-west edge. a hand-inked crowd on the nice grounds by biec, madavara, seen from behind, looking at a small loud stage under an arched truss whose light goes up and crosses. behind it the green line viaduct comes in on its piers and stops at madavara, the end of the line, a train pulling in with people standing in its lit windows; a lorry on tumakuru road; the long low exhibition halls; wide rain-tree umbrellas; a high-mast lamp at the interchange; a four-day moon. the crowd is dressed for 15 degrees: hoods up, beanies, mufflers, shawls, phone torches held up like small stars. foreground: a guy in a yellow monkey cap with both arms up, a tall guy holding up his phone torch, a girl with mallige pinned in her braid, two friends under one shawl, a guy with a steel tumbler of coffee steaming under his chin. brush lines with pressure and wobble; spot inks printed loose, off-register and grainy. the drawing trails off at the bottom like a sketchbook page.",
+  "palette": {
+    "tee": "#151515",
+    "line": "#F1E7D0",
+    "ink_yellow": "#F6B330",
+    "ink_green": "#56B27C",
+    "accent_blue": "#4C66F5"
+  },
+  "units": "1200 x 1600 (multiply by 3 for px on the 3600 x 4800 art)",
+  "type_zones": [
+    {
+      "name": "city",
+      "x": 80,
+      "y": 150,
+      "w": 1040,
+      "h": 230
+    },
+    {
+      "name": "dates",
+      "x": 300,
+      "y": 392,
+      "w": 600,
+      "h": 56
+    }
+  ],
+  "annotations": [
+    {
+      "text": "the green line ends here, madavara",
+      "x": 120,
+      "y": 486,
+      "rotation": -3,
+      "points_to": [
+        384.0,
+        555.7
+      ]
+    },
+    {
+      "text": "tumakuru road, lorries all night",
+      "x": 30,
+      "y": 790,
+      "rotation": 2,
+      "points_to": [
+        136,
+        703
+      ]
+    },
+    {
+      "text": "biec halls",
+      "x": 1020,
+      "y": 642,
+      "rotation": -2,
+      "points_to": [
+        850,
+        712
+      ]
+    },
+    {
+      "text": "rain trees, the city's umbrellas",
+      "x": 860,
+      "y": 538,
+      "rotation": -4,
+      "points_to": [
+        936,
+        628
+      ]
+    },
+    {
+      "text": "15 degrees. monkey caps out",
+      "x": 24,
+      "y": 1040,
+      "rotation": -5,
+      "points_to": [
+        336,
+        1192.8
+      ]
+    }
+  ],
+  "figures": {
+    "moon": [
+      1052,
+      498
+    ],
+    "bats": [
+      900,
+      572
+    ],
+    "mast": [
+      1146,
+      592
+    ],
+    "end": [
+      474,
+      621.5
+    ],
+    "viaduct": [
+      180,
+      601.2
+    ],
+    "train": [
+      150,
+      538.8
+    ],
+    "station": [
+      384.0,
+      555.7
+    ],
+    "lorry": [
+      136,
+      703
+    ],
+    "halls": [
+      850,
+      712
+    ],
+    "trees": [
+      936,
+      628
+    ],
+    "stage": [
+      622,
+      735
+    ],
+    "foh": [
+      472,
+      812
+    ],
+    "torch": [
+      651.0,
+      901.7
+    ],
+    "mallige": [
+      845.0,
+      1248.0
+    ],
+    "monkeycap": [
+      336,
+      1192.8
+    ],
+    "shawl": [
+      1044.0,
+      1501.7
+    ],
+    "coffee": [
+      207.7,
+      1458.4
+    ]
+  },
+  "art_bbox": {
+    "x": 20,
+    "y": 482,
+    "w": 1162,
+    "h": 1091
+  },
+  "seed": 121326
+}
