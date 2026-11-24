@@ -194,25 +194,37 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       const leave = (e: PointerEvent) => { if (e.pointerType !== "touch") hover = false; };
       // two fingers: pinch to zoom around their midpoint
       const touches = new Map<number, { x: number; y: number }>();
-      let pinch: { d: number; z: number } | null = null;
+      let shiftPan = false;
+      const panBy = (dx: number, dy: number) => {
+        zm.cxt -= (2 * dx) / (st.clientWidth * zm.zt); zm.cyt += (2 * dy) / (st.clientHeight * zm.zt); clampZoom(); s.dirty = true;
+      };
+      let pinch: { d: number; z: number; mx: number; my: number } | null = null;
       const spread = () => { const [a, b] = [...touches.values()]; return { d: Math.hypot(a.x - b.x, a.y - b.y), m: { clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 } }; };
       const down = (e: PointerEvent) => {
         touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
         st.setPointerCapture(e.pointerId);
-        if (touches.size === 2) { s.drag = false; pinch = { d: spread().d, z: zm.zt }; return; }
+        if (touches.size === 2) { s.drag = false; const g = spread(); pinch = { d: g.d, z: zm.zt, mx: g.m.clientX, my: g.m.clientY }; return; }
+        shiftPan = e.shiftKey;
         s.drag = true; lx = e.clientX; ly = e.clientY; lt = performance.now(); s.vel = 0; s.goal = null; s.dirty = true;
         if (e.pointerType === "touch") holdUntil = Infinity;
       };
       const move = (e: PointerEvent) => {
         if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-        if (pinch && touches.size === 2) { const g = spread(); const [sx, sy] = ndc(g.m); zoomAt(pinch.z * (g.d / Math.max(1, pinch.d)), sx, sy); return; }
+        if (pinch && touches.size === 2) {
+          // two fingers: spread to zoom, move together to slide around the print
+          const g = spread(); const [sx, sy] = ndc(g.m);
+          panBy(g.m.clientX - pinch.mx, g.m.clientY - pinch.my); pinch.mx = g.m.clientX; pinch.my = g.m.clientY;
+          zoomAt(pinch.z * (g.d / Math.max(1, pinch.d)), sx, sy); return;
+        }
         if (!s.drag) return;
         const dx = e.clientX - lx, dy = e.clientY - ly, now = performance.now();
-        if (zm.zt > 1.01) {
-          // zoomed in: dragging moves around the print
-          zm.cxt -= (2 * dx) / (st.clientWidth * zm.zt); zm.cyt += (2 * dy) / (st.clientHeight * zm.zt); clampZoom();
-        } else {
-          s.yaw += dx * 0.45; s.vel = ((dx * 0.45) / Math.max(1, now - lt)) * 16;
+        if (zm.zt > 1.01 && (shiftPan || e.shiftKey)) panBy(dx, dy);
+        else {
+          // sideways always turns the tee, zoomed in or not (slower when close, so the print doesn't fly past);
+          // zoomed in, up and down slides along it
+          const k = 0.45 / Math.sqrt(zm.zt);
+          s.yaw += dx * k; s.vel = ((dx * k) / Math.max(1, now - lt)) * 16;
+          if (zm.zt > 1.01) panBy(0, dy);
         }
         lx = e.clientX; ly = e.clientY; lt = now; s.dirty = true;
       };
@@ -220,7 +232,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         touches.delete(e.pointerId);
         if (touches.size < 2) pinch = null;
         if (!s.drag) return;
-        s.drag = false; if (Math.abs(s.vel) > 0.3 && zm.zt <= 1.01) s.goal = s.yaw + s.vel * 8; s.dirty = true;
+        s.drag = false; if (Math.abs(s.vel) > 0.3) s.goal = s.yaw + s.vel * 8; s.dirty = true;
         if (e.pointerType === "touch") holdUntil = performance.now() + 2500;   // no hover on a phone: a pause, then it turns again
       };
       // double-click: in close where you point, again to step back out
@@ -306,7 +318,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         }
         const busyCloth = moving || swinging;
         if (busyCloth) restSince = now;
-        if (busyCloth && traced) { tc.style.transition = "opacity 120ms"; tc.style.opacity = "0"; traced = false; shown = -1; }
+        // the still steps aside at once: a fading still over a turning tee reads as a blur
+        if (busyCloth && traced) { tc.style.transition = "none"; tc.style.opacity = "0"; traced = false; shown = -1; }
         if (!pt || busyCloth || s.photo || s.loading || busy || now - restSince < 300 || !quiet(now)) return;
         const sig = `${s.design}|${s.tee}|${s.yaw.toFixed(3)}|${zm.z.toFixed(4)}|${zm.cx.toFixed(4)}|${zm.cy.toFixed(4)}|${JSON.stringify(s.variant)}`;
         if (sig !== lastSig) { pt.setView({ yaw: s.yaw, crop: [zm.cx, zm.cy, zm.z], knit: true }); lastSig = sig; shown = -1; }
