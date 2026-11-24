@@ -7,7 +7,8 @@
 import sys, numpy as np
 from PIL import Image
 OUT = sys.argv[1]
-BW, BH = 2048, 2731
+FULL = len(sys.argv) > 3 and sys.argv[3] == "full"   # close-zoom version: 3600 x 4800 (94 px/cm), fetched only on zoom
+BW, BH = (3600, 4800) if FULL else (2048, 2731)
 TEE = {"black": (21, 21, 21), "cream": (255, 250, 231)}
 HALO = {"black": (21, 21, 21), "cream": (236, 227, 206)}   # halo fill used in the Figma file: holes in the ink
 
@@ -59,7 +60,8 @@ for d, tee in pairs:
     b = resize_rgba(Image.open(art), (BW, BH))
     if ov: b = over(b, recut(Image.open(ov), (BW, BH)))
     b8 = knockout((np.clip(b, 0, 1) * 255 + 0.5).astype(np.uint8), tee)
-    save8(b8, f"{OUT}/print-back-{d}-{tee}.webp")
+    save8(b8, f"{OUT}/print-back-{d}-{tee}{'-full' if FULL else ''}.webp")
+if FULL: sys.exit()
 
 # chest: again.. in four scripts, rebuilt at 4x from the Figma export (the old one was these lines at 1x)
 hi = np.array(Image.open("overlays/hi/front-B-black.png").convert("RGB")).astype(np.float32)

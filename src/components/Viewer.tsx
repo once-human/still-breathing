@@ -15,6 +15,8 @@ const TryOn = dynamic(() => import("@/components/TryOn").then((m) => m.TryOn), {
 type Engine = {
   setLook: (d: Design, t: Colour) => void;
   turnTo: (deg: number) => void;
+  /** zoom by a factor (around the middle of the view); 0 resets */
+  zoomBy: (k: number) => void;
   setScene: (id: string) => void;
   photo: (job: PhotoJob) => Promise<Blob>;
   setVariant: (v: Variant) => Promise<void>;
@@ -97,6 +99,39 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       type PathTracer = import("@/lib/viewer/pathtracer").PathTracer;
       let pt: PathTracer | null = null;
       const s = { design: lookRef.current.design, tee: lookRef.current.tee, yaw: angRef.current, goal: null as number | null, vel: 0, drag: false, dirty: true, photo: false, loading: false, variant: variantRef.current };
+      // zoom: a crop of the same frame (the lens never moves, so the perspective never changes), eased
+      const zm = { z: 1, cx: 0, cy: 0, zt: 1, cxt: 0, cyt: 0 };
+      const ZMAX = 5;
+      const clampZoom = () => {
+        zm.zt = Math.min(ZMAX, Math.max(1, zm.zt));
+        const lim = 1 - 1 / zm.zt;
+        zm.cxt = Math.min(lim, Math.max(-lim, zm.cxt)); zm.cyt = Math.min(lim, Math.max(-lim, zm.cyt));
+      };
+      /** zoom to zt keeping the point under (sx, sy) (viewport NDC) where it is */
+      const zoomAt = (zt: number, sx: number, sy: number) => {
+        const px = zm.cxt + sx / zm.zt, py = zm.cyt + sy / zm.zt;
+        zm.zt = Math.min(ZMAX, Math.max(1, zt));
+        zm.cxt = px - sx / zm.zt; zm.cyt = py - sy / zm.zt;
+        clampZoom(); s.dirty = true; s.goal = null;
+        if (zm.zt > 1.5) void sharpen();
+      };
+      const ndc = (e: { clientX: number; clientY: number }) => {
+        const r = st.getBoundingClientRect();
+        return [((e.clientX - r.left) / r.width) * 2 - 1, 1 - ((e.clientY - r.top) / r.height) * 2] as const;
+      };
+      // close in, the back print is swapped for the full source resolution (fetched once per design)
+      const sharpened = new Set<string>();
+      const sharpen = async () => {
+        const key = `${s.design}-${s.tee}`;
+        if (sharpened.has(key)) return;
+        sharpened.add(key);
+        try {
+          const url = printBackURL(s.design, s.tee, true);
+          const tex = await raster.printTexture(url);
+          raster.setBackPrint(s.design, s.tee, tex); s.dirty = true; lastSig = "";
+          if (pt) { const [, f] = await colourMaps(s.design, s.tee); pt.setColourway(await bitmap(url), f); }
+        } catch { /* the regular print stays */ }
+      };
 
       const maps: Record<string, Promise<[ImageBitmap, ImageBitmap]>> = {};
       // the back and chest prints, at print resolution (the fabric itself is one flat colour)
@@ -154,24 +189,50 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       // ---------- interaction: it turns by itself; hover and it eases to a stop and is yours to turn ----------
       const still = matchMedia("(prefers-reduced-motion: reduce)");
       let hover = false, holdUntil = 0, spin = still.matches ? 0 : SPIN;
-      let lx = 0, lt = 0;
+      let lx = 0, ly = 0, lt = 0;
       const enter = (e: PointerEvent) => { if (e.pointerType !== "touch") hover = true; };
       const leave = (e: PointerEvent) => { if (e.pointerType !== "touch") hover = false; };
+      // two fingers: pinch to zoom around their midpoint
+      const touches = new Map<number, { x: number; y: number }>();
+      let pinch: { d: number; z: number } | null = null;
+      const spread = () => { const [a, b] = [...touches.values()]; return { d: Math.hypot(a.x - b.x, a.y - b.y), m: { clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 } }; };
       const down = (e: PointerEvent) => {
-        s.drag = true; st.setPointerCapture(e.pointerId); lx = e.clientX; lt = performance.now(); s.vel = 0; s.goal = null; s.dirty = true;
+        touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        st.setPointerCapture(e.pointerId);
+        if (touches.size === 2) { s.drag = false; pinch = { d: spread().d, z: zm.zt }; return; }
+        s.drag = true; lx = e.clientX; ly = e.clientY; lt = performance.now(); s.vel = 0; s.goal = null; s.dirty = true;
         if (e.pointerType === "touch") holdUntil = Infinity;
       };
       const move = (e: PointerEvent) => {
+        if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (pinch && touches.size === 2) { const g = spread(); const [sx, sy] = ndc(g.m); zoomAt(pinch.z * (g.d / Math.max(1, pinch.d)), sx, sy); return; }
         if (!s.drag) return;
-        const dx = e.clientX - lx, now = performance.now();
-        s.yaw += dx * 0.45; s.vel = ((dx * 0.45) / Math.max(1, now - lt)) * 16;
-        lx = e.clientX; lt = now; s.dirty = true;
+        const dx = e.clientX - lx, dy = e.clientY - ly, now = performance.now();
+        if (zm.zt > 1.01) {
+          // zoomed in: dragging moves around the print
+          zm.cxt -= (2 * dx) / (st.clientWidth * zm.zt); zm.cyt += (2 * dy) / (st.clientHeight * zm.zt); clampZoom();
+        } else {
+          s.yaw += dx * 0.45; s.vel = ((dx * 0.45) / Math.max(1, now - lt)) * 16;
+        }
+        lx = e.clientX; ly = e.clientY; lt = now; s.dirty = true;
       };
       const up = (e: PointerEvent) => {
+        touches.delete(e.pointerId);
+        if (touches.size < 2) pinch = null;
         if (!s.drag) return;
-        s.drag = false; if (Math.abs(s.vel) > 0.3) s.goal = s.yaw + s.vel * 8; s.dirty = true;
+        s.drag = false; if (Math.abs(s.vel) > 0.3 && zm.zt <= 1.01) s.goal = s.yaw + s.vel * 8; s.dirty = true;
         if (e.pointerType === "touch") holdUntil = performance.now() + 2500;   // no hover on a phone: a pause, then it turns again
       };
+      // double-click: in close where you point, again to step back out
+      const dbl = (e: MouseEvent) => { const [sx, sy] = ndc(e); zoomAt(zm.zt > 1.2 ? 1 : 3, sx, sy); };
+      // pinch on a trackpad (ctrl+wheel), or the wheel once already zoomed in
+      const wheel = (e: WheelEvent) => {
+        if (!e.ctrlKey && !e.metaKey && zm.zt <= 1.01) return;
+        e.preventDefault();
+        const [sx, sy] = ndc(e);
+        zoomAt(zm.zt * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.002)), sx, sy);
+      };
+      st.addEventListener("dblclick", dbl); st.addEventListener("wheel", wheel, { passive: false });
       st.addEventListener("pointerenter", enter); st.addEventListener("pointerleave", leave);
       st.addEventListener("pointerdown", down); st.addEventListener("pointermove", move);
       st.addEventListener("pointerup", up); st.addEventListener("pointercancel", up);
@@ -212,7 +273,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         if (!onScreen) { prevT = 0; return; }
         if (firstFrame) s.yaw = angRef.current;   // pick up wherever the photos were turned to while this loaded
         // auto-turn: eases out when the pointer comes over the tee (or it's being turned, or a view was picked)
-        const want = still.matches || hover || s.drag || s.goal !== null || s.photo || now < holdUntil ? 0 : SPIN;
+        const want = still.matches || hover || s.drag || s.goal !== null || s.photo || now < holdUntil || zm.zt > 1.01 ? 0 : SPIN;
         spin += (want - spin) * (1 - Math.exp(-dt / 0.45));
         if (Math.abs(spin) < 0.02 && want === 0) spin = 0;
         if (spin) { s.yaw += spin * dt; s.dirty = true; }
@@ -221,8 +282,15 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           if (Math.abs(d) < 0.02) { s.yaw = s.goal; s.goal = null; }
           s.dirty = true;
         }
-        const moving = s.drag || s.goal !== null || spin !== 0;
-        raster.setView(s.yaw, [0, 0, 1], st.clientWidth, st.clientHeight);
+        const ez = 1 - Math.exp(-dt / 0.14);
+        const zooming = Math.abs(zm.zt - zm.z) > 1e-4 || Math.abs(zm.cxt - zm.cx) > 1e-5 || Math.abs(zm.cyt - zm.cy) > 1e-5;
+        if (zooming) {
+          zm.z += (zm.zt - zm.z) * ez; zm.cx += (zm.cxt - zm.cx) * ez; zm.cy += (zm.cyt - zm.cy) * ez;
+          if (Math.abs(zm.zt - zm.z) < 1e-4) { zm.z = zm.zt; zm.cx = zm.cxt; zm.cy = zm.cyt; }
+          s.dirty = true;
+        }
+        const moving = s.drag || s.goal !== null || spin !== 0 || zooming;
+        raster.setView(s.yaw, [zm.cx, zm.cy, zm.z], st.clientWidth, st.clientHeight);
         const swinging = raster.simulate(dt);
         // every display frame is drawn (60, 120, whatever the screen runs at): a skipped frame in a steady turn
         // reads as a judder
@@ -240,8 +308,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         if (busyCloth) restSince = now;
         if (busyCloth && traced) { tc.style.transition = "opacity 120ms"; tc.style.opacity = "0"; traced = false; shown = -1; }
         if (!pt || busyCloth || s.photo || s.loading || busy || now - restSince < 300 || !quiet(now)) return;
-        const sig = `${s.design}|${s.tee}|${s.yaw.toFixed(3)}|${JSON.stringify(s.variant)}`;
-        if (sig !== lastSig) { pt.setView({ yaw: s.yaw, crop: [0, 0, 1], knit: true }); lastSig = sig; shown = -1; }
+        const sig = `${s.design}|${s.tee}|${s.yaw.toFixed(3)}|${zm.z.toFixed(4)}|${zm.cx.toFixed(4)}|${zm.cy.toFixed(4)}|${JSON.stringify(s.variant)}`;
+        if (sig !== lastSig) { pt.setView({ yaw: s.yaw, crop: [zm.cx, zm.cy, zm.z], knit: true }); lastSig = sig; shown = -1; }
         if (pt.clean) return;
         busy = true;
         const p = pt;
@@ -263,6 +331,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           if (pt && c && o) { pt.setColourway(c, o); pt.setScene(scene, FABRIC[t], t === "cream"); }
           s.dirty = true; lastSig = "";
         },
+        zoomBy: (k) => { if (k === 0) zoomAt(1, 0, 0); else zoomAt(zm.zt * k, 0, 0); },
         turnTo: (deg) => { const d = ((((deg - s.yaw) % 360) + 540) % 360) - 180; s.goal = s.yaw + d; holdUntil = performance.now() + 6000; },
         setScene: (id) => {
           scene = SCENES.find((x) => x.id === id) ?? SCENES[0];
@@ -287,6 +356,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           st.removeEventListener("pointerenter", enter); st.removeEventListener("pointerleave", leave);
           st.removeEventListener("pointerdown", down); st.removeEventListener("pointermove", move);
           st.removeEventListener("pointerup", up); st.removeEventListener("pointercancel", up);
+          st.removeEventListener("dblclick", dbl); st.removeEventListener("wheel", wheel);
           removeEventListener("scroll", onScroll); removeEventListener("wheel", onScroll);
           raster.renderer.dispose(); pt?.device.destroy();
         },
@@ -352,11 +422,16 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       </div>
       <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1 text-[13px]">
         {VIEWS.map((v, i) => (
-          <button key={v.label} onClick={() => { setView(i); engine.current?.turnTo(v.yaw); if (mode !== "3d") { const a = ((Math.round(v.yaw / 30) * 30) % 360 + 360) % 360; angRef.current = a; setAng(a); } }} className={`hit ${i === view ? "font-semibold" : "text-quiet hover:text-ink"}`}>
+          <button key={v.label} onClick={() => { setView(i); engine.current?.zoomBy(0); engine.current?.turnTo(v.yaw); if (mode !== "3d") { const a = ((Math.round(v.yaw / 30) * 30) % 360 + 360) % 360; angRef.current = a; setAng(a); } }} className={`hit ${i === view ? "font-semibold" : "text-quiet hover:text-ink"}`}>
             {v.label}
           </button>
         ))}
-        <button onClick={() => setTryOn(true)} className="hit ml-auto font-semibold text-blue hover:text-ink">try it on →</button>
+        <span className="ml-auto flex items-baseline gap-3" role="group" aria-label="Zoom">
+          <button onClick={() => engine.current?.zoomBy(1 / 1.6)} className="hit text-quiet hover:text-ink" aria-label="Zoom out">−</button>
+          <span className="text-quiet">zoom</span>
+          <button onClick={() => engine.current?.zoomBy(1.6)} className="hit text-quiet hover:text-ink" aria-label="Zoom in">+</button>
+        </span>
+        <button onClick={() => setTryOn(true)} className="hit font-semibold text-blue hover:text-ink">try it on →</button>
       </div>
       <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-line pt-1.5 text-[13px]" role="group" aria-label="Light">
         <span className="text-quiet">light</span>
