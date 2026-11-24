@@ -58,7 +58,7 @@ for i, (kn, en) in enumerate(STATIONS):
     d.text((LX - LW // 2 - GAP, y), en, font=en_f, fill=QUIET, anchor="rm")
     d.text((LX + LW // 2 + GAP, y), kn, font=kn_f, fill=INK, anchor="lm")
     if en == "mahalakshmi":   # shares its name with the Mumbai show's ground: two blue dots, like the front's ..
-        x = LX + LW // 2 + GAP + d.textlength(kn, font=kn_f) + 24
+        x = LX + LW // 2 + GAP + d.textlength(kn, font=kn_f) + 70
         for j in range(2): d.ellipse((x + j * 58, y + 22, x + j * 58 + 38, y + 60), fill=BLUE)
 
 # ---- the end: a terminal ring, the name both ways, big ----
