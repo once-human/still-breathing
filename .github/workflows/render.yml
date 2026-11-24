@@ -10,7 +10,7 @@ on:
         default: turntable
       tees:
         description: "design-colour pairs, comma separated (each shirt comes in one colour)"
-        default: "B-black,A-cream,C-black,D-cream"
+        default: "C-black,A-cream,D-cream"
       samples:
         description: "Cycles samples per pixel"
         default: "64"
