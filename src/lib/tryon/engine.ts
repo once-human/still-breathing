@@ -34,9 +34,9 @@ const ASSET = "/tee/fit/";
 const RIG = "/tee/tryon/m170-M.glb";
 export type TryOnStatus = "model" | "camera" | "look" | "ready" | "nobody";
 
-const NOSE = 0, L_EAR = 7, R_EAR = 8, L_SH = 11, R_SH = 12, L_EL = 13, R_EL = 14, L_WR = 15, R_WR = 16, L_IDX = 19, R_IDX = 20, L_HIP = 23, R_HIP = 24;
+const NOSE = 0, L_EAR = 7, R_EAR = 8, L_SH = 11, R_SH = 12, L_EL = 13, R_EL = 14, L_WR = 15, R_WR = 16, L_IDX = 19, R_IDX = 20, L_HIP = 23, R_HIP = 24, L_KNEE = 25, R_KNEE = 26;
 const SOLVE = [L_SH, R_SH, L_EL, R_EL, L_HIP, R_HIP, L_EAR, R_EAR, NOSE];
-const TRACK = [L_SH, R_SH, L_EL, R_EL, L_WR, R_WR, L_HIP, R_HIP, L_EAR, R_EAR, NOSE, L_IDX, R_IDX];
+const TRACK = [L_SH, R_SH, L_EL, R_EL, L_WR, R_WR, L_HIP, R_HIP, L_EAR, R_EAR, NOSE, L_IDX, R_IDX, L_KNEE, R_KNEE];
 
 /** One Euro filter: heavy smoothing when still, almost none when moving fast (Casiez et al. 2012) */
 class OneEuro {
@@ -405,8 +405,15 @@ export class TryOn {
       const cut = 1.2 + 2.2 * this.qSpeed, rr = 2 * Math.PI * cut * dt;
       this.torsoQ.slerp(qNew, rr / (rr + 1));
     }
-    // the hips turn on their own (a twist at the waist), when they're in view
-    this.hipQ.slerp(hips ? frame(this.P.get(R_HIP)!.clone().sub(this.P.get(L_HIP)!), up) : this.torsoQ, 1 - Math.exp(-dt * (hips ? 10 : 4)));
+    // the pelvis is its own frame: its line is your hips', and it stands on your legs (hip to knee, or plain upright
+    // when the knees are out of the picture). Bend forward and the chest goes with your shoulders while the pelvis
+    // mostly stays: the spine curves between them and the hem stays round your hips instead of swinging out
+    if (hips) {
+      const kn = [L_KNEE, R_KNEE].filter((i) => (l![i].visibility ?? 0) > 0.5).map((i) => this.P.get(i)!);
+      const leg = kn.length ? hipMid!.clone().sub(kn.reduce((a, b) => a.clone().add(b)).multiplyScalar(1 / kn.length)).normalize() : new THREE.Vector3(0, 1, 0);
+      const pelvisUp = leg.multiplyScalar(0.55).add(up.clone().multiplyScalar(0.45)).normalize();
+      this.hipQ.slerp(frame(this.P.get(R_HIP)!.clone().sub(this.P.get(L_HIP)!), pelvisUp), 1 - Math.exp(-dt * 10));
+    } else this.hipQ.slerp(this.torsoQ, 1 - Math.exp(-dt * 4));
 
     // ---- the skeleton, posed like a game character's ----
     this.rig.position.set(0, 0, 0); this.rig.scale.setScalar(this.body); this.rig.updateMatrixWorld(true);
