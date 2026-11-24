@@ -502,7 +502,10 @@ export class TryOn {
     if (hips) {
       const kn = [L_KNEE, R_KNEE].filter((i) => (l![i].visibility ?? 0) > 0.5).map((i) => this.P.get(i)!);
       const leg = kn.length ? hipMid!.clone().sub(kn.reduce((a, b) => a.clone().add(b)).multiplyScalar(1 / kn.length)).normalize() : new THREE.Vector3(0, 1, 0);
-      const pelvisUp = leg.multiplyScalar(0.55).add(up.clone().multiplyScalar(0.45)).normalize();
+      // sit down and the thighs come forward: then they no longer say where the pelvis stands (it stays with the
+      // torso), or it would tip back with them
+      const thigh = (leg.angleTo(up) * 180) / Math.PI, lw = 0.55 * Math.min(1, Math.max(0, (45 - thigh) / 20));
+      const pelvisUp = leg.multiplyScalar(lw).add(up.clone().multiplyScalar(1 - lw)).normalize();
       this.hipQ.slerp(frame(this.P.get(R_HIP)!.clone().sub(this.P.get(L_HIP)!), pelvisUp), 1 - Math.exp(-dt * 10));
     } else this.hipQ.slerp(this.torsoQ, 1 - Math.exp(-dt * 4));
 
