@@ -1,17 +1,20 @@
-# The show behind the person in the shop viewer: one 360 degree picture of a dark hall and its stage, rendered in
-# Cycles in horizontal strips across the farm, then stitched, lens-blurred and committed to the site.
+# The places behind the person in the shop viewer (pipeline/stage.py: studio, window, show): one 360 degree picture
+# each, rendered in Cycles in horizontal strips across the farm, then stitched, developed and committed to the site.
 name: stage
 on:
   workflow_dispatch:
     inputs:
+      places:
+        description: "places to render, comma separated (studio, window, show)"
+        default: "studio,window,show"
       width:
         description: "panorama width in pixels (height is half)"
-        default: "2048"
+        default: "4096"
       samples:
-        description: "Cycles samples per pixel"
-        default: "48"
+        description: "Cycles samples per pixel (adaptive, denoised)"
+        default: "64"
       strips:
-        description: "horizontal strips, one runner each"
+        description: "horizontal strips per place, one runner each"
         default: "16"
 
 permissions:
@@ -27,7 +30,9 @@ jobs:
       matrix: ${{ steps.m.outputs.matrix }}
     steps:
       - id: m
-        run: echo "matrix={\"strip\":[$(seq -s, 0 $(( ${{ inputs.strips }} - 1 )))]}" >> "$GITHUB_OUTPUT"
+        run: |
+          P=$(echo "${{ inputs.places }}" | tr -d ' ' | sed 's/[^,][^,]*/"&"/g')
+          echo "matrix={\"place\":[$P],\"strip\":[$(seq -s, 0 $(( ${{ inputs.strips }} - 1 )))]}" >> "$GITHUB_OUTPUT"
 
   strip:
     needs: plan
@@ -50,15 +55,15 @@ jobs:
             curl -sSL "https://download.blender.org/release/Blender${BLENDER%.*}/blender-${BLENDER}-linux-x64.tar.xz" | tar -xJ -C ~/blender --strip-components=1
           fi
           sudo apt-get -qq update && sudo apt-get -qq install -y libxi6 libxxf86vm1 libxfixes3 libxrender1 libgl1 libxkbcommon0 libsm6 > /dev/null
-      - name: Render strip ${{ matrix.strip }}
+      - name: Render ${{ matrix.place }} strip ${{ matrix.strip }}
         run: |
-          mkdir -p out; N=$(printf "s%02d" ${{ matrix.strip }})
-          ~/blender/blender -b --factory-startup -P pipeline/stage.py -- "$PWD/out/$N.exr" ${{ matrix.strip }} ${{ inputs.strips }} ${{ inputs.samples }} ${{ inputs.width }} \
+          mkdir -p out; N=$(printf "${{ matrix.place }}-s%02d" ${{ matrix.strip }})
+          ~/blender/blender -b --factory-startup -P pipeline/stage.py -- ${{ matrix.place }} "$PWD/out/$N.exr" ${{ matrix.strip }} ${{ inputs.strips }} ${{ inputs.samples }} ${{ inputs.width }} \
             | grep -E "Fra:.*Sample [0-9]+/[0-9]+$|saved|Error|Traceback" | tail -5
           test -s "out/$N.npy"
       - uses: actions/upload-artifact@v4
         with:
-          name: strip-${{ matrix.strip }}
+          name: strip-${{ matrix.place }}-${{ matrix.strip }}
           path: out/*.npy
           retention-days: 7
 
@@ -73,11 +78,13 @@ jobs:
         run: |
           pip install -q numpy pillow
           mkdir -p public/tee/stage
-          python3 pipeline/stage_post.py public/tee/stage/show.webp $(ls got/s*.npy | sort)
+          for P in $(echo "${{ inputs.places }}" | tr ',' ' '); do
+            python3 pipeline/stage_post.py "$P" "public/tee/stage/$P.webp" $(ls got/$P-s*.npy | sort)
+          done
           ls -la public/tee/stage
           git config user.name "once-human"
           git config user.email "121476278+once-human@users.noreply.github.com"
           git add public/tee/stage
           git diff --cached --quiet && { echo "nothing new"; exit 0; }
-          git commit -m "Stage: the show around the person, 360 degrees, rendered on the farm"
+          git commit -m "Stage: ${{ inputs.places }} around the person, 360 degrees, rendered on the farm"
           git pull --rebase -q && git push
