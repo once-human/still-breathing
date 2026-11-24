@@ -3,10 +3,10 @@
 #   detail.png           height map: stitching, rib collar, hem folds (same for every design)
 import sys, math
 from PIL import Image, ImageDraw
-from pattern import PANEL_W, PANEL_H, NECK_W, FRONT_DROP, BACK_DROP, RIB, L, HC, key_points
+from pattern import PANEL_W, PANEL_H, NECK_Y, NECK_W, FRONT_DROP, BACK_DROP, RIB, L, HC, key_points, ay, SIZE_NAME
 PX = 40
 W, H = int(PANEL_W * PX), int(PANEL_H * PX)
-def to_px(x, y, panel): return ((panel * PANEL_W + (x if panel == 0 else -x) + PANEL_W / 2) * PX, (PANEL_H - y) * PX)
+def to_px(x, y, panel): return ((panel * PANEL_W + (x if panel == 0 else -x) + PANEL_W / 2) * PX, (PANEL_H - ay(y)) * PX)
 def build_detail():
     img = Image.new("L", (W * 2, H), 128); d = ImageDraw.Draw(img)
     sp, st, sb, ua = key_points()
@@ -56,7 +56,7 @@ def build_detail():
     return img
 if __name__ == "__main__":
     if sys.argv[1] == "detail":
-        build_detail().save("detail.png"); print("detail ok"); sys.exit()
+        build_detail().save(f"detail-{SIZE_NAME}.png"); print("detail ok", SIZE_NAME); sys.exit()
     design, tee = sys.argv[1], sys.argv[2]
     import os
     HERE = os.path.dirname(os.path.abspath(__file__))
@@ -78,6 +78,11 @@ if __name__ == "__main__":
         atlas.alpha_composite(im, (x, y)); mask.paste(im.split()[3], (x, y), im.split()[3])
     back = Image.open(f"{ROOT}/{art}/art-{tee}-al3.png").convert("RGBA").resize((1200, 1600), Image.LANCZOS)
     back.alpha_composite(Image.open(f"{OV}/ov-back-{tee}.png").convert("RGBA"))
-    place(back, 0, L - BACK_DROP - 7.5, 29.7, 1)          # A3-width back print, 7.5 cm under the back neck
-    place(Image.open(f"{OV}/ov-front-{tee}.png").convert("RGBA"), 10.5, L - 10, 10.16, 0)  # 4x4 in chest print, wearer's left
+    # back: the whole printable area. The blank takes up to 16 x 20 in; the art is 3:4, so it fills the height:
+    # 15 x 20 in (38.1 x 50.8 cm), its top 9.5 cm under the high shoulder point (just clear of the collar rib)
+    place(back, 0, NECK_Y - 9.5, 38.1, 1)
+    # front: again.. in four scripts, stacked, on the wearer's left chest at chest height (top 15 cm under the
+    # shoulder point, so the block centres on the chest line), its inner edge 4 cm off the centre front
+    W_FRONT = 10.5
+    place(Image.open(f"{OV}/ov-front-{tee}.png").convert("RGBA"), 4 + W_FRONT / 2, NECK_Y - 15, W_FRONT, 0)
     atlas.convert("RGB").save(f"atlas-{design}-{tee}.png"); mask.save(f"inkmask-{design}-{tee}.png"); print("ok", atlas.size)

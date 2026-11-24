@@ -3,8 +3,13 @@
 # Not published, standard oversized drop-shoulder values until a real sample is measured:
 #   neck width 19.6, front drop 9.5, back drop 2.5, rib 2.0, sleeve length 22, sleeve opening 20 flat,
 #   armhole 25 straight, shoulder slope 3.2, sleeve angle 15 deg below the shoulder line.
-import math
-SIZE = {"chest": 55.9, "length": 73.7, "shoulder": 50.8}
+# Other sizes: SIZE=<XS..2XL> in the environment grades the body from the published chart; the neck,
+# sleeve and rib stay the same (they are not graded on this blank).
+import math, os
+CHART = {"XS": (40, 27, 18), "S": (42, 28, 19), "M": (44, 29, 20), "L": (46, 30, 21), "XL": (48, 31, 22), "2XL": (50, 32, 23)}  # chest, length, shoulder (in)
+SIZE_NAME = os.environ.get("SIZE", "M")
+_c, _l, _s = CHART[SIZE_NAME]
+SIZE = {"chest": _c * 2.54 / 2, "length": _l * 2.54, "shoulder": _s * 2.54}
 NECK_W, FRONT_DROP, BACK_DROP, RIB = 9.8, 9.5, 2.5, 2.0
 SLOPE, ARMHOLE, SLEEVE_LEN, SLEEVE_OPEN, SLEEVE_ANG = 3.2, 25.0, 22.0, 20.0, 15.0
 L = SIZE["length"]; HC = SIZE["chest"] / 2; HS = SIZE["shoulder"] / 2
@@ -48,4 +53,7 @@ def outline(front, step=1.0):
     if math.dist(clean[0][0], clean[-1][0]) < 1e-6: clean.pop()
     return clean
 SEWN = {"shoulder", "sleevetop", "underarm", "side"}
-PANEL_W, PANEL_H = 100.0, 76.0
+# Texture atlas: one 110 x 86 cm cell per panel, anchored at the neck (the high shoulder point sits at NECK_Y
+# for every size), so the prints stay where they are printed whatever the length of the body below them.
+PANEL_W, PANEL_H, NECK_Y = 110.0, 86.0, 82.0
+def ay(y): return y - L + NECK_Y          # pattern y (from the hem) -> atlas y
