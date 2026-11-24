@@ -24,7 +24,7 @@
 // the CPU only ever touches the net. Once everything is still, both snap to exactly zero: the path tracer's
 // geometry is the rest pose, so the two always agree.
 import * as THREE from "three/webgpu";
-import { attribute, textureLoad, ivec2, int, floor, positionLocal, normalLocal, length, max, min, sin, cos, dot, float, transformNormalToView } from "three/tsl";
+import { attribute, textureLoad, ivec2, int, floor, positionLocal, normalLocal, length, max, min, sin, cos, dot, float, vec3, vec4, smoothstep, modelViewMatrix, normalMap } from "three/tsl";
 
 export const TEX_W = 256;
 export const TEX_H = 64;        // up to 16384 particles
@@ -33,8 +33,9 @@ const SUB_DT = 1 / 120;         // fixed sub-step
 const MAX_OFF = 0.07;           // m, a hard limit however hard it is turned
 const SQUEEZE_FULL = 0.045;     // 4.5 % compression = fully formed folds
 const FOLD_LEN = 0.05;          // m between fold crests (heavy cotton makes few, soft folds)
-const FOLD_H = 0.0045;          // m, crest height at full squeeze
-const BREEZE = 0.95;            // m/s at the top of a gust: a slow night breeze, not a storm
+const FOLD_H = 0.0022;          // m, crest height at full squeeze
+const BREEZE = 0.8;             // m/s at the top of a gust: a slow night breeze, not a storm
+const INERTIA = 0.35;           // share of the turn the cloth feels as inertia
 
 type Mesh = { pos: Float32Array; idx: Uint32Array };
 
@@ -195,8 +196,24 @@ export class Cloth {
 
   /** where the garment is held: rotation (3x3), translation, uniform scale (pivot -> world) */
   setPose(R: THREE.Matrix3, t: THREE.Vector3, s = 1) {
+    if (this.started) { this.pR.copy(this.R); this.pT.copy(this.t); this.pS = this.s; }
     this.R.copy(R); this.t.copy(t); this.s = s;
-    if (!this.started) { this.snap(); this.started = true; }
+    if (!this.started) { this.snap(); this.started = true; this.pR.copy(R); this.pT.copy(t); this.pS = s; }
+    // most of the turn is handed straight to the cloth; only part of it is left for inertia to act on. Real
+    // jersey on a form trails a turn a little; letting it feel the whole spin of a fast drag makes it whip.
+    const a = [0, 0, 0], b = [0, 0, 0], k = 1 - INERTIA;
+    for (let c = 0; c < this.n; c++) {
+      if (this.pin[c]) continue;
+      this.targetWith(this.pR, this.pT, this.pS, c, a); this.target(c, b);
+      for (let j = 0; j < 3; j++) { const d = (b[j] - a[j]) * k; this.x[3 * c + j] += d; this.xp[3 * c + j] += d; }
+    }
+  }
+  private pR = new THREE.Matrix3(); private pT = new THREE.Vector3(); private pS = 1;
+  private targetWith(R: THREE.Matrix3, t: THREE.Vector3, s: number, c: number, out: number[]) {
+    const e = R.elements, rx = this.rest[3 * c] * s, ry = this.rest[3 * c + 1] * s, rz = this.rest[3 * c + 2] * s;
+    out[0] = e[0] * rx + e[3] * ry + e[6] * rz + t.x;
+    out[1] = e[1] * rx + e[4] * ry + e[7] * rz + t.y;
+    out[2] = e[2] * rx + e[5] * ry + e[8] * rz + t.z;
   }
 
   private target(c: number, out: number[]) {
@@ -220,7 +237,7 @@ export class Cloth {
     if (!this.wind) return 0;
     const TAU = 2 * Math.PI;
     const g = 0.5 + 0.22 * Math.sin(TAU * t / 29 + 1) + 0.18 * Math.sin(TAU * t / 17.3) + 0.1 * Math.sin(TAU * t / 7.1 + 2);
-    const u = Math.min(1, Math.max(0, (g - 0.4) / 0.32));
+    const u = Math.min(1, Math.max(0, (g - 0.22) / 0.5));
     return u * u * (3 - 2 * u);
   }
 
@@ -247,7 +264,7 @@ export class Cloth {
         if (G > 0) {
           // gusts arrive as waves crossing the garment, a long one and a short one at an angle
           const along = x[i] * wx + x[i + 2] * wz, across = x[i + 1] * 0.8 + (x[i + 2] * wx - x[i] * wz) * 0.6;
-          const f = 1 + 0.45 * Math.sin(TAU * (along / 0.42 - 1.7 * t)) + 0.25 * Math.sin(TAU * (across / 0.27 - 2.6 * t) + 1.7);
+          const f = 1 + 0.55 * Math.sin(TAU * (along / 0.3 - 1.25 * t)) + 0.3 * Math.sin(TAU * (across / 0.22 - 1.9 * t) + 1.7);
           const W = BREEZE * G * f;
           // relative air velocity, along the patch's world normal
           const ux = W * wx - (x[i] - xp[i]) / SUB_DT, uy = W * 0.04 - (x[i + 1] - xp[i + 1]) / SUB_DT, uz = W * wz - (x[i + 2] - xp[i + 2]) / SUB_DT;
@@ -342,7 +359,7 @@ export function clothedPosition(offsets: THREE.DataTexture) {
  * The full cloth for a material: `position` (offset + folds) for positionNode, and `bend(n)` to tilt a
  * view-space shading normal by the folds' slope.
  */
-export function clothNodes(offsets: THREE.DataTexture, squeeze: THREE.DataTexture | null) {
+export function clothNodes(offsets: THREE.DataTexture, squeeze: THREE.DataTexture | null, center: [number, number, number] = [0, 1.1, 0]) {
   const I = attribute("sbI", "vec4"), Wt = attribute("sbW", "vec4");
   const at = (tex: THREE.DataTexture, f: typeof I.x) => {
     const row = floor(f.div(TEX_W));
@@ -351,16 +368,22 @@ export function clothNodes(offsets: THREE.DataTexture, squeeze: THREE.DataTextur
   const blend = (tex: THREE.DataTexture) => at(tex, I.x).mul(Wt.x).add(at(tex, I.y).mul(Wt.y)).add(at(tex, I.z).mul(Wt.z)).add(at(tex, I.w).mul(Wt.w));
   const moved = positionLocal.add(blend(offsets));
   if (!squeeze) return { position: moved, bend: <T,>(n: T) => n };
-  const sv = blend(squeeze), amt = min(length(sv), float(1)), dir = sv.div(max(length(sv), float(1e-4)));
+  const sv = blend(squeeze), amt = smoothstep(float(0.2), float(1), min(length(sv), float(1))), dir = sv.div(max(length(sv), float(1e-4)));
   // ridges across the squeeze axis; a gentle warp so they wander like real folds instead of ruling straight
   const k = (2 * Math.PI) / FOLD_LEN;
   const ph = dot(positionLocal, dir).mul(k).add(sin(positionLocal.y.mul(31).add(positionLocal.x.mul(17))).mul(0.9));
-  const h = amt.mul(amt).mul(FOLD_H);
-  const position = moved.add(normalLocal.mul(sin(ph).mul(h)));
-  const slope = dir.mul(cos(ph).mul(h).mul(k));
+  const h = amt.mul(FOLD_H);
+  // both shells (outside and lining side) must rise the same way, or the inner one pokes through the outer:
+  // every face's normal is turned to point away from the garment's middle before it's used
+  const away = dot(normalLocal, positionLocal.sub(vec3(...center))).greaterThanEqual(0).select(float(1), float(-1));
+  const nOut = normalLocal.mul(away);
+  const position = moved.add(nOut.mul(sin(ph).mul(h)));
+  const slope = dir.mul(cos(ph).mul(h).mul(k)).mul(away);
   const tangential = slope.sub(normalLocal.mul(dot(normalLocal, slope)));
-  const bendView = transformNormalToView(tangential);
-  return { position, bend: (n: ReturnType<typeof transformNormalToView>) => n.sub(bendView).normalize() };
+  // the slope is a plain vector (zero where there are no folds): carried into view space as a direction,
+  // never normalised, so flat cloth keeps exactly its own normal
+  const bendView = modelViewMatrix.mul(vec4(tangential, 0)).xyz;
+  return { position, bend: (n: ReturnType<typeof normalMap>) => n.sub(bendView).normalize() };
 }
 
 /** the squeeze texture (same layout as the offsets) */
