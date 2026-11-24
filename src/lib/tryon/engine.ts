@@ -109,6 +109,7 @@ export class TryOn {
   private armOn = [false, false];
   private fctx: CanvasRenderingContext2D;
   private mask = document.createElement("canvas");
+  private midU = new OneEuro(1.0, 0.015, 1.2); private midV = new OneEuro(1.0, 0.015, 1.2); private body = 0;
   private keyOff = new THREE.Vector3(0, 2, 2); private shown = false; private qSpeed = 0;
   private lit = false; private lum = 0.5; private tint = new THREE.Color(1, 1, 1); private side = new THREE.Vector2();
   private P = new Map<number, THREE.Vector3>();   // filtered camera-space points (mirrored), metres
@@ -305,7 +306,7 @@ export class TryOn {
     this.place(r.landmarks[0] ?? null, r.worldLandmarks[0] ?? null, t, dt);
     if (this.frameN++ % 10 === 0) this.light(dt * 10);
     if (this.cloth && this.rig.visible) {
-      this.cloth.setPose(this.m3.setFromMatrix4(this.m4.makeRotationFromQuaternion(this.rig.quaternion)), this.rig.position, this.sizeScale.x, dt);
+      this.cloth.setPose(this.m3.setFromMatrix4(this.m4.makeRotationFromQuaternion(this.rig.quaternion)), this.rig.position, this.rig.scale.x, dt);
       this.cloth.step(dt);
     }
     this.renderer.render(this.scene, this.camera);
@@ -342,7 +343,7 @@ export class TryOn {
   private place(l: NormalizedLandmark[] | null, w: Landmark[] | null, t: number, dt: number) {
     const ok = l && w && (l[L_SH].visibility ?? 0) > 0.55 && (l[R_SH].visibility ?? 0) > 0.55;
     if (!ok) {
-      if (++this.lost > 6) { this.rig.visible = false; this.occluders.visible = false; this.placed = false; this.lms = null; this.filt.forEach((f) => f.reset()); this.tFilt.reset(); this.onStatus("nobody"); }
+      if (++this.lost > 6) { this.rig.visible = false; this.occluders.visible = false; this.placed = false; this.lms = null; this.filt.forEach((f) => f.reset()); this.tFilt.reset(); this.midU.reset(); this.midV.reset(); this.body = 0; this.onStatus("nobody"); }
       return;
     }
     this.lost = 0;
@@ -380,6 +381,19 @@ export class TryOn {
       const b = f.f(new THREE.Vector3(X(i), Y(i), Z(i)), t);
       this.P.set(i, new THREE.Vector3(b.x + T[0], b.y + T[1], -(b.z + T[2])));
     }
+    // pinned to the picture: the 3D points can drift a little against the video (their depth is a guess from one
+    // camera), but where your shoulders are in the frame is the model's surest answer. Everything is slid so the
+    // shoulders' midpoint lands exactly on that spot, at the depth the solve found
+    {
+      const mu = this.midU.f((U(L_SH) + U(R_SH)) / 2, t), mv = this.midV.f((Vv(L_SH) + Vv(R_SH)) / 2, t);
+      const m0 = this.P.get(L_SH)!.clone().add(this.P.get(R_SH)!).multiplyScalar(0.5), Zc = -m0.z;
+      const shift = new THREE.Vector3((mu * Zc) / this.f, (mv * Zc) / this.f, -Zc).sub(m0);
+      this.P.forEach((p) => p.add(shift));
+      // and fitted to you: the form's shoulder joints are 36 cm apart, yours are what the model measures. Learned
+      // over a second or two, so the tee never breathes in size, and the size you pick is on top of that
+      const k = Math.min(1.35, Math.max(0.8, this.P.get(L_SH)!.distanceTo(this.P.get(R_SH)!) / 0.36));
+      this.body = this.body ? this.body + (k - this.body) * (1 - Math.exp(-dt / 1.5)) : k;
+    }
     this.lms = l;
     this.img = l!.map((p) => ({ x: p.x, y: p.y }));
 
@@ -399,8 +413,8 @@ export class TryOn {
       const cut = 1.2 + 2.2 * this.qSpeed, rr = 2 * Math.PI * cut * dt;
       this.rig.quaternion.slerp(qNew, rr / (rr + 1));
     }
-    this.rig.scale.copy(this.sizeScale);
-    this.rig.position.copy(mid).sub(this.anchor.clone().multiply(this.sizeScale).applyQuaternion(this.rig.quaternion));
+    this.rig.scale.copy(this.sizeScale).multiplyScalar(this.body);
+    this.rig.position.copy(mid).sub(this.anchor.clone().multiply(this.rig.scale).applyQuaternion(this.rig.quaternion));
     this.rig.updateMatrixWorld();
     this.key.target.position.copy(this.rig.position); this.key.position.copy(this.rig.position).add(this.keyOff);
 
