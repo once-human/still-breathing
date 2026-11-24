@@ -2,6 +2,12 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.11.0 — 2026-11-25
+### Studio
+- The carousel is three views now. **The tee** opens first: the shirt alone on paper, turning slowly; drag to turn it, or pick front or back. **Worn**: someone in it at the place you pick, with front, ¾, side and back, zoom, the light and the photo. **Up close**: framed on the whole back print, or the chest print, with the cloth still moving; zoom right in and slide along it. ¾ back, flat and the art are gone.
+- The arrows on the picture are drawn like the notes on the shirts: a marker arrow, small and quiet until you come near that side, then the room dims softly there and a word in hand says where it goes.
+- The mouse wheel only zooms once you've put your hand on the tee, so scrolling the page never gets caught in the viewer.
+
 ## 0.10.2 — 2026-11-25
 ### Studio
 - Turning the tee never mixes in an old design's frames again. Every file the viewer loads now has its own fingerprint in its address, so a frame or texture that changed is always fetched fresh, and the ones that didn't stay cached.

@@ -21,19 +21,21 @@ type Engine = {
   setScene: (id: string) => void;
   photo: (job: PhotoJob) => Promise<Blob>;
   setVariant: (v: Variant) => Promise<void>;
-  setShot: (sh: Shot) => Promise<void>;
+  setShot: (sh: Shot, spot?: number) => Promise<void>;
   dispose: () => void;
 };
 
 /**
- * The carousel: each view is made for one thing and locked to it. The cloth and the air stay live in every one.
- *   worn      someone wearing it at the place you pick: turn, zoom, the lot
- *   alone     the tee by itself on paper: turn it, nothing else
- *   ¾ back    the hero angle, fixed; it leans a little toward the pointer
- *   flat      the back straight on, as the print sits on the shirt
- *   close     right in on the print: slide along it, no turning
- *   the art   the artwork itself, flat: pan and zoom over it
+ * The carousel: three views, each made for one thing. The cloth and the air stay live in every one.
+ *   the tee   the tee by itself on paper, turning slowly; drag to turn it, or pick front or back
+ *   worn      someone wearing it at the place you pick: turn, zoom, the light, the photo
+ *   up close  framed on a print (the back, or the chest), cloth and all: zoom right in and slide along it
  */
+type Spot = {
+  label: string; yaw: number;
+  /** where the view opens (zoom, centre x, centre y in the frame's -1..1) and how far it zooms */
+  open: [number, number, number]; zoom: [number, number];
+};
 type Shot = {
   id: string; label: string;
   /** who's in it: the person (the page's fit pick) or the tee on its own */
@@ -43,21 +45,23 @@ type Shot = {
   /** where it starts (null: wherever the last worn view was) */
   yaw: number | null;
   turn: boolean; spin: boolean;
-  /** zoom range and where it opens */
-  zoom: [number, number]; open: [number, number, number];
+  zoom: [number, number];
   pan: boolean;
-  /** degrees it leans toward the pointer */
-  parallax: number;
-  art?: boolean;
+  /** up close: the prints it frames, the first one first */
+  spots?: Spot[];
 };
 const SHOTS: Shot[] = [
-  { id: "worn", label: "worn", who: "worn", paper: false, yaw: null, turn: true, spin: true, zoom: [1, 5], open: [1, 0, 0], pan: true, parallax: 0 },
-  { id: "alone", label: "alone", who: "alone", paper: true, yaw: 200, turn: true, spin: true, zoom: [1, 1], open: [1, 0, 0], pan: false, parallax: 0 },
-  { id: "hero", label: "¾ back", who: "worn", paper: false, yaw: 148, turn: false, spin: false, zoom: [1, 1], open: [1, 0, 0], pan: false, parallax: 9 },
-  { id: "flat", label: "flat", who: "alone", paper: true, yaw: 180, turn: false, spin: false, zoom: [1, 1], open: [1, 0, 0], pan: false, parallax: 0 },
-  { id: "close", label: "close", who: "alone", paper: true, yaw: 180, turn: false, spin: false, zoom: [3.2, 3.2], open: [3.2, 0, 0.12], pan: true, parallax: 0 },
-  { id: "art", label: "the art", who: "alone", paper: true, yaw: 180, turn: false, spin: false, zoom: [1, 1], open: [1, 0, 0], pan: false, parallax: 0, art: true },
+  { id: "tee", label: "the tee", who: "alone", paper: true, yaw: 210, turn: true, spin: true, zoom: [1, 1], pan: false },
+  { id: "worn", label: "worn", who: "worn", paper: false, yaw: null, turn: true, spin: true, zoom: [1, 5], pan: true },
+  {
+    id: "close", label: "up close", who: "alone", paper: true, yaw: 180, turn: false, spin: false, zoom: [1.85, 7], pan: true,
+    spots: [
+      { label: "back print", yaw: 180, open: [1.85, 0, 0.07], zoom: [1.85, 7] },
+      { label: "chest print", yaw: 0, open: [3.6, 0.176, 0.3], zoom: [3.6, 7] },
+    ],
+  },
 ];
+const TEE_SIDES = [{ label: "front", yaw: 0 }, { label: "back", yaw: 180 }];
 /** the shop tee on its own form, no one in it */
 const ALONE: Variant = { dir: "form-M", size: "M", pose: "stand", body: false };
 
@@ -110,14 +114,18 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
   // the offline path-traced frames, 12 angles, drag to turn: shown at once while the 3D loads ("poster"),
   // and for good on devices that should not run 3D at all ("flat")
   const [mode, setMode] = useState<"poster" | "3d" | "flat">("poster");
-  const [ang, setAng] = useState(0);
-  const angRef = useRef(0);
+  const [ang, setAng] = useState(SHOTS[0].yaw ?? 0);
+  const angRef = useRef(SHOTS[0].yaw ?? 0);
   const flatDrag = useRef<{ x: number; a: number } | null>(null);
   const [shotI, setShotI] = useState(0);
   const shotRef = useRef<Shot>(SHOTS[0]);
+  /** the zoom range in force: the shot's, or up close the print it frames */
+  const rangeRef = useRef<[number, number]>(SHOTS[0].zoom);
+  // which side of the tee, or which print up close, was picked last (-1: none, it's turning on its own)
+  const [spotI, setSpotI] = useState(-1);
   const [switching, setSwitching] = useState(false);
-  const [art, setArt] = useState({ z: 1, x: 0, y: 0 });
-  const artDrag = useRef<{ x: number; y: number; ax: number; ay: number } | null>(null);
+  // which edge of the stage the pointer is near: that side's way to the next view shows
+  const [edge, setEdge] = useState<"l" | "r" | null>(null);
 
   useEffect(() => {
     let dead = false;
@@ -126,8 +134,10 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       if (dead) return;
       if (tier === "photos") { setMode("flat"); return; }   // the 3D code is never downloaded
       const lite = tier === "lite";
-      // the tee, its textures and the decoder start downloading now, alongside the 3D code, not after it
-      prefetchTee(variantRef.current, lookRef.current.design, lookRef.current.tee);
+      // the tee the opening view shows, its textures and the decoder start downloading now, alongside the 3D
+      // code, not after it
+      const first = shotRef.current.who === "worn" ? variantRef.current : ALONE;
+      prefetchTee(first, lookRef.current.design, lookRef.current.tee);
       const code = Promise.all([import("@/lib/viewer/raster"), import("@/lib/viewer/scene")]);
       // nothing is drawn until the viewer is about to be seen
       await new Promise<void>((res) => {
@@ -146,15 +156,15 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       // the paper studio for the views of the tee on its own
       const PAPER = sceneFor(SCENES.find((x) => x.id === "studio") ?? SCENES[0], true);
       const sceneOf = (v: Variant) => (shotRef.current.paper ? PAPER : sceneFor(place, v.body));
-      let scene = sceneOf(variantRef.current);
+      let scene = sceneOf(first);
       raster.setScene(scene, lookRef.current.tee === "cream");
 
       type PathTracer = import("@/lib/viewer/pathtracer").PathTracer;
       let pt: PathTracer | null = null;
-      const s = { design: lookRef.current.design, tee: lookRef.current.tee, yaw: angRef.current, goal: null as number | null, vel: 0, drag: false, dirty: true, photo: false, loading: false, variant: variantRef.current };
+      const s = { design: lookRef.current.design, tee: lookRef.current.tee, yaw: angRef.current, goal: null as number | null, vel: 0, drag: false, dirty: true, photo: false, loading: false, variant: first };
       // zoom: a crop of the same frame (the lens never moves, so the perspective never changes), eased
       const zm = { z: 1, cx: 0, cy: 0, zt: 1, cxt: 0, cyt: 0 };
-      const zlim = () => shotRef.current.zoom;
+      const zlim = () => rangeRef.current;
       const clampZoom = () => {
         zm.zt = Math.min(zlim()[1], Math.max(zlim()[0], zm.zt));
         const lim = 1 - 1 / zm.zt;
@@ -261,10 +271,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       let hover = false, holdUntil = 0, spin = still.matches ? 0 : SPIN;
       let lx = 0, ly = 0, lt = 0;
       const enter = (e: PointerEvent) => { if (e.pointerType !== "touch") hover = true; };
-      const leave = (e: PointerEvent) => {
-        if (e.pointerType !== "touch") hover = false;
-        const sh = shotRef.current; if (sh.parallax && sh.yaw !== null) { s.goal = sh.yaw; s.dirty = true; }
-      };
+      const leave = (e: PointerEvent) => { if (e.pointerType !== "touch") hover = false; engaged = false; };
       // two fingers: pinch to zoom around their midpoint
       const touches = new Map<number, { x: number; y: number }>();
       let shiftPan = false;
@@ -274,7 +281,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       let pinch: { d: number; z: number; mx: number; my: number } | null = null;
       const spread = () => { const [a, b] = [...touches.values()]; return { d: Math.hypot(a.x - b.x, a.y - b.y), m: { clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 } }; };
       const down = (e: PointerEvent) => {
-        if (shotRef.current.art) return;
+        engaged = true;
         touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
         st.setPointerCapture(e.pointerId);
         if (touches.size === 2 && zlim()[1] > zlim()[0]) { s.drag = false; const g = spread(); pinch = { d: g.d, z: zm.zt, mx: g.m.clientX, my: g.m.clientY }; return; }
@@ -291,16 +298,11 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           zoomAt(pinch.z * (g.d / Math.max(1, pinch.d)), sx, sy); return;
         }
         const sh = shotRef.current;
-        // the hero view leans toward the pointer, a few degrees either way, and nothing more
-        if (sh.parallax && sh.yaw !== null && e.pointerType !== "touch") {
-          const [nx] = ndc(e); s.goal = sh.yaw + nx * sh.parallax; s.dirty = true;
-        }
         if (!s.drag) return;
         const dx = e.clientX - lx, dy = e.clientY - ly, now = performance.now();
         if (!sh.turn) {
           // locked views: a drag only slides along the print where the view allows it
           if (sh.pan && zm.zt > 1.01) panBy(dx, dy);
-          if (sh.parallax && sh.yaw !== null && e.pointerType === "touch") { s.yaw = Math.max(sh.yaw - sh.parallax, Math.min(sh.yaw + sh.parallax, s.yaw - dx * 0.08)); }
           lx = e.clientX; ly = e.clientY; lt = now; s.dirty = true; return;
         }
         if (zm.zt > 1.01 && (shiftPan || e.shiftKey)) panBy(dx, dy);
@@ -320,12 +322,17 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         s.drag = false; if (shotRef.current.turn && Math.abs(s.vel) > 0.3) s.goal = s.yaw + s.vel * 8; s.dirty = true;
         if (e.pointerType === "touch") holdUntil = performance.now() + 2500;   // no hover on a phone: a pause, then it turns again
       };
-      // double-click: in close where you point, again to step back out
-      const dbl = (e: MouseEvent) => { if (shotRef.current.art || zlim()[1] <= zlim()[0]) return; const [sx, sy] = ndc(e); zoomAt(zm.zt > 1.2 ? 1 : 3, sx, sy); };
-      // pinch on a trackpad (ctrl+wheel), or the wheel once already zoomed in
+      // double-click: in close where you point, again to step back out to where the view opens
+      const dbl = (e: MouseEvent) => {
+        const [lo, hi] = zlim(); if (hi <= lo) return;
+        const [sx, sy] = ndc(e); zoomAt(zm.zt > lo * 1.2 ? lo : Math.min(hi, lo * 2.6), sx, sy);
+      };
+      // pinch on a trackpad (ctrl+wheel); the plain wheel only once you've put your hand on the tee (clicked or
+      // dragged it), so scrolling down the page never gets caught in the viewer
+      let engaged = false;
       const wheel = (e: WheelEvent) => {
-        if (shotRef.current.art || zlim()[1] <= zlim()[0]) return;
-        if (!e.ctrlKey && !e.metaKey && zm.zt <= 1.01) return;
+        if (zlim()[1] <= zlim()[0]) return;
+        if (!e.ctrlKey && !e.metaKey && (!engaged || zm.zt <= 1.01)) return;
         e.preventDefault();
         const [sx, sy] = ndc(e);
         zoomAt(zm.zt * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.002)), sx, sy);
@@ -366,8 +373,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       let raf = 0, shown = -1, firstFrame = true, prevT = 0, traced = false;
       const loop = (now: number) => {
         raf = requestAnimationFrame(loop);
-        if (process.env.NODE_ENV !== "production") Object.assign(window, { __sb: { pt, raster, s, SCENES, spin: () => spin } });
-        if (!onScreen || shotRef.current.art) { prevT = 0; return; }
+        if (process.env.NODE_ENV !== "production") Object.assign(window, { __sb: { pt, raster, s, zm, SCENES, spin: () => spin } });
+        if (!onScreen) { prevT = 0; return; }
         // while the page scrolls the viewer holds its frame and the page gets the whole GPU: a tee sliding past
         // doesn't need to breathe, and the scroll must never stutter
         if (!s.drag && !firstFrame && now - pageScroll < 200) { prevT = 0; return; }
@@ -472,17 +479,18 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           }
         },
         setVariant: (v) => (shotRef.current.who === "worn" ? loadVariant(v) : Promise.resolve()),
-        setShot: async (sh) => {
+        setShot: async (sh, i = 0) => {
           const was = shotRef.current;
           if (was.who === "worn" && was.yaw === null) wornYaw = s.yaw;
           shotRef.current = sh;
           const v = sh.who === "worn" ? variantRef.current : ALONE;
-          const z = sh.open;
+          const sp = sh.spots?.[i];
+          rangeRef.current = sp?.zoom ?? sh.zoom;
+          const z = sp?.open ?? [1, 0, 0];
           zm.z = zm.zt = z[0]; zm.cx = zm.cxt = z[1]; zm.cy = zm.cyt = z[2];
           if (z[0] > 1.5) void sharpen();
           s.goal = null; s.vel = 0; spin = 0;
-          s.yaw = sh.yaw ?? wornYaw;
-          if (sh.art) return;
+          s.yaw = sp?.yaw ?? sh.yaw ?? wornYaw;
           if (JSON.stringify(v) !== JSON.stringify(s.variant) || sceneOf(v) !== scene) await loadVariant(v);
           s.dirty = true; lastSig = "";
         },
@@ -496,8 +504,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           raster.renderer.dispose(); pt?.device.destroy();
         },
       };
-      if (shotRef.current.id !== "worn") void engine.current.setShot(shotRef.current);
-      else if (JSON.stringify(variantRef.current) !== JSON.stringify(s.variant)) engine.current.setVariant(variantRef.current);
+      if (shotRef.current.who === "worn" && JSON.stringify(variantRef.current) !== JSON.stringify(s.variant)) engine.current.setVariant(variantRef.current);
       const want = lookRef.current;
       if (want.tee !== s.tee || want.design !== s.design) engine.current.setLook(want.design, want.tee);
     })().catch((e) => { console.warn("3D view off, showing the rendered frames", e); setStatus(""); setMode("flat"); });
@@ -532,34 +539,56 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
   };
 
   const shot = SHOTS[shotI];
-  const goShot = async (i: number) => {
+  const spot = shot.spots?.[Math.max(0, spotI)];
+  const nearest = (yaw: number) => ((Math.round(yaw / 30) * 30) % 360 + 360) % 360;
+  const showAngle = (yaw: number) => { const a = nearest(yaw); angRef.current = a; setAng(a); };
+  /** a view, and up close which print it frames */
+  const goShot = async (i: number, sp = 0) => {
     const n = (i + SHOTS.length) % SHOTS.length, sh = SHOTS[n];
-    setShotI(n); setArt({ z: 1, x: 0, y: 0 });
+    setShotI(n); setSpotI(sh.spots ? sp : -1);
+    const yaw = sh.spots?.[sp]?.yaw ?? sh.yaw;
     if (!engine.current) {
       // still the photos: the nearest rendered angle stands in until the 3D is up
-      shotRef.current = sh;
-      if (sh.yaw !== null) { const a = ((Math.round(sh.yaw / 30) * 30) % 360 + 360) % 360; angRef.current = a; setAng(a); }
+      shotRef.current = sh; rangeRef.current = sh.spots?.[sp]?.zoom ?? sh.zoom;
+      if (yaw !== null) showAngle(yaw);
       return;
     }
     setSwitching(true);
-    try { await engine.current.setShot(sh); } finally { setSwitching(false); }
+    try { await engine.current.setShot(sh, sp); } finally { setSwitching(false); }
   };
-  // the art: pan and zoom over the flat file
-  const artZoom = (z: number) => setArt((a) => { const zz = Math.min(6, Math.max(1, z)); const k = zz / a.z; return { z: zz, x: zz === 1 ? 0 : a.x * k, y: zz === 1 ? 0 : a.y * k }; });
-  const artLimit = (a: { z: number; x: number; y: number }, w: number, h: number) => {
-    const lx = (w * (a.z - 1)) / 2, ly = (h * (a.z - 1)) / 2;
-    return { z: a.z, x: Math.max(-lx, Math.min(lx, a.x)), y: Math.max(-ly, Math.min(ly, a.y)) };
+  /** the tee view: turn it round to its front or back */
+  const turnTee = (i: number) => {
+    setSpotI(i); engine.current?.turnTo(TEE_SIDES[i].yaw);
+    if (mode !== "3d") showAngle(TEE_SIDES[i].yaw);
   };
+  // the rendered frames framed the way up close frames the live view (the same crop of the same camera)
+  const stillCrop = spot && mode !== "3d"
+    ? { transform: `scale(${spot.open[0]}) translate(${-spot.open[1] * 50}%, ${spot.open[2] * 50}%)` } : undefined;
+  const dark = !shot.paper && sceneId === "show";
+  const zoomRow = (
+    <span className="ml-auto flex items-baseline gap-3" role="group" aria-label="Zoom">
+      <button onClick={() => engine.current?.zoomBy(1 / 1.6)} className="hit text-quiet hover:text-ink" aria-label="Zoom out">−</button>
+      <span className="text-quiet">zoom</span>
+      <button onClick={() => engine.current?.zoomBy(1.6)} className="hit text-quiet hover:text-ink" aria-label="Zoom in">+</button>
+    </span>
+  );
 
   return (
     <div>
       <div
         ref={stage}
         data-lenis-prevent
-        className={`group relative aspect-[880/1120] w-full touch-none overflow-hidden ${!shot.paper && sceneId === "show" ? "bg-[#0b0a0a]" : "bg-studio"} select-none ${shot.turn || shot.pan ? "cursor-grab active:cursor-grabbing" : ""}`}
+        className={`group relative aspect-[880/1120] w-full touch-none overflow-hidden ${dark ? "bg-[#0b0a0a]" : "bg-studio"} select-none ${shot.turn || shot.pan ? "cursor-grab active:cursor-grabbing" : ""}`}
         aria-label={`The tee, view ${shotI + 1} of ${SHOTS.length}: ${shot.label}`}
         aria-roledescription="carousel"
         tabIndex={0}
+        onPointerMove={(e) => {
+          if (e.pointerType === "touch") return;
+          const r = e.currentTarget.getBoundingClientRect(), x = (e.clientX - r.left) / r.width;
+          const v = x < 0.22 ? "l" : x > 0.78 ? "r" : null;
+          if (v !== edge) setEdge(v);
+        }}
+        onPointerLeave={() => setEdge(null)}
         onKeyDown={(e) => { if (e.key === "ArrowRight") void goShot(shotI + 1); else if (e.key === "ArrowLeft") void goShot(shotI - 1); }}
       >
         {/* the last view stays up while the next one loads (never an empty stage in between) */}
@@ -571,7 +600,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
             (never a blank while the next one decodes). Shown while the 3D loads, and for good without it. */}
         <div
           className={`absolute inset-0 transition-opacity duration-500 ${mode === "3d" ? "pointer-events-none opacity-0" : ""}`}
-          onPointerDown={(e) => { if (mode === "3d" || !(shot.turn || shot.parallax)) return; e.currentTarget.setPointerCapture(e.pointerId); flatDrag.current = { x: e.clientX, a: ang }; }}
+          onPointerDown={(e) => { if (mode === "3d" || !shot.turn) return; e.currentTarget.setPointerCapture(e.pointerId); flatDrag.current = { x: e.clientX, a: ang }; }}
           onPointerMove={(e) => {
             const d = flatDrag.current; if (!d) return;
             const steps = Math.round((e.clientX - d.x) / 45);
@@ -585,37 +614,32 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
               key={`${design}-${a}`} src={STILL(design, a)} alt="" draggable={false}
               fetchPriority={a === ang ? "high" : "low"} decoding="async"
               className={`absolute inset-0 h-full w-full ${a === ang ? "" : "opacity-0"}`}
-              style={shot.id === "close" ? { transform: "scale(2.6) translateY(4%)" } : undefined}
+              style={stillCrop}
             />
           ))}
         </div>
-        {shot.art ? (
-          <div
-            className="absolute inset-0 z-10 cursor-grab overflow-hidden active:cursor-grabbing"
-            style={{ background: COLOURS[tee].hex }}
-            onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); artDrag.current = { x: e.clientX, y: e.clientY, ax: art.x, ay: art.y }; }}
-            onPointerMove={(e) => {
-              const d = artDrag.current; if (!d) return;
-              const r = e.currentTarget.getBoundingClientRect();
-              setArt((a) => artLimit({ z: a.z, x: d.ax + e.clientX - d.x, y: d.ay + e.clientY - d.y }, r.width, r.height));
-            }}
-            onPointerUp={() => { artDrag.current = null; }}
-            onDoubleClick={() => artZoom(art.z > 1.2 ? 1 : 3)}
-            onWheel={(e) => artZoom(art.z * Math.exp(-e.deltaY * 0.002))}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={printBackURL(design, tee, true)} alt={`The back print of ${DESIGNS[design].name}, flat`} draggable={false}
-              className="absolute inset-[6%] h-[88%] w-[88%] object-contain"
-              style={{ transform: `translate(${art.x}px, ${art.y}px) scale(${art.z})`, transition: artDrag.current ? "none" : "transform 160ms ease-out" }}
-            />
-          </div>
-        ) : null}
-        <button onClick={() => void goShot(shotI - 1)} aria-label="Previous view"
-          className={`absolute top-1/2 left-2 z-20 -translate-y-1/2 px-2 py-3 text-[22px] leading-none opacity-70 transition hover:opacity-100 ${(!shot.paper && sceneId === "show") || (shot.art && tee === "black") ? "text-white" : "text-black"}`}>←</button>
-        <button onClick={() => void goShot(shotI + 1)} aria-label="Next view"
-          className={`absolute top-1/2 right-2 z-20 -translate-y-1/2 px-2 py-3 text-[22px] leading-none opacity-70 transition hover:opacity-100 ${(!shot.paper && sceneId === "show") || (shot.art && tee === "black") ? "text-white" : "text-black"}`}>→</button>
-        <p className={`pointer-events-none absolute right-3 bottom-3 z-20 text-[12px] tnum ${(!shot.paper && sceneId === "show") || (shot.art && tee === "black") ? "text-white/70" : "text-black/55"}`}>{shotI + 1} / {SHOTS.length}</p>
+        {/* the way to the next view, drawn the way the notes on the shirts are: a marker arrow and a word in hand.
+            Near an edge the room dims a little on that side and the word says where it goes. */}
+        {([-1, 1] as const).map((k) => {
+          const side = k < 0 ? "l" : "r", on = edge === side, to = SHOTS[(shotI + k + SHOTS.length) % SHOTS.length];
+          return (
+            <div key={side}>
+              <div aria-hidden className={`pointer-events-none absolute inset-y-0 z-10 w-2/5 transition-opacity duration-500 ${k < 0 ? "left-0 bg-[radial-gradient(ellipse_100%_75%_at_0%_50%,rgba(0,0,0,0.4),transparent_72%)]" : "right-0 bg-[radial-gradient(ellipse_100%_75%_at_100%_50%,rgba(0,0,0,0.4),transparent_72%)]"} ${on ? "opacity-100" : "opacity-0"}`} />
+              <button
+                onClick={() => void goShot(shotI + k)} aria-label={`${k < 0 ? "Previous" : "Next"} view: ${to.label}`}
+                className={`group/arrow absolute top-1/2 z-20 flex -translate-y-1/2 flex-col gap-0.5 p-3 text-ink transition-[opacity,scale] duration-300 ease-out [filter:drop-shadow(0_1px_3px_rgba(0,0,0,0.6))] ${k < 0 ? "left-1 origin-left items-start" : "right-1 origin-right items-end"} ${on ? "scale-100 opacity-100" : "scale-[0.72] opacity-55"}`}
+              >
+                <svg width="52" height="30" viewBox="0 0 40 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden
+                  className={`transition-[translate] duration-300 ${k < 0 ? "-scale-x-100" : ""} ${on ? (k < 0 ? "-translate-x-1" : "translate-x-1") : ""}`}>
+                  <path d="M3 13.2c7-1.6 17-.6 31-1.7" />
+                  <path d="M26.5 5.2c3 2.6 5.4 4.6 8.2 6.5-3.1 1.7-5.6 3.9-7.8 6.9" />
+                </svg>
+                <span className={`font-hand text-[24px] leading-none transition-opacity duration-300 ${on ? "opacity-100" : "opacity-0"}`}>{to.label}</span>
+              </button>
+            </div>
+          );
+        })}
+        <p className={`pointer-events-none absolute right-3 bottom-3 z-20 text-[12px] tnum ${dark ? "text-white/70" : "text-black/55"}`}>{shotI + 1} / {SHOTS.length}</p>
         <p className="pointer-events-none absolute bottom-3 left-3 text-[12px] text-black/60 tnum">{status}</p>
       </div>
       <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[13px]" role="tablist" aria-label="Views">
@@ -626,28 +650,30 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         ))}
         <button onClick={() => setTryOn(true)} className="hit ml-auto font-semibold text-blue hover:text-ink">try it on →</button>
       </div>
-      {shot.id === "worn" ? (
-      <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1 border-t border-line pt-1.5 text-[13px]">
-        {VIEWS.map((v, i) => (
-          <button key={v.label} onClick={() => { setView(i); engine.current?.zoomBy(0); engine.current?.turnTo(v.yaw); if (mode !== "3d") { const a = ((Math.round(v.yaw / 30) * 30) % 360 + 360) % 360; angRef.current = a; setAng(a); } }} className={`hit ${i === view ? "font-semibold" : "text-quiet hover:text-ink"}`}>
-            {v.label}
-          </button>
-        ))}
-        <span className="ml-auto flex items-baseline gap-3" role="group" aria-label="Zoom">
-          <button onClick={() => engine.current?.zoomBy(1 / 1.6)} className="hit text-quiet hover:text-ink" aria-label="Zoom out">−</button>
-          <span className="text-quiet">zoom</span>
-          <button onClick={() => engine.current?.zoomBy(1.6)} className="hit text-quiet hover:text-ink" aria-label="Zoom in">+</button>
-        </span>
-      </div>
+      {shot.id === "tee" ? (
+        <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1 border-t border-line pt-1.5 text-[13px]" role="group" aria-label="Side">
+          {TEE_SIDES.map((v, i) => (
+            <button key={v.label} onClick={() => turnTee(i)} className={`hit ${i === spotI ? "font-semibold" : "text-quiet hover:text-ink"}`}>{v.label}</button>
+          ))}
+          <span className="ml-auto text-quiet">drag to turn it</span>
+        </div>
       ) : null}
-      {shot.art ? (
-        <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1 border-t border-line pt-1.5 text-[13px]">
-          <span className="text-quiet">the artwork, flat · drag to move over it</span>
-          <span className="ml-auto flex items-baseline gap-3" role="group" aria-label="Zoom">
-            <button onClick={() => artZoom(art.z / 1.6)} className="hit text-quiet hover:text-ink" aria-label="Zoom out">−</button>
-            <span className="text-quiet">zoom</span>
-            <button onClick={() => artZoom(art.z * 1.6)} className="hit text-quiet hover:text-ink" aria-label="Zoom in">+</button>
-          </span>
+      {shot.id === "worn" ? (
+        <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1 border-t border-line pt-1.5 text-[13px]" role="group" aria-label="Angle">
+          {VIEWS.map((v, i) => (
+            <button key={v.label} onClick={() => { setView(i); engine.current?.zoomBy(0); engine.current?.turnTo(v.yaw); if (mode !== "3d") showAngle(v.yaw); }} className={`hit ${i === view ? "font-semibold" : "text-quiet hover:text-ink"}`}>
+              {v.label}
+            </button>
+          ))}
+          {zoomRow}
+        </div>
+      ) : null}
+      {shot.spots ? (
+        <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1 border-t border-line pt-1.5 text-[13px]" role="group" aria-label="Print">
+          {shot.spots.map((v, i) => (
+            <button key={v.label} onClick={() => void goShot(shotI, i)} className={`hit ${i === spotI ? "font-semibold" : "text-quiet hover:text-ink"}`}>{v.label}</button>
+          ))}
+          {zoomRow}
         </div>
       ) : null}
       {!shot.paper ? (

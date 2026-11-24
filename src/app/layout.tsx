@@ -20,9 +20,12 @@ const face = localFont({
   adjustFontFallback: "Arial",
 });
 
+/** Gochi Hand: the handwriting of the notes and arrows on the shirts, for the few hand-made marks on the page */
+const hand = localFont({ src: "./fonts/GochiHand-Regular.ttf", variable: "--font-handwriting", display: "swap", preload: false });
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={face.variable}>
+    <html lang="en" className={`${face.variable} ${hand.variable}`}>
       <body>
         <SmoothScroll />
         {children}
