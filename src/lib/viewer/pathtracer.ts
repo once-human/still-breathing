@@ -117,7 +117,7 @@ export class PathTracer {
     const tris = new Float32Array(n * 12), triv = new Uint32Array(n * 4);
     let t0 = performance.now();
     for (let i = 0; i < n; i++) {
-      if ((i & 8191) === 0 && performance.now() - t0 > 6) { await new Promise((r) => setTimeout(r, 0)); t0 = performance.now(); }
+      if ((i & 2047) === 0 && performance.now() - t0 > 2) { await new Promise((r) => setTimeout(r, 0)); t0 = performance.now(); }
       const t = bvh.order[i], a = g.idx[t * 3], b = g.idx[t * 3 + 1], c = g.idx[t * 3 + 2];
       const o = i * 12;
       for (let k = 0; k < 3; k++) {

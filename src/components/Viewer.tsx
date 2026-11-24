@@ -198,7 +198,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       };
 
       // ---------- loop ----------
-      let raf = 0, shown = -1, firstFrame = true, prevT = 0, traced = false, ema = 16.7, half = false;
+      let raf = 0, shown = -1, firstFrame = true, prevT = 0, traced = false;
       const loop = (now: number) => {
         raf = requestAnimationFrame(loop);
         const dt = prevT ? Math.min(0.1, (now - prevT) / 1000) : 1 / 60;
@@ -219,12 +219,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         const moving = s.drag || s.goal !== null || spin !== 0;
         raster.setView(s.yaw, [0, 0, 1], st.clientWidth, st.clientHeight);
         const swinging = raster.simulate(dt);
-        // pacing: when only the slow auto-turn is running and this GPU can't hold 60, draw every other frame
-        // (a 14°/s turn reads the same at 30) rather than let frames pile up behind the page. Anything you do
-        // yourself (drag, a swing you caused) always gets every frame, at full sharpness.
-        ema = ema * 0.9 + dt * 1000 * 0.1;
-        const autoOnly = spin !== 0 && !s.drag && s.goal === null && !hover;
-        if (autoOnly && ema > 22 && (half = !half)) return;
+        // every display frame is drawn (60, 120, whatever the screen runs at): a skipped frame in a steady turn
+        // reads as a judder
         if (s.dirty || swinging) {
           raster.render();
           s.dirty = false;
