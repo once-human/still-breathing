@@ -5,11 +5,14 @@ import { COLOURS, DESIGNS, type Colour, type Design } from "@/content/tee";
 import type { Format, Look, PhotoJob } from "@/lib/viewer/photo";
 import type { Variant } from "@/lib/viewer/raster";
 import { pickTier } from "@/lib/viewer/tier";
+import dynamic from "next/dynamic";
+
+// the camera try-on, and the pose model behind it, only download when someone asks for it
+const TryOn = dynamic(() => import("@/components/TryOn").then((m) => m.TryOn), { ssr: false });
 
 type Engine = {
   setLook: (d: Design, t: Colour) => void;
   turnTo: (deg: number) => void;
-  setMagnify: (on: boolean) => void;
   setScene: (id: string) => void;
   photo: (job: PhotoJob) => Promise<Blob>;
   setVariant: (v: Variant) => Promise<void>;
@@ -23,29 +26,32 @@ const VIEWS = [
   { label: "back", yaw: 180 },
 ];
 // samples before the denoiser runs and the traced frame replaces the real-time one: enough for clean soft shadows
-const MAX_SPP = 40;
+const MAX_SPP = 32;
+// the turntable's own speed, degrees a second: one turn in about 26 s
+const SPIN = 14;
 // labels only; the rigs live in lib/viewer/scene.ts (kept out of the page bundle until the viewer loads)
 const SCENE_LIST = [{ id: "studio", label: "studio" }, { id: "window", label: "window" }, { id: "show", label: "the show" }];
 const PHOTO_SPP = 64;
-// the tracer checks itself: past this many ms per sample it first traces fewer pixels, then hands over to the frames
-const SLOW_MS = 80;
+// GPU time the background tracer may use per frame, and the full-sample cost past which it isn't worth it
+const TRACE_MS = 3;
+const SLOW_MS = 600;
 const STILL = (d: string, a: number) => `/tee/still/${d}/a${a}.webp`;
 const FORMAT_LIST: { id: Format; label: string }[] = [{ id: "story", label: "story 9:16" }, { id: "post", label: "post 4:5" }];
 const LOOK_LIST: Look[] = ["clean", "film"];
 
 /**
- * The tee on a seamless sweep. Drag to turn it; let go and the browser path-traces the exact view
- * (same cotton, ink and softboxes as the offline renders), sharpening over a few seconds.
+ * The tee on a seamless sweep, turning slowly by itself. Put the pointer on it and it eases to a stop and is
+ * yours to turn; the cloth swings with it. At rest the browser path-traces the exact view (same cotton, ink and
+ * softboxes as the offline renders) and fades it in.
  */
 export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; variant: Variant }) {
   const stage = useRef<HTMLDivElement>(null);
   const rasterCv = useRef<HTMLCanvasElement>(null);
   const traceCv = useRef<HTMLCanvasElement>(null);
-  const still = useRef<HTMLImageElement>(null);
   const engine = useRef<Engine | null>(null);
   const [status, setStatus] = useState("");
   const [view, setView] = useState(0);
-  const [magnify, setMagnify] = useState(false);
+  const [tryOn, setTryOn] = useState(false);
   const lookRef = useRef({ design, tee });
   const variantRef = useRef(variant);
   const sceneRef = useRef("studio");
@@ -75,165 +81,172 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         io.observe(stage.current!);
       });
       if (dead) return;
-      const [{ Raster, FABRIC }, { SCENES, CAMERA, BODY_CAMERA }, PT] = await Promise.all([
-        import("@/lib/viewer/raster"), import("@/lib/viewer/scene"), tier === "trace" ? import("@/lib/viewer/pathtracer") : Promise.resolve(null),
-      ]);
+      const [{ Raster, FABRIC }, { SCENES, CAMERA, BODY_CAMERA }] = await Promise.all([import("@/lib/viewer/raster"), import("@/lib/viewer/scene")]);
       if (dead || !stage.current || !rasterCv.current || !traceCv.current) return;
-      const st = stage.current, img = still.current!, tc = traceCv.current;
+      const st = stage.current, tc = traceCv.current;
       const raster = new Raster(rasterCv.current);
       await raster.init();
       let scene = SCENES.find((x) => x.id === sceneRef.current) ?? SCENES[0];
       raster.setScene(scene, lookRef.current.tee === "cream");
 
-      type PathTracer = InstanceType<NonNullable<typeof PT>["PathTracer"]>;
+      type PathTracer = import("@/lib/viewer/pathtracer").PathTracer;
       let pt: PathTracer | null = null;
-      if (PT && PT.PathTracer.supported()) {
-        try { pt = new PT.PathTracer(); await pt.init(tc); } catch (e) { console.warn("path tracer off", e); pt = null; }
-      }
-      const s = { design: lookRef.current.design, tee: lookRef.current.tee, yaw: angRef.current, goal: null as number | null, vel: 0, drag: false, crop: [0, 0, 1] as [number, number, number], magnify: false, moving: true, dirty: true, photo: false, loading: false, variant: variantRef.current };
+      const s = { design: lookRef.current.design, tee: lookRef.current.tee, yaw: angRef.current, goal: null as number | null, vel: 0, drag: false, dirty: true, photo: false, loading: false, variant: variantRef.current };
 
       const bitmap = async (url: string) => createImageBitmap(await (await fetch(url)).blob(), { colorSpaceConversion: "none", premultiplyAlpha: "none" });
       const maps: Record<string, Promise<[ImageBitmap, ImageBitmap]>> = {};
       const colourMaps = (d: Design, t: Colour) => (maps[`${d}-${t}`] ??= Promise.all([bitmap(`/tee/fit/tex/color-${d}-${t}.jpg`), bitmap(`/tee/fit/tex/orm-${d}-${t}.png`)]));
       const normals: Record<string, Promise<ImageBitmap>> = {};
       let knitB: ImageBitmap | null = null;
-      /** a tee from the fit pipeline (and in fit mode its body); the path tracer re-indexes it */
+      let geo: Awaited<ReturnType<typeof raster.load>> | null = null;
+      /** hands the current tee to the path tracer (it builds its own acceleration structure in a worker) */
+      const ptLoad = async (p: PathTracer, v: Variant) => {
+        if (!geo) return;
+        const cam = v.body ? BODY_CAMERA[v.pose] : CAMERA;
+        const [[c, o], nrm] = await Promise.all([colourMaps(s.design, s.tee), (normals[v.size] ??= bitmap(`/tee/fit/tex/normal-${v.size}.png`))]);
+        knitB ??= await bitmap("/tee/fit/tex/knit-normal.png");
+        p.imgNormal = nrm; p.imgKnit = knitB;
+        await p.setGeometry(geo);
+        p.setImages({ color: c, orm: o, normal: nrm, knit: knitB });
+        if (v.skin) p.skin = v.skin;
+        p.setCamera(cam);
+        p.setScene(scene, FABRIC[s.tee], s.tee === "cream");
+      };
+      /** a tee from the fit pipeline (and in fit mode its body) */
       const loadVariant = async (v: Variant) => {
         s.loading = true;
         while (busy) await new Promise((r) => setTimeout(r, 16));
         try {
-          const geo = await raster.load(s.design, s.tee, v);
-          const cam = v.body ? BODY_CAMERA[v.pose] : CAMERA;
-          raster.setCamera(cam);
-          if (pt) {
-            const [[c, o], nrm] = await Promise.all([colourMaps(s.design, s.tee), (normals[v.size] ??= bitmap(`/tee/fit/tex/normal-${v.size}.png`))]);
-            knitB ??= await bitmap("/tee/fit/tex/knit-normal.png");
-            pt.imgNormal = nrm; pt.imgKnit = knitB;
-            await pt.setGeometry(geo);
-            pt.setImages({ color: c, orm: o, normal: nrm, knit: knitB });
-            if (v.skin) pt.skin = v.skin;
-            pt.setCamera(cam);
-            pt.setScene(scene, FABRIC[s.tee], s.tee === "cream");
-          }
+          geo = await raster.load(s.design, s.tee, v);
+          raster.setCamera(v.body ? BODY_CAMERA[v.pose] : CAMERA);
+          if (pt) await ptLoad(pt, v);
           s.variant = v;
         } finally { s.loading = false; s.dirty = true; lastSig = ""; }
       };
       let busy = false, lastSig = "";
       await loadVariant(s.variant);
       if (dead) return;
+      // every shader compiled before the first frame, off the main thread: the first turn is as smooth as the rest
+      await raster.renderer.compileAsync(raster.scene, raster.camera).catch(() => {});
+      if (dead) return;
 
-      // ---------- sizing ----------
-      // rasterK: drops while dragging if frames run slow, back to 1 the moment the view comes to rest
-      // traceK : the tracer's resolution, lowered once if this GPU turns out slow
-      let rasterK = 1, dragK = 1, traceK = Math.min(devicePixelRatio, 1.5);
-      const fullDpr = () => Math.min(devicePixelRatio, 2) * (tier === "trace" ? 1 : 0.75);
+      // ---------- sizing: always full sharpness, never a lower-resolution stand-in while it moves ----------
+      const dpr = () => Math.min(devicePixelRatio || 1, 2);
+      const traceK = () => Math.min(devicePixelRatio || 1, 1.5);
       const size = () => {
         const w = st.clientWidth, h = st.clientHeight;
-        raster.resize(w, h, fullDpr() * rasterK);
-        tc.width = Math.round(w * traceK); tc.height = Math.round(h * traceK);
+        raster.resize(w, h, dpr());
+        tc.width = Math.round(w * traceK()); tc.height = Math.round(h * traceK());
         pt?.resize(tc.width, tc.height);
-        s.dirty = true;
+        s.dirty = true; lastSig = "";
       };
-      const setRasterK = (k: number) => { if (k === rasterK) return; rasterK = k; raster.resize(st.clientWidth, st.clientHeight, fullDpr() * k); s.dirty = true; };
       const ro = new ResizeObserver(size); ro.observe(st); size();
       // off screen, nothing runs
       let onScreen = true;
       const vis = new IntersectionObserver((es) => { onScreen = es[0].isIntersecting; if (onScreen) s.dirty = true; });
       vis.observe(st);
 
-      // ---------- interaction ----------
-      let lx = 0, ly = 0, lt = 0;
-      const down = (e: PointerEvent) => { s.drag = true; st.setPointerCapture(e.pointerId); lx = e.clientX; ly = e.clientY; lt = performance.now(); s.vel = 0; s.goal = null; s.dirty = true; };
+      // ---------- interaction: it turns by itself; hover and it eases to a stop and is yours to turn ----------
+      const still = matchMedia("(prefers-reduced-motion: reduce)");
+      let hover = false, holdUntil = 0, spin = still.matches ? 0 : SPIN;
+      let lx = 0, lt = 0;
+      const enter = (e: PointerEvent) => { if (e.pointerType !== "touch") hover = true; };
+      const leave = (e: PointerEvent) => { if (e.pointerType !== "touch") hover = false; };
+      const down = (e: PointerEvent) => {
+        s.drag = true; st.setPointerCapture(e.pointerId); lx = e.clientX; lt = performance.now(); s.vel = 0; s.goal = null; s.dirty = true;
+        if (e.pointerType === "touch") holdUntil = Infinity;
+      };
       const move = (e: PointerEvent) => {
         if (!s.drag) return;
-        const dx = e.clientX - lx, dy = e.clientY - ly, now = performance.now();
-        if (s.magnify) {
-          const z = s.crop[2];
-          s.crop[0] = clamp(s.crop[0] - (dx / st.clientWidth) * 2 / z, -1 + 1 / z, 1 - 1 / z);
-          s.crop[1] = clamp(s.crop[1] + (dy / st.clientHeight) * 2 / z, -1 + 1 / z, 1 - 1 / z);
-        } else {
-          s.yaw += dx * 0.45; s.vel = ((dx * 0.45) / Math.max(1, now - lt)) * 16;
-        }
-        lx = e.clientX; ly = e.clientY; lt = now; s.dirty = true;
+        const dx = e.clientX - lx, now = performance.now();
+        s.yaw += dx * 0.45; s.vel = ((dx * 0.45) / Math.max(1, now - lt)) * 16;
+        lx = e.clientX; lt = now; s.dirty = true;
       };
-      const up = () => { if (!s.drag) return; s.drag = false; if (!s.magnify && Math.abs(s.vel) > 0.3) s.goal = s.yaw + s.vel * 8; s.dirty = true; };
-      const wheel = (e: WheelEvent) => {
-        if (!s.magnify) return;
-        e.preventDefault();
-        const r = st.getBoundingClientRect();
-        const nx = ((e.clientX - r.left) / r.width) * 2 - 1, ny = 1 - ((e.clientY - r.top) / r.height) * 2;
-        const z0 = s.crop[2], z = clamp(z0 * Math.exp(-e.deltaY * 0.002), 1, 12);
-        // keep the point under the cursor still
-        const px = s.crop[0] + nx / z0, py = s.crop[1] + ny / z0;
-        s.crop = [clamp(px - nx / z, -1 + 1 / z, 1 - 1 / z), clamp(py - ny / z, -1 + 1 / z, 1 - 1 / z), z];
-        s.dirty = true;
+      const up = (e: PointerEvent) => {
+        if (!s.drag) return;
+        s.drag = false; if (Math.abs(s.vel) > 0.3) s.goal = s.yaw + s.vel * 8; s.dirty = true;
+        if (e.pointerType === "touch") holdUntil = performance.now() + 2500;   // no hover on a phone: a pause, then it turns again
       };
-      const click = (e: MouseEvent) => {
-        if (!s.magnify || s.crop[2] > 1.01) return;
-        const r = st.getBoundingClientRect(), z = 4;
-        const nx = ((e.clientX - r.left) / r.width) * 2 - 1, ny = 1 - ((e.clientY - r.top) / r.height) * 2;
-        s.crop = [clamp(nx, -1 + 1 / z, 1 - 1 / z), clamp(ny, -1 + 1 / z, 1 - 1 / z), z]; s.dirty = true;
-      };
+      st.addEventListener("pointerenter", enter); st.addEventListener("pointerleave", leave);
       st.addEventListener("pointerdown", down); st.addEventListener("pointermove", move);
       st.addEventListener("pointerup", up); st.addEventListener("pointercancel", up);
-      st.addEventListener("wheel", wheel, { passive: false }); st.addEventListener("click", click);
+
+      // ---------- the path tracer: background work only ----------
+      // It never takes a frame from you: it starts once the page has been idle a moment, works only while the tee
+      // is at rest, the page is not scrolling, the tab is visible and the viewer is on screen, and then only in
+      // strips of about 3 ms of GPU time per frame. Nothing grainy is ever shown: only the finished, denoised frame
+      // fades in, and the moment anything moves it steps aside.
+      let lastScroll = 0, restSince = 0;
+      const onScroll = () => { lastScroll = performance.now(); };
+      addEventListener("scroll", onScroll, { passive: true });
+      addEventListener("wheel", onScroll, { passive: true });
+      const quiet = (now: number) => now - lastScroll > 450 && document.visibilityState === "visible" && onScreen;
+      const startTracer = async () => {
+        // wait for a calm moment before even creating the device
+        for (;;) {
+          await new Promise<void>((r) => ("requestIdleCallback" in window ? requestIdleCallback(() => r(), { timeout: 4000 }) : setTimeout(r, 1500)));
+          if (dead) return;
+          if (quiet(performance.now())) break;
+          await new Promise((r) => setTimeout(r, 800));
+        }
+        const PT = await import("@/lib/viewer/pathtracer");
+        if (dead || !PT.PathTracer.supported()) return;
+        const p = new PT.PathTracer();
+        try { await p.init(tc); size(); p.resize(tc.width, tc.height); await ptLoad(p, s.variant); } catch (e) { console.warn("path tracer off", e); return; }
+        if (dead) { p.device.destroy(); return; }
+        pt = p; setCanPhoto(true); lastSig = "";
+      };
 
       // ---------- loop ----------
-      let raf = 0, shown = -1, firstFrame = true, lastT = 0, ema = 16.7;
-      const loop = () => {
+      let raf = 0, shown = -1, firstFrame = true, prevT = 0, traced = false, ema = 16.7, half = false;
+      const loop = (now: number) => {
         raf = requestAnimationFrame(loop);
-        if (process.env.NODE_ENV !== "production") Object.assign(window, { __sb: { pt, raster, s, SCENES, tier, k: () => ({ rasterK, dragK, traceK }) } });
-        if (!onScreen) { lastT = 0; return; }
+        const dt = prevT ? Math.min(0.1, (now - prevT) / 1000) : 1 / 60;
+        prevT = now;
+        if (process.env.NODE_ENV !== "production") Object.assign(window, { __sb: { pt, raster, s, SCENES, spin: () => spin } });
+        if (!onScreen) { prevT = 0; return; }
         if (firstFrame) s.yaw = angRef.current;   // pick up wherever the photos were turned to while this loaded
+        // auto-turn: eases out when the pointer comes over the tee (or it's being turned, or a view was picked)
+        const want = still.matches || hover || s.drag || s.goal !== null || s.photo || now < holdUntil ? 0 : SPIN;
+        spin += (want - spin) * (1 - Math.exp(-dt / 0.45));
+        if (Math.abs(spin) < 0.02 && want === 0) spin = 0;
+        if (spin) { s.yaw += spin * dt; s.dirty = true; }
         if (!s.drag && s.goal !== null) {
-          const d = s.goal - s.yaw; s.yaw += d * 0.14;
+          const d = s.goal - s.yaw; s.yaw += d * (1 - Math.exp(-dt * 9));
           if (Math.abs(d) < 0.02) { s.yaw = s.goal; s.goal = null; }
           s.dirty = true;
         }
-        const sig = `${s.design}|${s.tee}|${s.yaw.toFixed(3)}|${s.crop.join(",")}`;
-        const moving = s.drag || s.goal !== null;
-        // frame-time governor: a weak GPU drags at fewer pixels instead of stuttering; full sharpness at rest
-        const now = performance.now();
-        if (moving) {
-          if (lastT && now - lastT < 250) ema = ema * 0.85 + (now - lastT) * 0.15;
-          if (ema > 28 && dragK > 0.5) { dragK = Math.max(0.5, dragK * 0.8); ema = 20; }
-          setRasterK(dragK);
-        } else setRasterK(1);
-        lastT = moving ? now : 0;
-        if (s.dirty || sig !== lastSig) {
-          raster.setView(s.yaw, s.crop, st.clientWidth, st.clientHeight);
+        const moving = s.drag || s.goal !== null || spin !== 0;
+        raster.setView(s.yaw, [0, 0, 1], st.clientWidth, st.clientHeight);
+        const swinging = raster.simulate(dt);
+        // pacing: when only the slow auto-turn is running and this GPU can't hold 60, draw every other frame
+        // (a 14°/s turn reads the same at 30) rather than let frames pile up behind the page. Anything you do
+        // yourself (drag, a swing you caused) always gets every frame, at full sharpness.
+        ema = ema * 0.9 + dt * 1000 * 0.1;
+        const autoOnly = spin !== 0 && !s.drag && s.goal === null && !hover;
+        if (autoOnly && ema > 22 && (half = !half)) return;
+        if (s.dirty || swinging) {
           raster.render();
-          if (firstFrame) { firstFrame = false; setMode("3d"); }
-          if (sig !== lastSig) pt?.setView({ yaw: s.yaw, crop: [...s.crop], knit: true });
-          lastSig = sig; s.dirty = false;
-          tc.style.opacity = "0"; shown = -1;
-          setStatus("");
+          s.dirty = false;
+          if (firstFrame) { firstFrame = false; setMode("3d"); setStatus(""); void startTracer(); }
         }
-        if (!pt) {
-          // no WebGPU: show the offline path-traced frame whenever the view lands on one
-          const y = ((s.yaw % 360) + 360) % 360, near = (Math.round(y / 30) * 30) % 360;
-          const ok = !s.variant.body && !moving && Math.abs(y - near) < 0.5 && s.crop[2] === 1;
-          if (ok && !img.src.endsWith(STILL(s.design, near))) img.src = STILL(s.design, near);
-          img.style.opacity = ok && img.complete && img.naturalWidth > 0 ? "1" : "0";
-          return;
-        }
-        if (s.photo || s.loading || moving || busy || pt.clean) return;
+        const busyCloth = moving || swinging;
+        if (busyCloth) restSince = now;
+        if (busyCloth && traced) { tc.style.transition = "opacity 120ms"; tc.style.opacity = "0"; traced = false; shown = -1; }
+        if (!pt || busyCloth || s.photo || s.loading || busy || now - restSince < 300 || !quiet(now)) return;
+        const sig = `${s.design}|${s.tee}|${s.yaw.toFixed(3)}|${JSON.stringify(s.variant)}`;
+        if (sig !== lastSig) { pt.setView({ yaw: s.yaw, crop: [0, 0, 1], knit: true }); lastSig = sig; shown = -1; }
+        if (pt.clean) return;
         busy = true;
-        // traced out of sight, a few samples per frame so the page stays responsive; the real-time view stays up
-        // until the denoised frame is ready, then it fades across. No grain is ever on screen.
-        const n = pt.lastMs > 0 ? clamp(Math.floor(24 / pt.lastMs), 1, 8) : 1;
-        const go = pt.frame + n >= MAX_SPP ? pt.step(Math.max(1, MAX_SPP - pt.frame), false).then(() => pt!.denoise(true)) : pt.step(n, false);
         const p = pt;
+        const go = p.frame >= MAX_SPP ? p.denoise(true) : p.work(TRACE_MS);
         go.then(() => {
           busy = false;
           if (p !== pt) return;
-          if (p.clean && shown !== p.frame) { shown = p.frame; tc.style.opacity = "1"; }
-          // too slow here: trace fewer pixels once, then leave it to the offline frames
-          if (!p.clean && p.frame >= 4 && p.lastMs > SLOW_MS) {
-            if (traceK > 0.75) { traceK = 0.75; size(); p.setView({ yaw: s.yaw, crop: [...s.crop], knit: true }); lastSig = ""; }
-            else { console.info("path tracer too slow on this GPU, using the rendered frames"); pt = null; p.device.destroy(); tc.style.opacity = "0"; setCanPhoto(false); s.dirty = true; }
-          }
-        });
+          if (p.clean && shown !== p.frame && lastSig === sig) { shown = p.frame; tc.style.transition = "opacity 450ms"; tc.style.opacity = "1"; traced = true; }
+          // a GPU this slow would take ages to finish a frame: leave it to the live view
+          if (!p.clean && p.lastMs > SLOW_MS) { console.info("path tracer too slow here, live view only"); pt = null; p.device.destroy(); tc.style.opacity = "0"; setCanPhoto(false); }
+        }).catch(() => { busy = false; });
       };
       raf = requestAnimationFrame(loop);
 
@@ -244,7 +257,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           if (pt && c && o) { pt.setColourway(c, o); pt.setScene(scene, FABRIC[t], t === "cream"); }
           s.dirty = true; lastSig = "";
         },
-        turnTo: (deg) => { const d = ((((deg - s.yaw) % 360) + 540) % 360) - 180; s.goal = s.yaw + d; s.crop = [0, 0, 1]; },
+        turnTo: (deg) => { const d = ((((deg - s.yaw) % 360) + 540) % 360) - 180; s.goal = s.yaw + d; holdUntil = performance.now() + 6000; },
         setScene: (id) => {
           scene = SCENES.find((x) => x.id === id) ?? SCENES[0];
           raster.setScene(scene, s.tee === "cream"); pt?.setScene(scene, FABRIC[s.tee], s.tee === "cream");
@@ -258,21 +271,20 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           try { return await renderPhoto(pt, job); }
           finally {
             s.photo = false; size();
-            pt.setView({ yaw: s.yaw, crop: [...s.crop], knit: true });
+            pt.setView({ yaw: s.yaw, crop: [0, 0, 1], knit: true });
             s.dirty = true; lastSig = "";
           }
         },
         setVariant: (v) => loadVariant(v),
-        setMagnify: (on) => { s.magnify = on; if (!on) s.crop = [0, 0, 1]; s.dirty = true; },
         dispose: () => {
           cancelAnimationFrame(raf); ro.disconnect(); vis.disconnect();
+          st.removeEventListener("pointerenter", enter); st.removeEventListener("pointerleave", leave);
           st.removeEventListener("pointerdown", down); st.removeEventListener("pointermove", move);
           st.removeEventListener("pointerup", up); st.removeEventListener("pointercancel", up);
-          st.removeEventListener("wheel", wheel); st.removeEventListener("click", click);
+          removeEventListener("scroll", onScroll); removeEventListener("wheel", onScroll);
           raster.renderer.dispose(); pt?.device.destroy();
         },
       };
-      setCanPhoto(!!pt);
       if (JSON.stringify(variantRef.current) !== JSON.stringify(s.variant)) engine.current.setVariant(variantRef.current);
       const want = lookRef.current;
       if (want.tee !== s.tee || want.design !== s.design) engine.current.setLook(want.design, want.tee);
@@ -312,14 +324,12 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       <div
         ref={stage}
         data-lenis-prevent
-        className={`relative aspect-[880/1120] w-full touch-none overflow-hidden bg-studio select-none ${magnify ? "cursor-zoom-in" : "cursor-grab active:cursor-grabbing"}`}
-        aria-label="The tee in 3D. Drag to turn it."
+        className={`relative aspect-[880/1120] w-full touch-none overflow-hidden bg-studio select-none cursor-grab active:cursor-grabbing`}
+        aria-label="The tee in 3D, turning slowly. Point at it to stop it, drag to turn it."
         role="img"
       >
         <canvas ref={rasterCv} className="absolute inset-0 h-full w-full" />
         <canvas ref={traceCv} className="absolute inset-0 h-full w-full opacity-0 transition-opacity duration-500" />
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img ref={still} alt="" className="pointer-events-none absolute inset-0 h-full w-full opacity-0" />
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={STILL(design, ang)} alt="" draggable={false} fetchPriority="high"
@@ -336,13 +346,11 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       </div>
       <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1 text-[13px]">
         {VIEWS.map((v, i) => (
-          <button key={v.label} onClick={() => { setView(i); engine.current?.turnTo(v.yaw); if (mode !== "3d") { const a = ((Math.round(v.yaw / 30) * 30) % 360 + 360) % 360; angRef.current = a; setAng(a); } }} className={`hit ${i === view && !magnify ? "font-semibold" : "text-quiet hover:text-ink"}`}>
+          <button key={v.label} onClick={() => { setView(i); engine.current?.turnTo(v.yaw); if (mode !== "3d") { const a = ((Math.round(v.yaw / 30) * 30) % 360 + 360) % 360; angRef.current = a; setAng(a); } }} className={`hit ${i === view ? "font-semibold" : "text-quiet hover:text-ink"}`}>
             {v.label}
           </button>
         ))}
-        <button onClick={() => { const on = !magnify; setMagnify(on); engine.current?.setMagnify(on); }} className={`hit ml-auto ${magnify ? "font-semibold" : "text-quiet hover:text-ink"}`}>
-          {magnify ? "close loupe" : "loupe"}
-        </button>
+        <button onClick={() => setTryOn(true)} className="hit ml-auto font-semibold text-blue hover:text-ink">try it on →</button>
       </div>
       <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-line pt-1.5 text-[13px]" role="group" aria-label="Light">
         <span className="text-quiet">light</span>
@@ -385,9 +393,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           </div>
         </div>
       ) : null}
-      {magnify ? <p className="mt-1 text-[12px] text-quiet">click to look close, scroll to zoom up to 12×, drag to move. it re-renders the cloth at that size, nothing is stretched.</p> : null}
+      {tryOn ? <TryOn design={design} tee={tee} onClose={() => setTryOn(false)} /> : null}
     </div>
   );
 }
 
-function clamp(v: number, a: number, b: number) { return Math.min(b, Math.max(a, v)); }

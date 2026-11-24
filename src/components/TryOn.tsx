@@ -1,0 +1,106 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { DESIGNS, type Colour, type Design } from "@/content/tee";
+import type { TryOn as Engine, TryOnStatus } from "@/lib/tryon/engine";
+
+const SAY: Record<TryOnStatus, string> = {
+  model: "getting the body model ready…",
+  camera: "allow the camera to see yourself in it",
+  look: "step back until your shoulders and chest are in the frame",
+  ready: "",
+  nobody: "step back until your shoulders and chest are in the frame",
+};
+
+/**
+ * The tee on you, through your own camera. The pose model runs in this tab, on this device: nothing is
+ * recorded and nothing leaves the browser.
+ */
+export function TryOn({ design, tee, onClose }: { design: Design; tee: Colour; onClose: () => void }) {
+  const video = useRef<HTMLVideoElement>(null);
+  const cv = useRef<HTMLCanvasElement>(null);
+  const arms = useRef<HTMLCanvasElement>(null);
+  const eng = useRef<Engine | null>(null);
+  const [status, setStatus] = useState<TryOnStatus>("model");
+  const [err, setErr] = useState("");
+  const [look, setLook] = useState<Design>(design);
+  const [shot, setShot] = useState<string | null>(null);
+  // the frame takes the camera's own shape, so the tee lines up with the picture edge to edge
+  const [ar, setAr] = useState(4 / 3);
+
+  useEffect(() => {
+    let dead = false;
+    (async () => {
+      try {
+        const { TryOn } = await import("@/lib/tryon/engine");
+        if (dead || !video.current || !cv.current || !arms.current) return;
+        const e = new TryOn(video.current, cv.current, arms.current, (s) => !dead && setStatus(s));
+        eng.current = e;
+        await e.start(design, DESIGNS[design].colour ?? tee);
+      } catch (x) {
+        if (dead) return;
+        const name = (x as { name?: string })?.name;
+        setErr(name === "NotAllowedError" ? "the camera is blocked for this site. allow it in the address bar and try again."
+          : name === "NotFoundError" ? "no camera found on this device."
+          : "the try-on couldn't start on this browser.");
+      }
+    })();
+    const onResize = () => eng.current?.resize();
+    const ro = new ResizeObserver(onResize); if (cv.current) ro.observe(cv.current);
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    addEventListener("resize", onResize); addEventListener("keydown", onKey);
+    const html = document.documentElement, prev = html.style.overflow; html.style.overflow = "hidden";
+    return () => {
+      dead = true; ro.disconnect(); eng.current?.dispose(); eng.current = null;
+      removeEventListener("resize", onResize); removeEventListener("keydown", onKey); html.style.overflow = prev;
+    };
+    // the session starts once; switching designs goes through setLook
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => () => { if (shot) URL.revokeObjectURL(shot); }, [shot]);
+
+  const pick = (d: Design) => { setLook(d); eng.current?.setLook(d, DESIGNS[d].colour); };
+  const snap = async () => { const b = await eng.current?.snapshot().catch(() => null); if (b) setShot(URL.createObjectURL(b)); };
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-black text-white" role="dialog" aria-modal aria-label="Try it on">
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        {/* the preview is a mirror, like any selfie camera; the saved photo is the right way round */}
+        <div className="absolute inset-0 flex items-center justify-center" style={{ transform: "scaleX(-1)" }}>
+          <div className="relative" style={{ aspectRatio: ar, width: `min(100%, calc((100dvh - 64px) * ${ar}))` }}>
+            <video ref={video} playsInline muted className="absolute inset-0 h-full w-full"
+              onLoadedMetadata={(e) => { const v = e.currentTarget; if (v.videoWidth && v.videoHeight) setAr(v.videoWidth / v.videoHeight); }} />
+            <canvas ref={cv} className="absolute inset-0 h-full w-full" />
+            <canvas ref={arms} className="absolute inset-0 h-full w-full" />
+          </div>
+        </div>
+        {err || SAY[status] ? (
+          <p className="pointer-events-none absolute inset-x-0 bottom-6 mx-auto w-fit max-w-[90%] rounded bg-black/60 px-3 py-1.5 text-center text-[14px]">{err || SAY[status]}</p>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2 px-4 py-3 text-[14px]">
+        {(Object.keys(DESIGNS) as Design[]).map((d) => (
+          <button key={d} onClick={() => pick(d)} className={`hit ${d === look ? "font-semibold" : "text-white/60 hover:text-white"}`}>
+            {DESIGNS[d].no} {DESIGNS[d].name}
+          </button>
+        ))}
+        <span className="hidden text-white/50 sm:inline">on this device only, nothing is recorded or sent</span>
+        <button onClick={snap} disabled={status !== "ready"} className="hit ml-auto font-semibold disabled:text-white/40">take a photo</button>
+        <button onClick={onClose} className="hit text-white/70 hover:text-white">close</button>
+      </div>
+      {shot ? (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/85 p-4" onClick={() => setShot(null)}>
+          <div className="flex max-h-full flex-col items-center gap-3" onClick={(e) => e.stopPropagation()}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={shot} alt="You in the tee" className="max-h-[80vh] w-auto max-w-full" />
+            <div className="flex gap-6">
+              <a href={shot} download={`still-breathing-${look}.jpg`} className="font-semibold hover:text-white/70">save</a>
+              <button onClick={() => setShot(null)} className="text-white/70 hover:text-white">back</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
