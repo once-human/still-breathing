@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       kind:
-        description: "turntable (web frames, transparent) or stills (presentation front / 3/4 / back)"
+        description: "turntable (web frames: someone wearing it at the show, as the 3D opens) or stills (presentation front / 3/4 / back)"
         type: choice
         options: [turntable, stills]
         default: turntable
@@ -62,10 +62,21 @@ jobs:
       - name: Render ${{ matrix.design }} ${{ matrix.tee }} ${{ matrix.view }}
         run: |
           mkdir -p out; N="${{ matrix.design }}-${{ matrix.tee }}-${{ matrix.view }}"
-          if [ "${{ inputs.kind }}" = "turntable" ]; then export W=880 H=1120 TRANSPARENT=1; fi
-          # the shop tee: size M sewn onto the ghost form by fit.yml
-          GLB="$PWD/public/tee/fit/form-M/stand.glb" THREADS=$(nproc) ~/blender/blender -b --factory-startup -P pipeline/render.py -- \
-            ${{ matrix.design }} ${{ matrix.tee }} ${{ matrix.view }} "$PWD/out/$N.png" ${{ inputs.samples }} | grep -E "Fra:|Saved|Error|Traceback" | tail -5
+          if [ "${{ inputs.kind }}" = "turntable" ]; then
+            # the poster frames of the 3D view: the shop tee in M on the 170 cm body it was simulated on, worn by that
+            # body made a person, at the show (its lights, the stage picture laid in behind by still_post.py)
+            export W=880 H=1120 SCENE=show GLB="$PWD/public/tee/fit/m170-M/stand.glb" PERSON="$PWD/public/tee/human/m170-stand.glb"
+            R="$PWD/out/$N-film.png"
+          else
+            # the shop tee: size M sewn onto the ghost form by fit.yml
+            export GLB="$PWD/public/tee/fit/form-M/stand.glb"; R="$PWD/out/$N.png"
+          fi
+          THREADS=$(nproc) ~/blender/blender -b --factory-startup -P pipeline/render.py -- \
+            ${{ matrix.design }} ${{ matrix.tee }} ${{ matrix.view }} "$R" ${{ inputs.samples }} | grep -E "Fra:|Saved|Error|Traceback" | tail -5
+          test -s "$R"
+          if [ "${{ inputs.kind }}" = "turntable" ]; then
+            python3 pipeline/still_post.py "$R" "$R.cam.json" public/tee/stage/show.webp "out/$N.png" && rm "$R" "$R.cam.json"
+          fi
           test -s "out/$N.png"
       - uses: actions/upload-artifact@v4
         with:
@@ -91,7 +102,7 @@ jobs:
           for f in frames/*.png; do
             b=$(basename "$f" .png); design=${b%%-*}; view=${b##*-}
             if [ "${{ inputs.kind }}" = "turntable" ]; then d=public/tee/still/$(echo $design | tr A-Z a-z); mkdir -p $d
-              # the web gets WebP: ~20 KB a frame instead of ~600 KB, alpha kept
+              # the web gets WebP: tens of KB a frame instead of ~1 MB
               python3 -c "import sys; from PIL import Image; Image.open(sys.argv[1]).save(sys.argv[2], 'WEBP', quality=90, method=6)" "$f" $d/$view.webp
             else d=previews; mkdir -p $d; cp "$f" $d/3d-$b.png; fi
             n=$((n+1))

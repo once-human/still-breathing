@@ -1,12 +1,18 @@
 # blender -b tee-drape.blend -P render.py -- <design> <tee> <view front|back> <out.png> [samples]
 # GLB=<tee.glb> blender -b --factory-startup -P render.py -- ...   renders a published fit-pipeline tee instead
 #   (already thick and smoothed; textures are the neck-anchored atlases texture.py writes next to this script)
+# PERSON=<person.glb> SCENE=show ...   the shop shot as the 3D view opens on it: someone wearing the tee (human.py),
+#   both lifted by FLOOR, framed by WEAR_CAMERA, lit by the show's lights (src/lib/viewer/scene.ts). The place stays
+#   put and the camera walks round it (aNN = the viewer's yaw). Film is transparent; still_post.py lays the
+#   stage picture in behind along the pinhole ray, as the path tracer does (its lens blur is already in it).
 import bpy, bmesh, sys, math
 from mathutils import Vector
 a = sys.argv[sys.argv.index("--") + 1:]
 design, tee_col, view, out = a[:4]; samples = int(a[4]) if len(a) > 4 else 128
 import os
 GLB = os.environ.get("GLB")
+PERSON = os.environ.get("PERSON"); SHOW = os.environ.get("SCENE") == "show"
+FLOOR = 0.35   # scene.ts FLOOR: the person stands on the floor the fit pipeline's bodies stand on
 ROOT = os.path.dirname(os.path.abspath(__file__)) if GLB else os.path.dirname(bpy.data.filepath)   # textures
 sc = bpy.context.scene
 if GLB:
@@ -30,6 +36,33 @@ else:
     so = tee.modifiers.new("thick", "SOLIDIFY"); so.thickness = 0.0032; so.offset = 0; so.use_even_offset = True
     if "stiff" in tee.vertex_groups: so.vertex_group = "stiff"; so.thickness_vertex_group = 0.5
     sub = tee.modifiers.new("sub", "SUBSURF"); sub.levels = 1; sub.render_levels = 2
+# ---- someone wearing it: skin, jeans, eyes, colours painted per vertex (linear albedo) ----
+person = []
+if PERSON:
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=PERSON)
+    person = [o for o in bpy.data.objects if o not in before and o.type == "MESH"]
+    # the same surfaces as the path tracer's materials 4, 5, 6 (pt.wgsl.ts): F0 0.028 / 0.02 / 0.03 is
+    # Specular IOR Level 0.35 / 0.25 / 0.375; the jeans carry the cotton sheen, the skin and eyes none
+    LOOK = {"skin": (0.5, 0.35, 0.0), "jeans": (0.85, 0.25, 0.35), "eyes": (0.12, 0.375, 0.0)}
+    for po in person:
+        if po.parent: po.matrix_world = po.matrix_world.copy(); po.parent = None
+        assert po.data.color_attributes, f"{po.name}: no painted colours (COLOR_0)"
+        ca = po.data.color_attributes[0].name
+        for i, slot in enumerate(po.data.materials):
+            # human.py exports placeholder materials, so the glTF has none: the mesh names say which part it is
+            nm = ((slot.name if slot else "") + " " + po.name + " " + po.data.name).lower()
+            kind = "jeans" if "jean" in nm else "eyes" if "eye" in nm else "skin"
+            r, spec, sheen = LOOK[kind]
+            pm = bpy.data.materials.new(f"person-{kind}"); pm.use_nodes = True
+            pb = pm.node_tree.nodes["Principled BSDF"]
+            col = pm.node_tree.nodes.new("ShaderNodeVertexColor"); col.layer_name = ca
+            pm.node_tree.links.new(col.outputs["Color"], pb.inputs["Base Color"])
+            pb.inputs["Roughness"].default_value = r; pb.inputs["Specular IOR Level"].default_value = spec
+            pb.inputs["Sheen Weight"].default_value = sheen; pb.inputs["Sheen Roughness"].default_value = 0.3
+            po.data.materials[i] = pm
+        po.location.z += FLOOR
+    tee.location.z += FLOOR
 # ---- material: cotton jersey + DTG ink ----
 m = bpy.data.materials.new("jersey"); m.use_nodes = True; nt = m.node_tree; N = nt.nodes; L = nt.links
 for n in list(N): N.remove(n)
@@ -66,37 +99,59 @@ bump2 = N.new("ShaderNodeBump"); bump2.inputs["Strength"].default_value = 0.9; b
 L.new(det.outputs[0], bump2.inputs["Height"]); L.new(bump.outputs[0], bump2.inputs["Normal"]); L.new(bump2.outputs[0], b.inputs["Normal"])
 tee.data.materials.clear(); tee.data.materials.append(m)
 for p in tee.data.polygons: p.material_index = 0
-# ---- studio: seamless sweep, three softboxes ----
-bg = (0.52, 0.515, 0.505) if tee_col == "black" else (0.42, 0.42, 0.425)   # studio grey like Qikink's shots, under Khronos neutral
-prof = [(y, 0.0) for y in [-6, -1, 0.3]] + [(0.3 + 0.6 * math.sin(t), 0.6 - 0.6 * math.cos(t)) for t in [k / 10 * math.pi / 2 for k in range(1, 11)]] + [(0.9, 4.0)]
-vs, fs = [], []
-for i, (y, z) in enumerate(prof):
-    vs += [(-6, y + 0.6, z + 0.35), (6, y + 0.6, z + 0.35)]
-    if i: fs.append((2 * i - 2, 2 * i - 1, 2 * i + 1, 2 * i))
-sm = bpy.data.meshes.new("sweep"); sm.from_pydata(vs, [], fs); sw = bpy.data.objects.new("sweep", sm); sc.collection.objects.link(sw)
-for p in sm.polygons: p.use_smooth = True
-sw.modifiers.new("s", "SUBSURF").levels = 2
-smat = bpy.data.materials.new("paper"); smat.use_nodes = True; sp = smat.node_tree.nodes["Principled BSDF"]; sp.inputs["Base Color"].default_value = bg + (1,); sp.inputs["Roughness"].default_value = 0.95
-sm.materials.append(smat)
-def area(name, loc, size, power, tint=(1, 1, 1)):
+def area(name, loc, size, power, tint=(1, 1, 1), aim=(0, 0, 1.12)):
     l = bpy.data.lights.new(name, "AREA"); l.shape = "RECTANGLE"; l.size, l.size_y = size; l.energy = power; l.color = tint
     ob = bpy.data.objects.new(name, l); sc.collection.objects.link(ob); ob.location = loc
-    ob.rotation_euler = (Vector((0, 0, 1.12)) - Vector(loc)).to_track_quat("-Z", "Y").to_euler(); return ob
-k = 1.0 if tee_col == "black" else 0.42   # a light tee needs less light or its folds burn out
-area("key", (-1.5, -1.9, 2.1), (1.4, 1.8), 160 * k, (1, 0.98, 0.95))
-area("fill", (1.9, -1.4, 1.3), (1.2, 1.6), 45 * k, (0.95, 0.97, 1))
-area("rim", (0.6, 1.4, 2.4), (1.0, 1.0), 90 * k)
-w = bpy.data.worlds.new("w"); sc.world = w; w.use_nodes = True; w.node_tree.nodes["Background"].inputs[1].default_value = 0.03
+    ob.rotation_euler = (Vector(aim) - Vector(loc)).to_track_quat("-Z", "Y").to_euler(); return ob
+w = bpy.data.worlds.new("w"); sc.world = w; w.use_nodes = True
+if SHOW:
+    # ---- the show: the place's own lights (scene.ts SCENES "show", three (x, y, z) -> Blender (x, -z, y)), no
+    # sweep, the dim hall as the world light. The lamps light the person but are not seen: the picture shows them
+    k = 0.6 if tee_col == "cream" else 1.0
+    for name, (x, y, z), size, power, tint in [
+        ("stage", (0.6, 3.1, 3.6), (2.6, 0.8), 650, (1, 0.9, 0.8)),
+        ("spot", (-2.6, 3.8, 1.6), (0.25, 0.25), 260, (1, 0.72, 0.45)),
+        ("beam", (0.4, 4.2, 0.9), (1.4, 0.3), 160, (0.86, 0.91, 1)),
+        ("foh", (-1.4, 3.5, -3.6), (0.8, 0.8), 480, (1, 0.86, 0.7)),
+    ]:
+        area(name, (x, -z, y), size, power * k, tint).visible_camera = False
+    w.node_tree.nodes["Background"].inputs[0].default_value = (0.0015, 0.0015, 0.002, 1)
+    w.node_tree.nodes["Background"].inputs[1].default_value = 1.0
+else:
+    # ---- studio: seamless sweep, three softboxes ----
+    bg = (0.52, 0.515, 0.505) if tee_col == "black" else (0.42, 0.42, 0.425)   # studio grey like Qikink's shots, under Khronos neutral
+    prof = [(y, 0.0) for y in [-6, -1, 0.3]] + [(0.3 + 0.6 * math.sin(t), 0.6 - 0.6 * math.cos(t)) for t in [k / 10 * math.pi / 2 for k in range(1, 11)]] + [(0.9, 4.0)]
+    vs, fs = [], []
+    for i, (y, z) in enumerate(prof):
+        vs += [(-6, y + 0.6, z + 0.35), (6, y + 0.6, z + 0.35)]
+        if i: fs.append((2 * i - 2, 2 * i - 1, 2 * i + 1, 2 * i))
+    sm = bpy.data.meshes.new("sweep"); sm.from_pydata(vs, [], fs); sw = bpy.data.objects.new("sweep", sm); sc.collection.objects.link(sw)
+    for p in sm.polygons: p.use_smooth = True
+    sw.modifiers.new("s", "SUBSURF").levels = 2
+    smat = bpy.data.materials.new("paper"); smat.use_nodes = True; sp = smat.node_tree.nodes["Principled BSDF"]; sp.inputs["Base Color"].default_value = bg + (1,); sp.inputs["Roughness"].default_value = 0.95
+    sm.materials.append(smat)
+    k = 1.0 if tee_col == "black" else 0.42   # a light tee needs less light or its folds burn out
+    area("key", (-1.5, -1.9, 2.1), (1.4, 1.8), 160 * k, (1, 0.98, 0.95))
+    area("fill", (1.9, -1.4, 1.3), (1.2, 1.6), 45 * k, (0.95, 0.97, 1))
+    area("rim", (0.6, 1.4, 2.4), (1.0, 1.0), 90 * k)
+    w.node_tree.nodes["Background"].inputs[1].default_value = 0.03
 # ---- camera ----
 ANG = {"front": 0, "back": 180, "q": 35, "side": 90}[view] if not view.startswith("a") else float(view[1:])   # aNN = turntable angle
-tee.rotation_mode = "XYZ"   # the glTF importer leaves objects in quaternion mode, which ignores rotation_euler
-tee.rotation_euler[2] = math.radians(ANG)
-if bpy.data.objects.get("body"): bpy.data.objects["body"].rotation_euler[2] = math.radians(ANG)
 cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam")); sc.collection.objects.link(cam); sc.camera = cam
-# same camera as CAMERA in src/lib/viewer/scene.ts (three y-up -> Blender z-up), so a frame lines up with the live view
-cam.data.lens = 85; cam.location = (0.2, -2.85, 1.21)
-cam.rotation_euler = (Vector((0, 0, 1.09)) - cam.location).to_track_quat("-Z", "Y").to_euler()
-cam.data.dof.use_dof = True; cam.data.dof.focus_distance = 2.75; cam.data.dof.aperture_fstop = 5.6
+cam.data.lens = 85; cam.data.dof.use_dof = True; cam.data.dof.aperture_fstop = 5.6
+if PERSON:
+    # WEAR_CAMERA in scene.ts, lifted with the person; the person stands still and the camera walks round them
+    # (the viewer turns person and place together in front of a fixed camera: the same picture)
+    a = math.radians(-ANG); x, y = 0.2, -2.85
+    cam.location = (x * math.cos(a) - y * math.sin(a), x * math.sin(a) + y * math.cos(a), FLOOR + 1.1)
+    aim = Vector((0, 0, FLOOR + 0.99)); cam.data.dof.focus_distance = 2.8
+else:
+    tee.rotation_mode = "XYZ"   # the glTF importer leaves objects in quaternion mode, which ignores rotation_euler
+    tee.rotation_euler[2] = math.radians(ANG)
+    if bpy.data.objects.get("body"): bpy.data.objects["body"].rotation_euler[2] = math.radians(ANG)
+    # same camera as CAMERA in src/lib/viewer/scene.ts (three y-up -> Blender z-up), so a frame lines up with the live view
+    cam.location = (0.2, -2.85, 1.21); aim = Vector((0, 0, 1.09)); cam.data.dof.focus_distance = 2.75
+cam.rotation_euler = (aim - cam.location).to_track_quat("-Z", "Y").to_euler()
 # ---- render ----
 sc.render.engine = "CYCLES"; sc.cycles.device = "CPU"
 # DEVICE=OPTIX or CUDA renders on the GPU (Colab T4, Kaggle); default CPU (laptop, GitHub runners)
@@ -107,7 +162,12 @@ if os.environ.get("DEVICE", "CPU") != "CPU":
 sc.cycles.samples = samples; sc.cycles.use_denoising = True
 sc.cycles.max_bounces = 6; sc.render.threads_mode = "FIXED"; sc.render.threads = int(os.environ.get("THREADS", 3)); sc.view_settings.view_transform = "Khronos PBR Neutral"   # keeps base colours true (AgX desaturated the blue and cream)
 sc.render.resolution_x, sc.render.resolution_y = int(os.environ.get("W", 1100)), int(os.environ.get("H", 1400)); sc.render.filepath = out
-if os.environ.get("TRANSPARENT"):   # web stills: tee only, composited over the page colour in the viewer
-    sc.render.film_transparent = True; bpy.data.objects["sweep"].hide_render = True
+if os.environ.get("TRANSPARENT") or SHOW:   # web stills: tee only, over the page colour, or the stage laid in behind
+    sc.render.film_transparent = True
+    if bpy.data.objects.get("sweep"): bpy.data.objects["sweep"].hide_render = True
     sc.render.image_settings.color_mode = "RGBA"
-bpy.ops.render.render(write_still=True)
+if SHOW:   # the pinhole camera for still_post.py, which looks the stage picture up along each pixel's ray
+    import json
+    f = (aim - cam.location).normalized()
+    json.dump({"pos": list(cam.location), "f": list(f), "tanHalf": 18 / cam.data.lens}, open(out + ".cam.json", "w"))
+if not os.environ.get("DRY"): bpy.ops.render.render(write_still=True)
