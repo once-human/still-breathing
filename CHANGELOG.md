@@ -2,6 +2,11 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.13.0 — 2026-11-25
+### Studio
+- Nothing half-ready is ever shown. Switching views, shirts or the light fades the view out, a slow breath (and after a beat, "breathing in..") holds the stage while the new one gets ready, the person, the room and all, and only then it fades back in whole. On opening, the 3D takes over from the photos only once its room is in too.
+- The strip of little pictures sits in the middle at the bottom on wider screens, each one the view as it really looks: the tee on its own, the person in it, the print. Hover for its name, click to go. The counter is back in its corner.
+
 ## 0.12.3 — 2026-11-25
 ### Site
 - From abroad, the tour shirts follow Mumbai or Bengaluru, the two gateways, by real flight time from where you are: Mumbai from the Gulf, Europe, Africa and the Americas (the most direct routes), Bengaluru from Sri Lanka, Southeast Asia and Australia.

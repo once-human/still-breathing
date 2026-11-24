@@ -14,11 +14,13 @@ import dynamic from "next/dynamic";
 const TryOn = dynamic(() => import("@/components/TryOn").then((m) => m.TryOn), { ssr: false });
 
 type Engine = {
-  setLook: (d: Design, t: Colour) => void;
+  setLook: (d: Design, t: Colour) => Promise<void>;
   turnTo: (deg: number) => void;
   /** zoom by a factor (around the middle of the view); 0 resets */
   zoomBy: (k: number) => void;
-  setScene: (id: string) => void;
+  setScene: (id: string) => Promise<void>;
+  /** a small square picture of the view as it is drawn now (for the strip of views) */
+  snap: () => Promise<string>;
   photo: (job: PhotoJob) => Promise<Blob>;
   setVariant: (v: Variant) => Promise<void>;
   setShot: (sh: Shot, spot?: number) => Promise<void>;
@@ -125,7 +127,13 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
   const rangeRef = useRef<[number, number]>(SHOTS[0].zoom);
   // which side of the tee, or which print up close, was picked last (-1: none, it's turning on its own)
   const [spotI, setSpotI] = useState(-1);
+  const spotRef = useRef(0);
   const [switching, setSwitching] = useState(false);
+  // while a change is being got ready the view is veiled: never half a change on screen
+  const [veil, setVeil] = useState(false);
+  const veilTurn = useRef(0);
+  // each view's own little picture for the strip, taken from the live view once it has been seen
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
   // which edge of the stage the pointer is near: that side's way to the next view shows
   const [edge, setEdge] = useState<"l" | "r" | null>(null);
 
@@ -224,7 +232,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         while (busy) await new Promise((r) => setTimeout(r, 16));
         try {
           const sc = sceneOf(v);
-          if (sc !== scene) { scene = sc; raster.setScene(scene, s.tee === "cream"); if (!firstFrame) void loadEnv(); }
+          if (sc !== scene) { scene = sc; raster.setScene(scene, s.tee === "cream"); if (!firstFrame) await loadEnv(); }
           geo = await raster.load(s.design, s.tee, v);
           raster.setCamera(cameraFor(v));
           if (pt) await ptLoad(pt, v);
@@ -244,6 +252,19 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         if (dead) return;
         raster.setEnv(envBmp); pt?.setEnv(envBmp);
         s.dirty = true; lastSig = "";
+      };
+      /** n display frames from now: whatever was just set up has been drawn */
+      const frames = (n = 2) => new Promise<void>((res) => { const f = (k: number) => (k ? requestAnimationFrame(() => f(k - 1)) : res()); f(n); });
+      // a picture of the view for the strip: taken right after a frame is drawn, in the same task (the canvas is
+      // only readable until the frame is handed to the screen)
+      let snapCb: ((u: string) => void) | null = null;
+      const snapCv = document.createElement("canvas"); snapCv.width = snapCv.height = 144;
+      const takeSnap = () => {
+        const cb = snapCb; if (!cb) return; snapCb = null;
+        const cv = rasterCv.current!, W = cv.width, H = cv.height, side = Math.min(W, H);
+        const g = snapCv.getContext("2d"); if (!g) return;
+        g.drawImage(cv, (W - side) / 2, (H - side) / 2, side, side, 0, 0, 144, 144);
+        try { cb(snapCv.toDataURL("image/webp", 0.82)); } catch { /* unreadable: the strip keeps its stand-in */ }
       };
       await loadVariant(s.variant);
       if (dead) return;
@@ -411,12 +432,19 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         // reads as a judder
         if (s.dirty || swinging) {
           raster.render();
+          takeSnap();
           s.dirty = false;
           if (firstFrame) {
             firstFrame = false;
             // the photo steps aside only once the 3D has actually reached the screen, textures and all (two
             // frames on): never an empty or half-dressed tee in between
-            requestAnimationFrame(() => requestAnimationFrame(() => { if (!dead) { setMode("3d"); setStatus(""); void loadEnv(); if (!lite) void startTracer(); } }));
+            // the place around it comes in first too: the 3D only takes over from the photos when it's whole
+            requestAnimationFrame(() => requestAnimationFrame(async () => {
+              if (dead) return;
+              await loadEnv(); s.dirty = true; await frames(2);
+              if (dead) return;
+              setMode("3d"); setStatus(""); if (!lite) void startTracer();
+            }));
           }
         }
         const busyCloth = moving || swinging;
@@ -458,16 +486,20 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           s.design = d; s.tee = t; raster.setScene(scene, t === "cream");
           if (pt && c && o) { pt.setColourway(c, o); ptFullOn = ""; pt.setScene(scene, FABRIC[t], t === "cream"); }
           s.dirty = true; lastSig = "";
+          await frames(2);
         },
         zoomBy: (k) => { if (k === 0) zoomAt(1, 0, 0); else zoomAt(zm.zt * k, 0, 0); },
         turnTo: (deg) => { const d = ((((deg - s.yaw) % 360) + 540) % 360) - 180; s.goal = s.yaw + d; holdUntil = performance.now() + 6000; },
-        setScene: (id) => {
+        setScene: async (id) => {
           place = SCENES.find((x) => x.id === id) ?? SCENES[0];
           scene = sceneFor(place, s.variant.body);
           raster.setScene(scene, s.tee === "cream"); pt?.setScene(scene, FABRIC[s.tee], s.tee === "cream");
           s.dirty = true; lastSig = "";
-          if (!firstFrame) void loadEnv();
+          // the page keeps the view veiled until the new place's picture is in and drawn
+          if (!firstFrame) await loadEnv();
+          await frames(2);
         },
+        snap: () => new Promise<string>((res) => { snapCb = res; s.dirty = true; }),
         photo: async (job) => {
           if (!pt) throw new Error("photos need WebGPU");
           s.photo = true;
@@ -495,6 +527,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           s.yaw = sp?.yaw ?? sh.yaw ?? wornYaw;
           if (JSON.stringify(v) !== JSON.stringify(s.variant) || sceneOf(v) !== scene) await loadVariant(v);
           s.dirty = true; lastSig = "";
+          await frames(2);
         },
         dispose: () => {
           cancelAnimationFrame(raf); ro.disconnect(); vis.disconnect();
@@ -513,7 +546,28 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
     return () => { dead = true; engine.current?.dispose(); engine.current = null; };
   }, []);
 
-  useEffect(() => { lookRef.current = { design, tee }; engine.current?.setLook(design, tee); }, [design, tee]);
+  /** do a change behind the veil: the view fades out, the change is made and drawn whole, then it fades back in */
+  const veiled = async (change: () => Promise<void>) => {
+    const turn = ++veilTurn.current;
+    setVeil(true); setSwitching(true);
+    await new Promise((res) => setTimeout(res, 160));
+    try { await change(); } finally { if (turn === veilTurn.current) { setVeil(false); setSwitching(false); } }
+    return turn === veilTurn.current;
+  };
+  /** the current view's picture for the strip (up close, only its first framing) */
+  const capture = async () => {
+    const e = engine.current, sh = shotRef.current, d = lookRef.current.design;
+    if (!e || (sh.spots && spotRef.current > 0)) return;
+    const url = await e.snap();
+    if (lookRef.current.design === d && shotRef.current === sh) setThumbs((t) => ({ ...t, [`${d}-${sh.id}`]: url }));
+  };
+  useEffect(() => {
+    lookRef.current = { design, tee };
+    const e = engine.current; if (!e) return;
+    void veiled(() => e.setLook(design, tee)).then((last) => { if (last) void capture(); });
+  }, [design, tee]); // eslint-disable-line react-hooks/exhaustive-deps
+  // the opening view's picture, the moment the 3D takes over
+  useEffect(() => { if (mode === "3d") void capture(); }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
   const vKey = JSON.stringify(variant);
   useEffect(() => { variantRef.current = variant; engine.current?.setVariant(variant); }, [vKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (photo) URL.revokeObjectURL(photo.url); }, [photo]);
@@ -547,7 +601,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
   /** a view, and up close which print it frames */
   const goShot = async (i: number, sp = 0) => {
     const n = (i + SHOTS.length) % SHOTS.length, sh = SHOTS[n];
-    setShotI(n); setSpotI(sh.spots ? sp : -1);
+    setShotI(n); setSpotI(sh.spots ? sp : -1); spotRef.current = sp;
     const yaw = sh.spots?.[sp]?.yaw ?? sh.yaw;
     if (!engine.current) {
       // still the photos: the nearest rendered angle stands in until the 3D is up
@@ -555,8 +609,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       if (yaw !== null) showAngle(yaw);
       return;
     }
-    setSwitching(true);
-    try { await engine.current.setShot(sh, sp); } finally { setSwitching(false); }
+    const e = engine.current;
+    if (await veiled(() => e.setShot(sh, sp))) void capture();
   };
   /** the tee view: turn it round to its front or back */
   const turnTee = (i: number) => {
@@ -594,7 +648,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         onKeyDown={(e) => { if (e.key === "ArrowRight") void goShot(shotI + 1); else if (e.key === "ArrowLeft") void goShot(shotI - 1); }}
       >
         {/* the last view stays up while the next one loads (never an empty stage in between) */}
-        <div className="absolute inset-0" aria-busy={switching}>
+        <div className={`absolute inset-0 transition-opacity ease-out ${veil ? "opacity-0 duration-150" : "opacity-100 duration-300"}`} aria-busy={switching}>
           <canvas ref={rasterCv} className="absolute inset-0 h-full w-full" />
           <canvas ref={traceCv} className="absolute inset-0 h-full w-full opacity-0 transition-opacity duration-500" />
         </div>
@@ -641,18 +695,38 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
             </div>
           );
         })}
-        {/* the views as little pictures, like a photo app's strip: see what's there, tap to go */}
-        <div className="absolute right-3 bottom-3 z-20 flex gap-1.5" role="group" aria-label="Views">
-          {SHOTS.map((x, i) => (
-            <button
-              key={x.id} onClick={() => void goShot(i)} aria-label={x.label} aria-current={i === shotI}
-              className={`relative size-10 overflow-hidden rounded-[3px] bg-studio shadow-[0_1px_4px_rgba(0,0,0,0.35)] transition duration-300 sm:size-11 ${i === shotI ? "opacity-100 ring-[1.5px] ring-ink" : "opacity-55 hover:opacity-100"}`}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={STILL(design, x.thumb.a)} alt="" draggable={false} loading="lazy" className="absolute inset-0 h-full w-full object-cover"
-                style={{ transform: `scale(${x.thumb.crop[0]}) translate(${-x.thumb.crop[1] * 50}%, ${x.thumb.crop[2] * 50}%)` }} />
-            </button>
-          ))}
+        {/* while a change is got ready: one slow breath, and after a beat a word in hand */}
+        {veil && mode === "3d" ? (
+          <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center" role="status" aria-label="Getting the view ready">
+            <div className="flex flex-col items-center gap-3 opacity-0 animate-[appear_300ms_ease-out_250ms_forwards]">
+              <span className={`size-3.5 rounded-full animate-[breathe_1.8s_ease-in-out_infinite] ${dark ? "bg-ink" : "bg-black/75"}`} />
+              <span className={`font-hand text-[20px] leading-none ${dark ? "text-ink/80" : "text-black/65"}`}>breathing in..</span>
+            </div>
+          </div>
+        ) : null}
+        <p className={`pointer-events-none absolute right-3 bottom-3 z-20 text-[12px] tnum ${dark ? "text-white/70" : "text-black/55"}`}>{shotI + 1} / {SHOTS.length}</p>
+        {/* the views as little pictures, like a photo app's strip, each as it really looks: see what's there, tap to go */}
+        <div className="absolute bottom-3 left-1/2 z-20 hidden -translate-x-1/2 gap-2 md:flex" role="group" aria-label="Views">
+          {SHOTS.map((x, i) => {
+            const live = thumbs[`${design}-${x.id}`];
+            // until a view has been seen live: the print itself for up close, a rendered frame for the others
+            const src = live ?? (x.spots ? asset(printBackURL(design, tee)) : STILL(design, x.thumb.a));
+            return (
+              <button
+                key={x.id} onClick={() => void goShot(i)} aria-label={x.label} aria-current={i === shotI}
+                className={`group/t relative size-11 rounded-[4px] transition duration-300 ease-out lg:size-12 ${i === shotI ? "opacity-100 ring-[1.5px] ring-ink ring-offset-2 ring-offset-black/40" : "opacity-60 hover:-translate-y-0.5 hover:opacity-100"}`}
+              >
+                <span className="absolute inset-0 overflow-hidden rounded-[4px] shadow-[0_2px_8px_rgba(0,0,0,0.35)]" style={{ background: x.spots && !live ? COLOURS[tee].hex : undefined }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={src} alt="" draggable={false} loading="lazy" className={`absolute inset-0 h-full w-full bg-studio ${x.spots && !live ? "object-contain p-1" : "object-cover"}`}
+                    style={live || x.spots ? undefined : { transform: `scale(${x.thumb.crop[0]}) translate(${-x.thumb.crop[1] * 50}%, ${x.thumb.crop[2] * 50}%)` }} />
+                </span>
+                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap font-hand text-[18px] leading-none text-ink opacity-0 transition duration-200 [filter:drop-shadow(0_1px_3px_rgba(0,0,0,0.7))] group-hover/t:opacity-100 group-focus-visible/t:opacity-100">
+                  {x.label}
+                </span>
+              </button>
+            );
+          })}
         </div>
         <p className="pointer-events-none absolute bottom-3 left-3 text-[12px] text-black/60 tnum">{status}</p>
       </div>
@@ -694,7 +768,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-line pt-1.5 text-[13px]" role="group" aria-label="Light">
         <span className="text-quiet">light</span>
         {SCENE_LIST.map((x) => (
-          <button key={x.id} onClick={() => { sceneRef.current = x.id; setSceneId(x.id); engine.current?.setScene(x.id); }} className={`hit ${x.id === sceneId ? "font-semibold" : "text-quiet hover:text-ink"}`}>
+          <button key={x.id} onClick={() => { sceneRef.current = x.id; setSceneId(x.id); const e = engine.current; if (e) void veiled(() => e.setScene(x.id)); }} className={`hit ${x.id === sceneId ? "font-semibold" : "text-quiet hover:text-ink"}`}>
             {x.label}
           </button>
         ))}

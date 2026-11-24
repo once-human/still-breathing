@@ -50,6 +50,9 @@ body {
 }
 .tnum { font-variant-numeric: tabular-nums; }
 
+/* the viewer's loader: one slow breath */
+@keyframes breathe { 0%, 100% { transform: scale(0.6); opacity: 0.35; } 50% { transform: scale(1.25); opacity: 0.95; } }
+@keyframes appear { to { opacity: 1; } }
 @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
 html.lenis, html.lenis body { height: auto; }

@@ -1,6 +1,6 @@
 {
   "name": "still-breathing",
-  "version": "0.12.3",
+  "version": "0.13.0",
   "private": true,
   "scripts": {
     "predev": "node scripts/hash-assets.mjs",
