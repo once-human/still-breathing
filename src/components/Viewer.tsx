@@ -254,9 +254,10 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       // is at rest, the page is not scrolling, the tab is visible and the viewer is on screen, and then only in
       // strips of about 3 ms of GPU time per frame. Nothing grainy is ever shown: only the finished, denoised frame
       // fades in, and the moment anything moves it steps aside.
-      let lastScroll = 0, restSince = 0;
+      let lastScroll = 0, restSince = 0, pageScroll = 0;
       const onScroll = () => { lastScroll = performance.now(); };
-      addEventListener("scroll", onScroll, { passive: true });
+      const onPageScroll = () => { lastScroll = pageScroll = performance.now(); };
+      addEventListener("scroll", onPageScroll, { passive: true });
       addEventListener("wheel", onScroll, { passive: true });
       const quiet = (now: number) => now - lastScroll > 450 && document.visibilityState === "visible" && onScreen;
       const startTracer = async () => {
@@ -279,10 +280,16 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       let raf = 0, shown = -1, firstFrame = true, prevT = 0, traced = false;
       const loop = (now: number) => {
         raf = requestAnimationFrame(loop);
-        const dt = prevT ? Math.min(0.1, (now - prevT) / 1000) : 1 / 60;
-        prevT = now;
         if (process.env.NODE_ENV !== "production") Object.assign(window, { __sb: { pt, raster, s, SCENES, spin: () => spin } });
         if (!onScreen) { prevT = 0; return; }
+        // while the page scrolls the viewer holds its frame and the page gets the whole GPU: a tee sliding past
+        // doesn't need to breathe, and the scroll must never stutter
+        if (!s.drag && !firstFrame && now - pageScroll < 200) { prevT = 0; return; }
+        // steady motion (the breeze, the auto-turn) runs at an even 60 frames a second, which is all slow
+        // motion needs; only turning it by hand gets every refresh of a fast screen
+        if (!s.drag && prevT && now - prevT < 1000 / 60 - 3) return;
+        const dt = prevT ? Math.min(0.1, (now - prevT) / 1000) : 1 / 60;
+        prevT = now;
         if (firstFrame) s.yaw = angRef.current;   // pick up wherever the photos were turned to while this loaded
         // auto-turn: eases out when the pointer comes over the tee (or it's being turned, or a view was picked)
         const want = still.matches || hover || s.drag || s.goal !== null || s.photo || now < holdUntil || zm.zt > 1.01 ? 0 : SPIN;
@@ -370,7 +377,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           st.removeEventListener("pointerdown", down); st.removeEventListener("pointermove", move);
           st.removeEventListener("pointerup", up); st.removeEventListener("pointercancel", up);
           st.removeEventListener("dblclick", dbl); st.removeEventListener("wheel", wheel);
-          removeEventListener("scroll", onScroll); removeEventListener("wheel", onScroll);
+          removeEventListener("scroll", onPageScroll); removeEventListener("wheel", onScroll);
           raster.renderer.dispose(); pt?.device.destroy();
         },
       };
