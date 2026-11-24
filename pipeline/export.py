@@ -29,6 +29,9 @@ def hull_len(pts):
         while len(up) >= 2 and cr(up[-2], up[-1], p) <= 0: up.pop()
         up.append(p)
     h = lo[:-1] + up[:-1]; return sum(math.dist(h[i], h[(i + 1) % len(h)]) for i in range(len(h)))
+import resource
+def mem(tag): print("mem", tag, resource.getrusage(resource.RUSAGE_SELF).ru_maxrss // 1024, "MB peak", flush=True)
+mem("loaded")
 def go(frame): sc.frame_set(frame); bpy.context.view_layer.update()
 
 # ---------- the body, measured the way a tailor would: standing, arms out of the way ----------
@@ -74,7 +77,7 @@ for pose in POSES:
     p["frame"] = tee["frame"]; p["lift_m"] = round(lift, 4)
     fit["poses"][pose] = p
 
-print("FIT", json.dumps(fit), flush=True); json.dump(fit, open(os.path.join(OUT, "fit.json"), "w"), indent=1)
+print("FIT", json.dumps(fit), flush=True); mem("measured"); json.dump(fit, open(os.path.join(OUT, "fit.json"), "w"), indent=1)
 
 # ---------- per pose: AO into the vertices, thickness, smoothing, GLB ----------
 sc.render.engine = "CYCLES"; sc.cycles.device = "CPU"; sc.cycles.samples = 96
@@ -111,15 +114,17 @@ for pose in POSES:
     sc.render.bake.target = "VERTEX_COLORS"
     print("bake", pose, len(tee.data.vertices), "verts", flush=True)
     bpy.ops.object.bake(type="AO")
-    print("baked", pose, flush=True)
+    print("baked", pose, flush=True); mem("baked " + pose)
     tee.data.materials.clear(); tee.data.materials.append(outer); tee.data.materials.append(inner)
     so = tee.modifiers.new("thick", "SOLIDIFY"); so.thickness = 0.0032; so.offset = 0; so.use_even_offset = True; so.material_offset = 1
     if "stiff" in tee.vertex_groups: so.vertex_group = "stiff"; so.thickness_vertex_group = 0.5
-    tee.modifiers.new("sub", "SUBSURF").levels = 1
-    glb(os.path.join(OUT, f"{pose}.glb"), export_vertex_color="ACTIVE"); print("tee glb", pose, flush=True)
+    sub = tee.modifiers.new("sub", "SUBSURF"); sub.levels = 1
+    # plain Catmull-Clark: the limit-surface evaluator needs ~3 GB on this mesh and killed 7 GB CI runners
+    sub.use_limit_surface = False
+    glb(os.path.join(OUT, f"{pose}.glb"), export_vertex_color="ACTIVE"); print("tee glb", pose, flush=True); mem("tee glb " + pose)
     # the body in this pose (armature applied), for fit mode
     body.hide_render = False; select_only(body)
     glb(os.path.join(OUT, f"body-{pose}.glb"), export_materials="NONE")
     body.hide_render = True
-    print("exported", pose, flush=True)
+    print("exported", pose, flush=True); mem("body glb " + pose)
 print("done", OUT)

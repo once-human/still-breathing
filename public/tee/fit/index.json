@@ -1,4 +1,94 @@
 {
+ "f155-S": {
+  "size": "S",
+  "body": {
+   "height_cm": 154,
+   "chest_cm": 99
+  },
+  "chest_ease_cm": 7,
+  "poses": {
+   "stand": {
+    "hem_below_crotch_cm": 5,
+    "sleeve_above_elbow_cm": 3,
+    "hem_vs_waistband_cm": 12,
+    "frame": 200,
+    "lift_m": 0.0
+   },
+   "up": {
+    "hem_rise_cm": 8,
+    "hem_vs_waistband_cm": 20,
+    "frame": 300,
+    "lift_m": 0.0
+   },
+   "sit": {
+    "back_hem_vs_waistband_cm": 17,
+    "front_hem_vs_waistband_cm": 16,
+    "seat_cm": 33,
+    "frame": 430,
+    "lift_m": -0.3457
+   }
+  }
+ },
+ "f155-XS": {
+  "size": "XS",
+  "body": {
+   "height_cm": 154,
+   "chest_cm": 99
+  },
+  "chest_ease_cm": 2,
+  "poses": {
+   "stand": {
+    "hem_below_crotch_cm": 3,
+    "sleeve_above_elbow_cm": 4,
+    "hem_vs_waistband_cm": 14,
+    "frame": 200,
+    "lift_m": 0.0
+   },
+   "up": {
+    "hem_rise_cm": 8,
+    "hem_vs_waistband_cm": 22,
+    "frame": 300,
+    "lift_m": 0.0
+   },
+   "sit": {
+    "back_hem_vs_waistband_cm": 18,
+    "front_hem_vs_waistband_cm": 18,
+    "seat_cm": 33,
+    "frame": 430,
+    "lift_m": -0.3457
+   }
+  }
+ },
+ "f162-S": {
+  "size": "S",
+  "body": {
+   "height_cm": 162,
+   "chest_cm": 102
+  },
+  "chest_ease_cm": 4,
+  "poses": {
+   "stand": {
+    "hem_below_crotch_cm": -1,
+    "sleeve_above_elbow_cm": 4,
+    "hem_vs_waistband_cm": 20,
+    "frame": 200,
+    "lift_m": 0.0
+   },
+   "up": {
+    "hem_rise_cm": 7,
+    "hem_vs_waistband_cm": 27,
+    "frame": 300,
+    "lift_m": 0.0
+   },
+   "sit": {
+    "back_hem_vs_waistband_cm": 28,
+    "front_hem_vs_waistband_cm": 40,
+    "seat_cm": 34,
+    "frame": 430,
+    "lift_m": -0.3806
+   }
+  }
+ },
  "form-M": {
   "size": "M",
   "body": {
@@ -13,6 +103,126 @@
     "hem_vs_waistband_cm": -19,
     "frame": 200,
     "lift_m": 0.0
+   }
+  }
+ },
+ "m163-S": {
+  "size": "S",
+  "body": {
+   "height_cm": 163,
+   "chest_cm": 86
+  },
+  "chest_ease_cm": 20,
+  "poses": {
+   "stand": {
+    "hem_below_crotch_cm": 6,
+    "sleeve_above_elbow_cm": 4,
+    "hem_vs_waistband_cm": 17,
+    "frame": 200,
+    "lift_m": 0.0
+   },
+   "up": {
+    "hem_rise_cm": 5,
+    "hem_vs_waistband_cm": 22,
+    "frame": 300,
+    "lift_m": 0.0
+   },
+   "sit": {
+    "back_hem_vs_waistband_cm": 21,
+    "front_hem_vs_waistband_cm": 21,
+    "seat_cm": 38,
+    "frame": 430,
+    "lift_m": -0.369
+   }
+  }
+ },
+ "m163-XS": {
+  "size": "XS",
+  "body": {
+   "height_cm": 163,
+   "chest_cm": 86
+  },
+  "chest_ease_cm": 15,
+  "poses": {
+   "stand": {
+    "hem_below_crotch_cm": 3,
+    "sleeve_above_elbow_cm": 5,
+    "hem_vs_waistband_cm": 20,
+    "frame": 200,
+    "lift_m": 0.0
+   },
+   "up": {
+    "hem_rise_cm": 6,
+    "hem_vs_waistband_cm": 25,
+    "frame": 300,
+    "lift_m": 0.0
+   },
+   "sit": {
+    "back_hem_vs_waistband_cm": 21,
+    "front_hem_vs_waistband_cm": 21,
+    "seat_cm": 38,
+    "frame": 430,
+    "lift_m": -0.369
+   }
+  }
+ },
+ "m170-M": {
+  "size": "M",
+  "body": {
+   "height_cm": 171,
+   "chest_cm": 94
+  },
+  "chest_ease_cm": 18,
+  "poses": {
+   "stand": {
+    "hem_below_crotch_cm": 3,
+    "sleeve_above_elbow_cm": 5,
+    "hem_vs_waistband_cm": 22,
+    "frame": 200,
+    "lift_m": 0.0
+   },
+   "up": {
+    "hem_rise_cm": 6,
+    "hem_vs_waistband_cm": 28,
+    "frame": 300,
+    "lift_m": 0.0
+   },
+   "sit": {
+    "back_hem_vs_waistband_cm": 25,
+    "front_hem_vs_waistband_cm": 25,
+    "seat_cm": 39,
+    "frame": 430,
+    "lift_m": -0.4061
+   }
+  }
+ },
+ "m170-S": {
+  "size": "S",
+  "body": {
+   "height_cm": 171,
+   "chest_cm": 94
+  },
+  "chest_ease_cm": 13,
+  "poses": {
+   "stand": {
+    "hem_below_crotch_cm": 0,
+    "sleeve_above_elbow_cm": 6,
+    "hem_vs_waistband_cm": 25,
+    "frame": 200,
+    "lift_m": 0.0
+   },
+   "up": {
+    "hem_rise_cm": 6,
+    "hem_vs_waistband_cm": 31,
+    "frame": 300,
+    "lift_m": 0.0
+   },
+   "sit": {
+    "back_hem_vs_waistband_cm": 26,
+    "front_hem_vs_waistband_cm": 44,
+    "seat_cm": 39,
+    "frame": 430,
+    "lift_m": -0.4061
    }
   }
  }

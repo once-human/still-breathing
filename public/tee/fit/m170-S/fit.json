@@ -1,0 +1,30 @@
+{
+ "size": "S",
+ "body": {
+  "height_cm": 171,
+  "chest_cm": 94
+ },
+ "chest_ease_cm": 13,
+ "poses": {
+  "stand": {
+   "hem_below_crotch_cm": 0,
+   "sleeve_above_elbow_cm": 6,
+   "hem_vs_waistband_cm": 25,
+   "frame": 200,
+   "lift_m": 0.0
+  },
+  "up": {
+   "hem_rise_cm": 6,
+   "hem_vs_waistband_cm": 31,
+   "frame": 300,
+   "lift_m": 0.0
+  },
+  "sit": {
+   "back_hem_vs_waistband_cm": 26,
+   "front_hem_vs_waistband_cm": 44,
+   "seat_cm": 39,
+   "frame": 430,
+   "lift_m": -0.4061
+  }
+ }
+}
