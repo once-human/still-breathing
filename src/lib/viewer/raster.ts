@@ -344,6 +344,8 @@ export class Raster {
 
     const P: number[] = [], N: number[] = [], UV: number[] = [], I: number[] = [], M: number[] = [], C: number[] = [];
     const teeMeshes: { mesh: THREE.Mesh; pos: Float32Array; idx: ArrayLike<number>; plain: boolean }[] = [];
+    // the body inside the tee, for the cloth to rest on (garment frame: no lift); not the eyes
+    const skinP: number[] = [], skinN: number[] = [];
     const take = (root: THREE.Object3D, kind: "tee" | "body" | "stool" | "person") => {
       root.updateMatrixWorld(true);
       root.traverse((o) => {
@@ -363,6 +365,10 @@ export class Raster {
           vv.fromBufferAttribute(na, i).applyMatrix3(nm).normalize(); N.push(vv.x, vv.y, vv.z);
           UV.push(ua ? ua.getX(i) : 0, ua ? ua.getY(i) : 0);
           if (kind === "person" && ca) C.push(ca.getX(i), ca.getY(i), ca.getZ(i)); else C.push(1, 1, 1);
+          if ((kind === "body" || (kind === "person" && pid !== 6))) {
+            skinP.push(P[P.length - 3], P[P.length - 2] - lift, P[P.length - 1]);
+            skinN.push(N[N.length - 3], N[N.length - 2], N[N.length - 1]);
+          }
         }
         const ix = g.index ? Array.from(g.index.array) : Array.from({ length: pa.count }, (_, i) => i);
         for (let i = 0; i < ix.length; i++) I.push(ix[i] + base);
@@ -399,6 +405,7 @@ export class Raster {
           (I.array as Float32Array).set(sk.I); (W.array as Float32Array).set(sk.W); I.needsUpdate = true; W.needsUpdate = true;
         });
         const cloth = new Cloth(net, this.offsets, this.slopes);
+        if (skinP.length) cloth.setBody(new Float32Array(skinP), new Float32Array(skinN));
         cloth.wind = !matchMedia("(prefers-reduced-motion: reduce)").matches;
         this.cloth = cloth;
       }).catch((e) => console.info("cloth off", e));

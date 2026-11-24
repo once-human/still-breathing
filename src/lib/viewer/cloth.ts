@@ -14,6 +14,10 @@
 // push is aerodynamic: it acts along each patch's normal and against the patch's own velocity, so a panel
 // facing the breeze bellies, one edge-on barely moves, and fast swings are damped by the air.
 //
+// The body is solid: every particle knows the skin under it (the nearest point of the body and its outward
+// normal) and may come in only until it rests on it, a few millimetres off, or wherever it already hung if that is
+// closer. A gust presses the tee onto the chest and stops there; it never passes into the body.
+//
 // Folds and creases are not painted on: the net's own shape is the cloth's shape. Each frame the slope of the
 // displacement around every particle (how the cloth around it is tilted, bunched or pulled) is measured, and
 // the shading follows it, so a ripple the breeze runs across the back catches the light exactly as the moving
@@ -38,6 +42,8 @@ const BREEZE = 0.75;            // m/s at the top of a gust: light air (Beaufort
 const AIR = (0.5 * 1.2 * 1.0) / 0.24;
 const INERTIA = 0.2;            // share of a slow turn the cloth feels as inertia (less the faster it turns)
 const SLOPE_MAX = 0.25;         // the steepest a fold may tilt the shading
+const SKIN_GAP = 0.004;         // m, the closest the middle of the 2-layer jersey comes to the skin (half its thickness and a hair)
+const SKIN_REACH = 0.12;        // m, particles further than this from the body are free (the hem below the waist, loose sleeves)
 
 type Mesh = { pos: Float32Array; idx: Uint32Array };
 
@@ -258,6 +264,9 @@ export class Cloth {
   /** the velocity the garment's own motion gives each particle this frame (world, m/s) */
   private carry: Float32Array;
   private G: Float32Array; private S: Float32Array;
+  /** the skin under each particle, in the garment's frame: nearest body point, its outward normal, and how close
+   * along it the particle may come (bn = 0: no body near) */
+  private bp: Float32Array | null = null; private bn: Float32Array | null = null; private gap: Float32Array | null = null;
 
   constructor(net: Net, public tex: THREE.DataTexture, public slopes: THREE.DataTexture[] | null = null) {
     this.n = net.n; this.rest = net.rest; this.nrm = net.nrm;
@@ -266,6 +275,74 @@ export class Cloth {
     this.x = new Float32Array(this.rest); this.xp = new Float32Array(this.rest);
     this.off = new Float32Array(3 * this.n); this.shift = new Float32Array(3 * this.n); this.carry = new Float32Array(3 * this.n);
     this.G = new Float32Array(9 * this.n); this.S = new Float32Array(this.n);
+  }
+
+  /**
+   * The body inside the tee (vertex positions and outward normals, in the garment's frame). Each particle takes
+   * the nearest skin vertex as its floor: the tangent plane there, which it may not go under.
+   */
+  setBody(pos: Float32Array, nrm: Float32Array) {
+    const nb = pos.length / 3, C = 0.04, key = (x: number, y: number, z: number) => `${x},${y},${z}`;
+    const grid = new Map<string, number[]>();
+    for (let v = 0; v < nb; v++) {
+      const k = key(Math.floor(pos[3 * v] / C), Math.floor(pos[3 * v + 1] / C), Math.floor(pos[3 * v + 2] / C));
+      let l = grid.get(k); if (!l) { l = []; grid.set(k, l); } l.push(v);
+    }
+    const bp = new Float32Array(3 * this.n), bn = new Float32Array(3 * this.n), gap = new Float32Array(this.n), r = this.rest;
+    const reach = Math.ceil(SKIN_REACH / C);
+    for (let c = 0; c < this.n; c++) {
+      const x = r[3 * c], y = r[3 * c + 1], z = r[3 * c + 2];
+      const gx = Math.floor(x / C), gy = Math.floor(y / C), gz = Math.floor(z / C);
+      let best = -1, bd = SKIN_REACH * SKIN_REACH;
+      // rings outward until the nearest found is nearer than the next ring could be
+      for (let ring = 0; ring <= reach && (best < 0 || (ring - 1) * C < Math.sqrt(bd)); ring++)
+        for (let i = -ring; i <= ring; i++) for (let j = -ring; j <= ring; j++) for (let k = -ring; k <= ring; k++) {
+          if (Math.max(Math.abs(i), Math.abs(j), Math.abs(k)) !== ring) continue;
+          const l = grid.get(key(gx + i, gy + j, gz + k)); if (!l) continue;
+          for (const v of l) {
+            const d = (pos[3 * v] - x) ** 2 + (pos[3 * v + 1] - y) ** 2 + (pos[3 * v + 2] - z) ** 2;
+            if (d < bd) { bd = d; best = v; }
+          }
+        }
+      if (best < 0) continue;
+      for (let j = 0; j < 3; j++) { bp[3 * c + j] = pos[3 * best + j]; bn[3 * c + j] = nrm[3 * best + j]; }
+      const d0 = (x - bp[3 * c]) * bn[3 * c] + (y - bp[3 * c + 1]) * bn[3 * c + 1] + (z - bp[3 * c + 2]) * bn[3 * c + 2];
+      gap[c] = Math.min(d0, SKIN_GAP);
+    }
+    this.bp = bp; this.bn = bn; this.gap = gap;
+  }
+
+  /** keep every particle (world space) on or outside the skin under it, and take away its speed into the body */
+  private onSkin() {
+    const bp = this.bp, bn = this.bn, gap = this.gap;
+    if (!bp || !bn || !gap) return;
+    const e = this.R.elements, s = this.s, t = this.t, x = this.x, xp = this.xp;
+    for (let c = 0; c < this.n; c++) {
+      const i = 3 * c, lx = bn[i], ly = bn[i + 1], lz = bn[i + 2];
+      if (lx === 0 && ly === 0 && lz === 0) continue;
+      const px = bp[i] * s, py = bp[i + 1] * s, pz = bp[i + 2] * s;
+      const wx = e[0] * px + e[3] * py + e[6] * pz + t.x, wy = e[1] * px + e[4] * py + e[7] * pz + t.y, wz = e[2] * px + e[5] * py + e[8] * pz + t.z;
+      const nx = e[0] * lx + e[3] * ly + e[6] * lz, ny = e[1] * lx + e[4] * ly + e[7] * lz, nz = e[2] * lx + e[5] * ly + e[8] * lz;
+      const d = (x[i] - wx) * nx + (x[i + 1] - wy) * ny + (x[i + 2] - wz) * nz, g = gap[c] * s;
+      if (d >= g) continue;
+      const k = g - d;
+      x[i] += k * nx; x[i + 1] += k * ny; x[i + 2] += k * nz;
+      // it has met the skin: no speed left into it (it may slide along it, and lift off)
+      const vn = (x[i] - xp[i]) * nx + (x[i + 1] - xp[i + 1]) * ny + (x[i + 2] - xp[i + 2]) * nz;
+      if (vn < 0) { xp[i] += vn * nx; xp[i + 1] += vn * ny; xp[i + 2] += vn * nz; }
+    }
+  }
+
+  /** the same floor for the shown offsets (garment frame), after smoothing has averaged neighbours together */
+  private offSkin(off: Float32Array) {
+    const bp = this.bp, bn = this.bn, gap = this.gap, r = this.rest;
+    if (!bp || !bn || !gap) return;
+    for (let c = 0; c < this.n; c++) {
+      const i = 3 * c, nx = bn[i], ny = bn[i + 1], nz = bn[i + 2];
+      if (nx === 0 && ny === 0 && nz === 0) continue;
+      const d = (r[i] + off[i] - bp[i]) * nx + (r[i + 1] + off[i + 1] - bp[i + 1]) * ny + (r[i + 2] + off[i + 2] - bp[i + 2]) * nz;
+      if (d < gap[c]) { const k = gap[c] - d; off[i] += k * nx; off[i + 1] += k * ny; off[i + 2] += k * nz; }
+    }
   }
 
   /**
@@ -399,6 +476,7 @@ export class Cloth {
           x[a] += ddx * k * wa; x[a + 1] += ddy * k * wa; x[a + 2] += ddz * k * wa;
           x[b] -= ddx * k * wb; x[b + 1] -= ddy * k * wb; x[b + 2] -= ddz * k * wb;
         }
+        this.onSkin();
       }
       this.hPrev = h;
     }
@@ -424,6 +502,7 @@ export class Cloth {
     // and grit on a hard turn), so what's shown is the net's shape with anything finer than its own spacing
     // smoothed away. The simulation itself keeps its state; only the drawn shape is smoothed.
     this.smoothShown();
+    this.offSkin(off);
     this.settled = false;
     const out = this.tex.image.data as Float32Array;
     for (let c = 0; c < this.n; c++) { out[4 * c] = off[3 * c]; out[4 * c + 1] = off[3 * c + 1]; out[4 * c + 2] = off[3 * c + 2]; }

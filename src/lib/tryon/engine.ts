@@ -306,8 +306,10 @@ export class TryOn {
         h.v.addScaledVector(a, st); h.p.addScaledVector(h.v, st);
         const d = h.p.clone().sub(head).normalize();
         if (out) {
+          // the body is solid: the hem may swing out and back, but never in past where it hangs on you (the
+          // occluder behind it is your body; anything pushed into it would be cut away, a hole through to the video)
           const inside = d.dot(out) - rest.dot(out);
-          if (inside < -0.03) { d.addScaledVector(out, -0.03 - inside).normalize(); h.v.addScaledVector(out, -Math.min(0, h.v.dot(out))); }
+          if (inside < 0) { d.addScaledVector(out, -inside).normalize(); h.v.addScaledVector(out, -Math.min(0, h.v.dot(out))); }
         }
         const a0 = d.angleTo(rest);
         if (a0 > h.cone) { d.copy(rest.clone().lerp(d, h.cone / a0).normalize()); h.v.multiplyScalar(0.5); }
