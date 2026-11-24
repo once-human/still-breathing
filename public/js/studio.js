@@ -64,9 +64,9 @@ function applyLights() {
   key.position.set(r * Math.sin(az), 2.1, r * Math.cos(az));
   const shift = kelvin(state.keyTemp); const k = KEY_TINT.clone();
   k.r *= shift.r / K_REF.r; k.g *= shift.g / K_REF.g; k.b *= shift.b / K_REF.b;
-  key.color.copy(k); key.intensity = 7.0 * p;
-  fill.color.copy(FILL_TINT); fill.intensity = (7.0 * p) / state.fill;
-  rim.intensity = state.rim ? 4.2 * p : 0;
+  key.color.copy(k); key.intensity = 28 * p;          // calibrated by eye against the Cycles frames
+  fill.color.copy(FILL_TINT); fill.intensity = (28 * p) / state.fill;
+  rim.intensity = state.rim ? 17 * p : 0;
   for (const l of [key, fill, rim]) l.lookAt(0, 1.12, 0);
 }
 

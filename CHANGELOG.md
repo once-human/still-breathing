@@ -2,6 +2,10 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.1.1 — 2026-11-24
+- Turntable frames for both colourways rendered on the GitHub Actions render farm (24 frames, 64 spp).
+- Real-time light rig calibrated against the Cycles frames, so the switch between them is close to invisible.
+
 ## 0.1.0 — 2026-11-24
 First cut of the Still Breathing site and the garment pipeline.
 
