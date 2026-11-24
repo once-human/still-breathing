@@ -110,7 +110,7 @@ export class TryOn {
   private mask = document.createElement("canvas");
   private tier = 0; private busy = 0; private over = 0; private swapping = false; private camInt = 1 / 30;
   private makePose: ((model: "full" | "lite") => Promise<PoseLandmarker>) | null = null;
-  private midU = new OneEuro(1.0, 0.015, 1.2); private midV = new OneEuro(1.0, 0.015, 1.2); private body = 0;
+  private midU = new OneEuro(1.0, 0.04, 1.6); private midV = new OneEuro(1.0, 0.04, 1.6); private body = 0;
   private keyOff = new THREE.Vector3(0, 2, 2); private shown = false; private qSpeed = 0;
   private lit = false; private lum = 0.5; private tint = new THREE.Color(1, 1, 1); private side = new THREE.Vector2();
   private P = new Map<number, THREE.Vector3>();   // filtered camera-space points (mirrored), metres
