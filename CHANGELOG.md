@@ -2,6 +2,10 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.12.3 — 2026-11-25
+### Site
+- From abroad, the tour shirts follow Mumbai or Bengaluru, the two gateways, by real flight time from where you are: Mumbai from the Gulf, Europe, Africa and the Americas (the most direct routes), Bengaluru from Sri Lanka, Southeast Asia and Australia.
+
 ## 0.12.2 — 2026-11-25
 ### Site
 - The countdown and the rest of the page really do follow your show now. The first shirt on the page never asked where you are, so everyone saw the next date, Delhi NCR.
