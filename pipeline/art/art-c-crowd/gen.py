@@ -1163,6 +1163,94 @@ class Scene(Art):
                     else:
                         self.ink(d, MINW, closed=True, rng=rng, a0=0.3, a1=0.4, pv=0.05, close_frac=rng.uniform(0.95, 1.03))
 
+    def ridge(self, y0, xa, xb, w0, rng, depth=1.4, arms=0.1):
+        """the far crowd the way it gets drawn by hand: one running line of head
+        bumps and shoulder dips, the pen lifted every few heads; now and then an
+        arm sticks up out of it with a phone or a torch on the end"""
+        ph1, ph2 = rng.uniform(0, TAU), rng.uniform(0, TAU)
+
+        def base(x):
+            return y0 + w0 * (0.22 * math.sin(x * 0.021 + ph1) + 0.12 * math.sin(x * 0.067 + ph2))
+        x = xa + rng.uniform(0, w0)
+        runs, cur, extras = [], [], []
+        while x < xb:
+            # thin out toward the ends and leave the odd pocket of ground
+            edge = abs((x - xa) / (xb - xa) * 2 - 1)
+            if rng.random() < 0.03 + max(0.0, edge - 0.75) * 1.6:
+                if len(cur) > 3:
+                    runs.append(cur)
+                cur = []
+                x += w0 * rng.uniform(0.8, 2.2)
+                continue
+            bw = w0 * rng.uniform(0.72, 1.3)
+            bh = w0 * rng.uniform(0.42, 0.9)
+            b = base(x + bw / 2) + rng.gauss(0, 0.07 * w0)
+            kind = rng.random()
+            if kind < 0.12:      # hood: a soft point
+                cur += [(x, b), (x + bw * 0.12, b - bh * 0.7), (x + bw * 0.5 + rng.gauss(0, 0.05 * bw), b - bh * 1.18), (x + bw * 0.88, b - bh * 0.7)]
+            elif kind < 0.2:     # bun on top
+                cur += [(x, b), (x + bw * 0.12, b - bh * 0.72), (x + bw * 0.34, b - bh), (x + bw * 0.42, b - bh * 1.32), (x + bw * 0.62, b - bh * 1.3),
+                        (x + bw * 0.68, b - bh), (x + bw * 0.88, b - bh * 0.72)]
+            elif kind < 0.26:    # cap with a brim
+                cur += [(x, b), (x + bw * 0.1, b - bh * 0.75), (x + bw * 0.45, b - bh * 1.02), (x + bw * 0.8, b - bh * 0.82), (x + bw * 1.15, b - bh * 0.7),
+                        (x + bw * 0.9, b - bh * 0.55)]
+            else:
+                cur += [(x, b), (x + bw * 0.1, b - bh * 0.72), (x + bw * 0.5 + rng.gauss(0, 0.06 * bw), b - bh), (x + bw * 0.9, b - bh * 0.72)]
+            top = (x + bw * 0.5, b - bh)
+            if rng.random() < 0.06:
+                extras.append(('cap', (x, b, bw, bh)))
+            if rng.random() < arms:
+                extras.append(('arm', (x + bw * rng.uniform(0.2, 0.8), b - bh * 0.5, bh)))
+            x += bw
+            # shoulder dip between heads (sometimes two heads touch)
+            if rng.random() < 0.7:
+                d = w0 * rng.uniform(0.12, 0.55)
+                cur.append((x + d * 0.5, base(x + d * 0.5) + w0 * rng.uniform(0.0, 0.12)))
+                x += d
+            if len(cur) > rng.randint(14, 30):
+                runs.append(cur)
+                cur = [(cur[-1][0] + rng.uniform(-2, 1.5), cur[-1][1] + rng.gauss(0, 0.6))]
+        if len(cur) > 3:
+            runs.append(cur)
+        lw = MINW
+        for run in runs:
+            p = self.hand(run, wob=0.035 * w0, trem=0.05 * w0, rng=rng, step=1.0)
+            self.knock(p + [(p[-1][0], y0 + depth * w0), (p[0][0], y0 + depth * w0)])
+            for k, data in extras:
+                if k == 'cap' and run[0][0] <= data[0] <= run[-1][0]:
+                    xx, b, bw, bh = data
+                    self.blob([(xx + bw * 0.12, b - bh * 0.62), (xx + bw * 0.5, b - bh * 0.98), (xx + bw * 0.88, b - bh * 0.62), (xx + bw * 0.8, b - bh * 0.35),
+                               (xx + bw * 0.2, b - bh * 0.35)], rng.choice(('Y', 'G', 'G')), rng=rng, shift=0.12 * w0, gap=0.0, n=14)
+            self.ink(p, lw, rng=rng, a0=0.8, a1=1.6, pv=0.3, redraw=0.15)
+        for k, data in extras:
+            if k != 'arm':
+                continue
+            ax, ay, bh = data
+            L = w0 * rng.uniform(1.0, 1.9)
+            a = -math.pi / 2 + rng.gauss(0, 0.28)
+            hx, hy = ax + math.cos(a) * L, ay + math.sin(a) * L
+            mid = ((ax + hx) / 2 + rng.gauss(0, 0.12 * w0), (ay + hy) / 2)
+            self.knock(offset_path([(ax, ay), mid, (hx, hy)], 0.16 * w0 + 1.5) + offset_path([(ax, ay), mid, (hx, hy)], -0.16 * w0 - 1.5)[::-1])
+            self.line([(ax, ay), mid, (hx, hy)], lw, rng=rng, wob=0.03 * w0, trem=0, a0=0.4, a1=0.6)
+            q = rng.random()
+            if q < 0.3:
+                # torch: a bright point, three or four short unequal ticks
+                self.dot(hx, hy - 1.5, max(1.6, 0.16 * w0), rng=rng)
+                ph = rng.uniform(0, TAU)
+                for i in range(rng.randint(3, 4)):
+                    aa = ph + TAU * i / 4 + rng.gauss(0, 0.3)
+                    r0, r1 = 3.5 + 0.2 * w0, 3.5 + w0 * rng.uniform(0.5, 1.0)
+                    self.line([(hx + math.cos(aa) * r0, hy - 1.5 + math.sin(aa) * r0), (hx + math.cos(aa) * r1, hy - 1.5 + math.sin(aa) * r1)], MINW,
+                              rng=rng, layer='Y', wob=0.1, trem=0, a0=0.3, a1=0.6)
+            elif q < 0.72:
+                ph_ = w0 * rng.uniform(0.6, 0.85)
+                pw = ph_ * rng.uniform(0.5, 0.62)
+                rect = [(hx - pw / 2, hy - ph_), (hx + pw / 2, hy - ph_ - rng.gauss(0, 0.4)), (hx + pw / 2, hy + 1), (hx - pw / 2, hy + 1)]
+                self.knock(rect)
+                self.blob(rect, 'B' if rng.random() < 0.06 else rng.choice(('Y', 'Y', 'G')), rng=rng, scale=(1.0, 1.15), shift=0.1 * w0, gap=0.0, n=10)
+            else:
+                self.dot(hx, hy, max(1.7, 0.2 * w0), rng=rng)
+
     def person_far(self, cx, cy, w, lw, rng):
         """a distant head: a bump, shoulders, maybe an arm with a phone"""
         h = w * 1.12
@@ -1189,10 +1277,10 @@ class Scene(Art):
             self.knock(offset_path(p, 0.18 * w) + offset_path(p, -0.18 * w)[::-1])
             self.ink(p, lw, rng=rng, a0=0.5, a1=0.8)
             q = rng.random()
-            if q < 0.42:
-                self.rays(hx, hy - 0.2 * w, 0.18 * w + 1.0, 1.15 * w + 3.0, rng.randint(6, 8), rng, skip_down=False)
+            if q < 0.22:
+                self.rays(hx, hy - 0.2 * w, 0.18 * w + 1.0, 0.95 * w + 3.0, rng.randint(4, 6), rng, skip_down=False)
                 self.dot(hx, hy - 0.2 * w, max(0.16 * w, 1.6), rng=rng)
-            elif q < 0.75:
+            elif q < 0.72:
                 ph = w * rng.uniform(0.7, 0.95)
                 pw = ph * 0.55
                 ang = rng.gauss(0, 0.2)
@@ -1202,7 +1290,7 @@ class Scene(Art):
                 self.knock(rect)
                 lay = 'B' if rng.random() < 0.04 else 'G' if rng.random() < 0.3 else 'Y'
                 self.blob(rect, lay, rng=rng, scale=(1.0, 1.12), shift=0.04 * w, gap=0.0, n=12)
-                if w > 11:
+                if w > 15:
                     self.box(rect, lw * 0.8, rng=rng, over=(-0.5, 1.0), wob=0.1)
             else:
                 self.dot(hx, hy - 0.15 * w, max(0.22 * w, 1.6), rng=rng)
@@ -2072,6 +2160,12 @@ class Scene(Art):
             t = (zi - 1.78) / (17 - 1.78)
             hw = 680 - 400 * t ** 0.6
             cxr = STX - 10 * (1 - t)
+            if zi > 11.2:
+                # the back of the crowd: drawn as running lines of heads
+                self.ridge(y0, cxr - hw * r.uniform(0.9, 1.0), cxr + hw * r.uniform(0.9, 1.0), w0 * r.uniform(0.95, 1.08), r,
+                           arms=0.07 + 0.05 * (17 - zi) / 6)
+                cnt += int(2 * hw / w0)
+                continue
             x = cxr - hw + r.uniform(0, w0)
             ppl = []
             while x < cxr + hw:
@@ -2090,9 +2184,9 @@ class Scene(Art):
                 else:
                     o = {}
                     q = r.random()
-                    if q < 0.09:
+                    if q < 0.06:
                         o['arms'] = {r.choice((-1, 1)): 'torch'}
-                    elif q < 0.16:
+                    elif q < 0.15:
                         o['arms'] = {r.choice((-1, 1)): 'phone'}
                     elif q < 0.25:
                         o['arms'] = {r.choice((-1, 1)): r.choice(['open', 'fist', 'peace', 'point', 'open'])}
@@ -2287,13 +2381,19 @@ def noise(cell_u, seed, sigma=64):
     return Image.effect_noise((nw, nh), sigma).convert('L').resize((W, H), Image.BICUBIC)
 
 
-def grain(m, seed, cut=58, cell=2.6, starve_cell=90, starve=0.45):
+def grain(m, seed, cut=80, cell=2.6, starve_cell=90, starve=0.45):
     """screen grain: open holes in the solids, more where the screen ran a little dry"""
-    fine = noise(cell, seed, 60)
+    # two fine screens at unrelated cell sizes, one shifted half a cell, so the
+    # holes don't line up on the noise lattice
+    f1 = noise(cell, seed, 60)
+    f2 = noise(cell * 0.71, seed + 7, 60)
+    f2 = ImageChops.offset(f2, int(cell * S * 0.37), int(cell * S * 0.61))
+    fine = Image.blend(f1, f2, 0.5).point(lambda p: max(0, min(255, int((p - 128) * 1.35 + 128))))
     low = noise(starve_cell, seed + 1, 70)
     mix = Image.blend(fine, low, starve)
     holes = mix.point(lambda p: 255 if p < cut else 0)
     holes = clean(holes, 7)                  # no pin-holes the screen can't hold
+    holes = holes.filter(ImageFilter.GaussianBlur(3.2)).point(lambda p: 255 if p > 118 else 0)   # round, not square
     return ImageChops.subtract(m, holes)
 
 
