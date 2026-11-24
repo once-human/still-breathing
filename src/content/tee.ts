@@ -3,18 +3,18 @@ import sizes from "../../public/tee/fred/sizes.json";
 /** Lineup 01: again.., the shirts for the December shows. Everything the page says about them lives here. */
 
 export type Colour = "black" | "cream";
-export type Design = "b" | "a" | "c" | "d";
+export type Design = "c" | "a" | "d";
 export type City = "mumbai" | "bengaluru";
 
 /**
- * Two shirts per city. Same blank, same front (again.. in four scripts); the back is what changes.
+ * Three shirts. Same blank, same front (again.. in four scripts); the back is what changes.
+ * The crowd is the tour's shirt (both cities in one drawing); each city also has its map.
  * Each shirt comes in one colour only: a night shirt in black, a day shirt in off white.
  */
-export const DESIGNS: Record<Design, { no: string; name: string; city: City; colour: Colour; back: string }> = {
-  b: { no: "01", name: "crowd", city: "mumbai", colour: "black", back: "the crowd at the barrier, drawn in lines, lit by the stage" },
+export const DESIGNS: Record<Design, { no: string; name: string; city: City | null; colour: Colour; back: string }> = {
+  c: { no: "01", name: "crowd", city: null, colour: "black", back: "both nights in one drawing: the crowd from behind, the green line stopping at Madavara on one side, the Mumbai skyline behind the race course on the other, people from both cities in front" },
   a: { no: "02", name: "map", city: "mumbai", colour: "cream", back: "the race course from above, the sea beside it, the sound rolling out from the stage" },
-  c: { no: "03", name: "crowd", city: "bengaluru", colour: "black", back: "the crowd on the grounds at Madavara, where the green line ends: a cool December night, monkey caps and phone torches" },
-  d: { no: "04", name: "end of the line", city: "bengaluru", colour: "cream", back: "the green line out to Madavara, its last station, where the show is: the last city, the end of the line" },
+  d: { no: "03", name: "map", city: "bengaluru", colour: "cream", back: "the NICE grounds from above, the green line ending at Madavara beside them, the sound rolling out from the stage" },
 };
 export const CITIES: City[] = ["mumbai", "bengaluru"];
 
@@ -40,7 +40,7 @@ export const SHOWS = [
 
 export const THE_TEE = {
   lineup: "lineup 01",
-  lede: "again.. in four scripts across the chest, the city across the whole back. Heavy cotton, cut loose, made for a long night on your feet.",
+  lede: "again.. in four scripts across the chest, the night drawn across the whole back. Heavy cotton, cut loose, made for a long night on your feet.",
   cloth: [
     ["cotton", "100% combed cotton, single jersey"],
     ["weight", "240 g/m², heavy and dense, not see-through"],
