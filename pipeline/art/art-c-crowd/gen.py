@@ -1539,8 +1539,22 @@ class Scene(Art):
             self.knock(col)
             self.line([cap[0], (x - cw * 0.55, yb + 10 * sc), (x - cw / 2 + rng.gauss(0, 0.3), 770)], lw, rng=rng, wob=0.3, trem=0.4, a0=0.5, a1=3.0)
             self.line([cap[1], (x + cw * 0.55, yb + 10 * sc), (x + cw / 2 + rng.gauss(0, 0.3), 770)], lw, rng=rng, wob=0.3, trem=0.4, a0=0.5, a1=3.0)
-            if sc > 0.75:
-                self.line([(x - cw * 0.12, yb + 16 * sc), (x - cw * 0.12 + rng.gauss(0, 0.4), yb + 16 * sc + rng.uniform(20, 45))], MINW, rng=rng, wob=0.2, trem=0.2, a0=0.5, a1=3.0)
+            # the side away from the stage lights: a few hand hatches, never the same twice
+            if cw > 7:
+                nh = rng.randint(1, 3) if sc > 0.75 else rng.randint(0, 1)
+                for j in range(nh):
+                    hx = x - cw * 0.5 + 2.6 + j * 2.9 + rng.uniform(-0.4, 0.4)
+                    if hx > x - 0.5:
+                        break
+                    y0h = yb + 13 * sc + rng.uniform(0, 14)
+                    self.line([(hx, y0h), (hx + rng.gauss(0, 0.3), y0h + rng.uniform(18, 70) * sc)], MINW, rng=rng, wob=0.2, trem=0.2, a0=0.5, a1=3.0)
+            # a lamp post on the parapet every other span
+            if k % 2 == 0 and x < XE - 30:
+                lx = x + rng.uniform(2, 6) * sc
+                ly = self.vg(lx)[0]
+                lh = 24 * sc + 4
+                self.line([(lx, ly - 1), (lx + rng.gauss(0, 0.3), ly - lh), (lx + 5 * sc + 1.5, ly - lh - 1.5)], MINW, rng=rng, wob=0.15, trem=0, a0=0.3, a1=0.4)
+                self.dot(lx + 5 * sc + 2.5, ly - lh + 1.2, 1.9, layer='Y', rng=rng)
         self.marks['viaduct'] = (180, self.vg(180)[1])
 
     def train(self, rng):
@@ -1705,10 +1719,34 @@ class Scene(Art):
         for a in (-0.35, -0.05, 0.25):
             self.line([(hx + 5, hy + a * 6), (hx + 22 + rng.uniform(0, 8), hy + a * 22)], MINW, rng=rng, layer='Y', wob=0.3, trem=0, a0=0.4, a1=2.0)
         self.marks['lorry'] = (x0 + 50, gy - 54)
-        # headlights further down the road
-        for (hx, hy) in ((236, 747), (262, 748)):
+        # an auto coming the other way: yellow hood, green body, the way they run here
+        self.auto(250, gy, rng)
+        # a car further down, just its lights
+        for (hx, hy) in ((300, 748),):
             self.dot(hx, hy, 2.1, layer='Y', rng=rng)
             self.dot(hx + 7, hy + 0.4, 2.1, layer='Y', rng=rng)
+
+    def auto(self, xf, gy, rng):
+        """an autorickshaw side-on, nose to the left"""
+        xr = xf + 36
+        hood = [(xf + 7, gy - 15), (xf + 8, gy - 27), (xf + 14, gy - 31), (xr - 8, gy - 32), (xr - 1, gy - 27), (xr + 1, gy - 14)]
+        body = [(xf - 1, gy - 6), (xf, gy - 12), (xf + 5, gy - 16), (xr + 1, gy - 15), (xr + 2, gy - 6)]
+        self.knock(hood + [(xr + 2, gy - 4), (xf - 1, gy - 4), (xf, gy - 12)])
+        self.blob([(xf + 9, gy - 26), (xf + 14, gy - 30), (xr - 8, gy - 31), (xr - 1, gy - 26), (xr - 1, gy - 22), (xf + 9, gy - 22)], 'Y', rng=rng, gap=0.0,
+                  shift=0.5, jit=0.03, n=16)
+        self.blob([(xf + 1, gy - 7), (xf + 2, gy - 12), (xf + 6, gy - 15), (xr, gy - 14), (xr + 1, gy - 7)], 'G', rng=rng, gap=0.0, shift=0.5, jit=0.03, n=16)
+        self.line(hood, MINW, rng=rng, wob=0.3, trem=0.2, a0=0.5, a1=0.8)
+        self.line(body, MINW, rng=rng, wob=0.3, trem=0.2, a0=0.5, a1=0.8)
+        self.line([(xf + 8, gy - 27), (xf + 3, gy - 14)], MINW, rng=rng, wob=0.2, trem=0, a0=0.3, a1=0.4)     # windscreen
+        self.line([(xr - 12, gy - 31), (xr - 13, gy - 15)], MINW, rng=rng, wob=0.2, trem=0, a0=0.3, a1=0.4)  # the door gap
+        for wx in (xf + 6, xr - 5):
+            ring = [(wx + math.cos(a) * 4.2, gy - 3.8 + math.sin(a) * 4.2) for a in [TAU * i / 7 for i in range(7)]]
+            self.knock(ring)
+            self.line(ring, MINW, rng=rng, wob=0.15, trem=0, closed=True, close_frac=1.02)
+        self.dot(xf + 1, gy - 12.5, 2.0, layer='Y', rng=rng)
+        for a in (-0.25, 0.1):
+            self.line([(xf - 4, gy - 12 + a * 4), (xf - 16 - rng.uniform(0, 6), gy - 12 + a * 16)], MINW, rng=rng, layer='Y', wob=0.2, trem=0, a0=0.4, a1=2.0)
+        self.marks['auto'] = (xf + 18, gy - 32)
 
     def low_buildings(self, rng):
         lw = MINW
@@ -1807,61 +1845,17 @@ class Scene(Art):
                 self.dot(lx, ly, 2.0, layer='Y', rng=rng)
         self.line([(xa - 3, base), (xb, base + 0.5)], lw, rng=rng, wob=0.4, trem=0.4, a0=1.0, a1=2.0)
 
-    def rain_tree(self, cx, base, rx, ct, cb, rng, fill=None, lean=0.0):
-        """samanea saman: a wide, low umbrella on a short forked trunk"""
-        lw = MINW
-        n = 18
-        top = []
-        for i in range(n + 1):
-            t = i / n
-            u = 2 * t - 1
-            x = cx + rx * u * (1 + 0.04 * math.sin(3 * u + cx))
-            y = cb - (cb - ct) * max(0.0, 1 - abs(u) ** 2.2) ** 0.55 + rng.gauss(0, 1.0) + lean * u * 6
-            top.append((x, y))
-        bot = []
-        for i in range(n + 1):
-            t = 1 - i / n
-            u = 2 * t - 1
-            bot.append((cx + rx * 0.97 * u, cb + 5 * (1 - u * u) + rng.gauss(0, 1.0)))
-        canopy = top + bot
-        # trunk + limbs
-        fy = cb + (base - cb) * rng.uniform(0.38, 0.5)
-        fx = cx + rng.gauss(0, rx * 0.05)
-        tw = max(5.0, rx * 0.075)
-        trunk = [(fx - tw * 0.7, fy), (cx - tw + rng.gauss(0, 1), base), (cx + tw + rng.gauss(0, 1), base), (fx + tw * 0.7, fy)]
-        self.knock(trunk)
-        limbs = []
-        nl = rng.randint(4, 6)
-        for i in range(nl):
-            u = -0.85 + 1.7 * (i + rng.uniform(0.25, 0.75)) / nl
-            ex, ey = cx + rx * u * 0.85, cb + 3 * (1 - u * u) + rng.uniform(-3, 3)
-            mx, my = fx + (ex - fx) * 0.45 + rng.gauss(0, 2), fy + (ey - fy) * 0.6 - abs(u) * 4
-            limbs.append([(fx + u * tw * 0.6, fy + 2), (mx, my), (ex, ey + 2)])
-            self.knock(offset_path(self.hand(limbs[-1], wob=0, trem=0, rng=rng), 2.4 + 2.2 * (1 - abs(u))) +
-                       offset_path(self.hand(limbs[-1], wob=0, trem=0, rng=rng), -(2.4 + 2.2 * (1 - abs(u))))[::-1])
-        d = self.hand(canopy, closed=True, wob=0, trem=0, rng=rng)
-        self.knock(d)
-        if fill:
-            self.blob(canopy, fill, rng=rng, scale=(0.9, 0.97), jit=0.05, shift=2.0, gap=0.7, n=40)
-        self.line([trunk[0], (cx - tw * 0.85 + rng.gauss(0, 1), (fy + base) / 2), trunk[1]], lw * 1.15, rng=rng, wob=0.3, trem=0.4, a0=0.6, a1=1.0)
-        self.line([trunk[3], (cx + tw * 0.85 + rng.gauss(0, 1), (fy + base) / 2), trunk[2]], lw * 1.15, rng=rng, wob=0.3, trem=0.4, a0=0.6, a1=1.0)
-        for lm in limbs:
-            p = self.hand(lm, wob=0.5, trem=0.3, rng=rng)
-            self.ink(p, lw, rng=rng, a0=0.6, a1=1.5, pv=0.25)
-            # a twig fork near the canopy
-            if rng.random() < 0.6:
-                a, b = p[int(len(p) * 0.6)], p[-1]
-                self.line([a, (b[0] + rng.uniform(-9, 9), b[1] - rng.uniform(0, 4))], MINW, rng=rng, wob=0.3, trem=0, a0=0.4, a1=0.8)
-        # leafy edge: small scallops along the top, looser hanging tufts below
-        dense = catmull(top, False, 0.8)
+    def leaf_edge(self, pts, rng, lw, smin=4.0, smax=13.0, gap=0.1, layer='line'):
+        """a leafy edge along pts: one short stroke per scallop, scallops of very
+        uneven size and swell, the pen lifting now and then"""
+        dense = catmull(pts, False, 0.8)
         s = cumlen(dense)
         Lt = s[-1]
-        pos = 0.0
+        pos = rng.uniform(0, 3)
         j = 0
-        while pos < Lt - 4:
-            sl = rng.uniform(7, 12)
-            a = pos
-            b = min(Lt, pos + sl)
+        while pos < Lt - 3:
+            sl = rng.uniform(smin, smax) * (1.5 if rng.random() < 0.15 else 1.0)
+            a, b = pos, min(Lt, pos + sl)
             while j < len(s) - 2 and s[j + 1] < a:
                 j += 1
             p0 = dense[j]
@@ -1869,27 +1863,124 @@ class Scene(Art):
             while k < len(s) - 2 and s[k + 1] < b:
                 k += 1
             p1 = dense[k]
+            if rng.random() < gap:
+                pos = b + rng.uniform(0.5, 3)
+                continue
             mx, my = (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2
             nx, ny = (p1[1] - p0[1]), -(p1[0] - p0[0])
             nn = math.hypot(nx, ny) or 1
-            bul = sl * rng.uniform(0.28, 0.45)
-            self.line([p0, (mx + nx / nn * bul, my + ny / nn * bul), p1], lw, rng=rng, wob=0.3, trem=0, a0=0.3, a1=0.6, pv=0.15)
-            pos = b + rng.uniform(-1.5, 1.0)
-        # inner clumps (the layered umbrella)
-        for i in range(int(rx / 10)):
-            u = rng.uniform(-0.75, 0.75)
-            x = cx + rx * u
-            ytop = cb - (cb - ct) * max(0.0, 1 - abs(u) ** 2.2) ** 0.55
-            y = ytop + (cb - ytop) * rng.uniform(0.3, 0.75)
-            sl = rng.uniform(8, 13)
-            self.line([(x - sl / 2, y), (x, y - sl * 0.4), (x + sl / 2, y)], lw, rng=rng, wob=0.3, trem=0, a0=0.3, a1=0.6)
-        # underside: hanging leaf ticks, gaps
-        for i in range(int(rx / 5)):
+            bul = sl * rng.uniform(0.22, 0.58)
+            sk = rng.uniform(-0.18, 0.18) * sl      # lean the bump a little
+            tx, ty = (p1[0] - p0[0]) / (sl or 1), (p1[1] - p0[1]) / (sl or 1)
+            q = [p0, (mx + nx / nn * bul * 0.8 - tx * sl * 0.22 + tx * sk, my + ny / nn * bul * 0.8 - ty * sl * 0.22 + ty * sk),
+                 (mx + nx / nn * bul + tx * sk, my + ny / nn * bul + ty * sk),
+                 (mx + nx / nn * bul * 0.8 + tx * sl * 0.22 + tx * sk, my + ny / nn * bul * 0.8 + ty * sl * 0.22 + ty * sk), p1]
+            self.line(q, lw, layer=layer, rng=rng, wob=0.12, trem=0, a0=0.35, a1=0.7, pv=0.15)
+            pos = b + rng.uniform(-1.0, 0.4)
+
+    def rain_tree(self, cx, base, rx, ct, cb, rng, fill=None, lean=0.0, far=False):
+        """samanea saman: a wide, low umbrella of clumps on a short forked trunk"""
+        lw = MINW
+        # the canopy is a few overlapping clumps along a low dome
+        k = max(3, int(rx / 17) + rng.randint(0, 2))
+        clumps = []
+        for i in range(k):
+            u = -0.78 + 1.56 * (i + rng.uniform(0.2, 0.8)) / k
+            crx = rx * rng.uniform(0.3, 0.46)
+            dome = max(0.0, 1 - abs(u) ** 2.0) ** 0.6
+            ctop = cb - (cb - ct) * (0.55 + 0.45 * dome) * rng.uniform(0.86, 1.06) + lean * u * 6
+            clumps.append((cx + rx * u, ctop, crx, (cb - ctop) * rng.uniform(0.75, 1.0)))
+        xs = [cx - rx + 2 * rx * i / 60 for i in range(61)]
+
+        def ytop(x):
+            best = None
+            for (ux, uy, ur, uh) in clumps:
+                d = (x - ux) / (ur * 1.25)
+                if abs(d) < 1:
+                    y = uy + uh * 0.55 * (1 - math.sqrt(1 - d * d))
+                    best = y if best is None else min(best, y)
+            return best
+        top = [(x, ytop(x)) for x in xs if ytop(x) is not None]
+        top = [(x, min(y, cb - 3)) for x, y in top]
+        bot = []
+        for i in range(17):
+            u = 1 - 2 * i / 16
+            bot.append((cx + rx * 0.96 * u, cb + 4 * (1 - u * u) + rng.gauss(0, 1.2)))
+        canopy = [top[0]] + top[1:-1:2] + [top[-1]] + bot
+        # trunk + limbs
+        fy = cb + (base - cb) * rng.uniform(0.38, 0.5)
+        fx = cx + rng.gauss(0, rx * 0.05)
+        tw = max(4.0, rx * 0.075)
+        trunk = [(fx - tw * 0.7, fy), (cx - tw + rng.gauss(0, 1), base), (cx + tw + rng.gauss(0, 1), base), (fx + tw * 0.7, fy)]
+        self.knock(trunk)
+        limbs = []
+        nl = rng.randint(3, 6)
+        for i in range(nl):
+            u = -0.85 + 1.7 * (i + rng.uniform(0.25, 0.75)) / nl
+            ex, ey = cx + rx * u * 0.85, cb + 3 * (1 - u * u) + rng.uniform(-3, 3)
+            mx, my = fx + (ex - fx) * 0.45 + rng.gauss(0, 2), fy + (ey - fy) * 0.6 - abs(u) * 4
+            limbs.append([(fx + u * tw * 0.6, fy + 2), (mx, my), (ex, ey + 2)])
+            hl = self.hand(limbs[-1], wob=0, trem=0, rng=rng)
+            wd = (2.0 + 2.2 * (1 - abs(u))) * (0.7 if far else 1.0)
+            self.knock(offset_path(hl, wd) + offset_path(hl, -wd)[::-1])
+        d = self.hand(canopy, closed=True, wob=0, trem=0, rng=rng)
+        self.knock(d)
+        if fill:
+            self.blob(canopy, fill, rng=rng, scale=(0.88, 0.97), jit=0.06, shift=2.2, gap=0.75, n=44)
+        self.line([trunk[0], (cx - tw * 0.85 + rng.gauss(0, 1), (fy + base) / 2), trunk[1]], lw * (1.0 if far else 1.15), rng=rng, wob=0.3, trem=0.4, a0=0.6, a1=1.0)
+        self.line([trunk[3], (cx + tw * 0.85 + rng.gauss(0, 1), (fy + base) / 2), trunk[2]], lw * (1.0 if far else 1.15), rng=rng, wob=0.3, trem=0.4, a0=0.6, a1=1.0)
+        if not far and rng.random() < 0.7:
+            # bark: a couple of short splits on the shadow side
+            for i in range(rng.randint(2, 3)):
+                yy = fy + (base - fy) * rng.uniform(0.2, 0.8)
+                self.line([(cx + tw * 0.35, yy), (cx + tw * 0.4 + rng.gauss(0, 0.5), yy + rng.uniform(4, 8))], MINW, rng=rng, wob=0.15, trem=0, a0=0.3, a1=0.5)
+        for lm in limbs:
+            p = self.hand(lm, wob=0.5, trem=0.3, rng=rng)
+            self.ink(p, lw, rng=rng, a0=0.6, a1=1.5, pv=0.25)
+            if rng.random() < 0.6 and not far:
+                a, b = p[int(len(p) * 0.6)], p[-1]
+                self.line([a, (b[0] + rng.uniform(-9, 9), b[1] - rng.uniform(0, 4))], MINW, rng=rng, wob=0.3, trem=0, a0=0.4, a1=0.8)
+        # the leafy top, then the lobes of the clumps behind showing through
+        self.leaf_edge(top, rng, lw, smin=3.5 if far else 4.0, smax=9.0 if far else 13.0, gap=0.16 if far else 0.08)
+        if not far:
+            order = sorted(range(k), key=lambda i: clumps[i][1])
+            for i in order[:max(1, k - 2)]:
+                ux, uy, ur, uh = clumps[i]
+                if rng.random() < 0.45:
+                    continue
+                # the lower rim of a high clump, drawn where it sits over the ones in front
+                arc = []
+                a0, a1 = rng.uniform(0.15, 0.35) * math.pi, rng.uniform(0.62, 0.88) * math.pi
+                for j in range(7):
+                    a = a0 + (a1 - a0) * j / 6
+                    arc.append((ux + math.cos(a) * ur * 0.95, uy + uh * 0.35 + math.sin(a) * uh * 0.45))
+                arc = [(x, y) for x, y in arc if y < cb - 2 and abs(x - cx) < rx * 0.9]
+                if len(arc) > 2:
+                    self.leaf_edge(arc, rng, lw, smin=3.5, smax=8.0, gap=0.2)
+            # leaf ticks in loose clusters, on the lit (upper-left) side of clumps
+            for (ux, uy, ur, uh) in clumps:
+                for c in range(1 if rng.random() < 0.55 else 0):
+                    gx = ux + rng.uniform(-0.55, 0.25) * ur
+                    gy = uy + uh * rng.uniform(0.15, 0.5)
+                    for t in range(rng.randint(2, 5)):
+                        x = gx + rng.gauss(0, ur * 0.18)
+                        y = gy + rng.gauss(0, uh * 0.12)
+                        if y > cb - 4 or abs(x - cx) > rx * 0.9:
+                            continue
+                        s_ = rng.uniform(3.0, 5.5)
+                        if rng.random() < 0.5:
+                            self.line([(x - s_, y), (x - s_ * 0.2, y - s_ * 0.55), (x + s_ * 0.6, y - s_ * 0.1)], MINW, rng=rng, wob=0.2, trem=0, a0=0.3, a1=0.5)
+                        else:
+                            self.line([(x - s_ * 0.6, y - s_ * 0.5), (x, y), (x + s_ * 0.6, y - s_ * 0.5)], MINW, rng=rng, wob=0.2, trem=0, a0=0.3, a1=0.5)
+        # underside: the dark under the umbrella, a few hanging ticks
+        for i in range(int(rx / (9 if far else 5))):
             u = rng.uniform(-0.95, 0.95)
-            x = cx + rx * 0.97 * u
-            y = cb + 5 * (1 - u * u)
-            if rng.random() < 0.7:
-                self.line([(x - 2, y - 1), (x + rng.gauss(0, 1), y + rng.uniform(3, 7))], MINW, rng=rng, wob=0.2, trem=0, a0=0.3, a1=0.5)
+            x = cx + rx * 0.96 * u
+            y = cb + 4 * (1 - u * u)
+            if rng.random() < 0.6:
+                self.line([(x - 1.5, y - 1), (x + rng.gauss(0, 1), y + rng.uniform(3, 8))], MINW, rng=rng, wob=0.2, trem=0, a0=0.3, a1=0.5)
+        if not far:
+            self.line([bot[0], bot[len(bot) // 2], bot[-1]], MINW, rng=rng, wob=0.6, trem=0.6, a0=2.0, a1=6.0, pv=0.35)
 
     def moon(self, x, y, r, rng, tilt=-0.6):
         """a four-day moon, low in the west"""
@@ -2098,6 +2189,11 @@ class Scene(Art):
             self.bat(x, y, s_, r, a)
         self.marks['bats'] = (900, 572)
 
+        # far trees behind the halls and the sheds: smaller, lighter, broken
+        r = R(15)
+        for (cx, rx, ct, cb) in ((770, 30, 690, 712), (842, 24, 696, 714), (1000, 34, 684, 708), (1062, 22, 694, 712), (1140, 30, 688, 710),
+                                 (126, 26, 700, 722), (314, 20, 708, 724)):
+            self.rain_tree(cx + r.gauss(0, 4), 740, rx, ct + r.gauss(0, 3), cb, r, fill=None, lean=r.gauss(0, 0.2), far=True)
         # far: low buildings, the mast at the interchange, the viaduct + train + station
         r = R(2)
         self.low_buildings(r)
@@ -2113,7 +2209,7 @@ class Scene(Art):
         self.marks['halls'] = (850, 712)
         # rain trees
         r = R(8)
-        for (cx, rx, ct, cb, fill, lean) in ((252, 38, 680, 708, None, 0.2), (408, 54, 662, 704, 'G', -0.3), (520, 58, 650, 694, None, 0.0),
+        for (cx, rx, ct, cb, fill, lean) in ((226, 36, 680, 708, None, 0.2), (408, 54, 662, 704, 'G', -0.3), (520, 58, 650, 694, None, 0.0),
                                             (800, 66, 642, 692, 'G', 0.3), (936, 82, 628, 686, None, -0.2), (1098, 68, 640, 694, 'G', 0.1)):
             self.rain_tree(cx, 772, rx, ct, cb, r, fill=fill, lean=lean)
         self.marks['trees'] = (936, 628)
