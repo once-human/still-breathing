@@ -359,7 +359,7 @@ def build_window():
     bookshelf and a split AC on the far side, a dining corner and the door behind the camera."""
     global ZC, SKY
     X0, X1, Y0, Y1, ZT = -3.2, 3.8, -4.2, 3.4, 3.0
-    WY0, WY1, WZ0, WZ1 = -1.8, 0.6, 0.62, 2.45                       # the window opening, just ahead-left of the person
+    WY0, WY1, WZ0, WZ1 = -1.8, 1.6, 0.45, 2.6                        # the window opening, just ahead-left of the person
     ZC = ZT
     # vitrified tiles, 60 x 60 cm, warm ivory, polished (they mirror the window softly), hairline grout
     m, nt, p = node_mat("tiles"); p.inputs["Roughness"].default_value = 0.14
@@ -462,12 +462,12 @@ def build_window():
         surf(lambda u, v, ya=ya, yb=yb: Vector((X0 + 0.12 + 0.05 * math.sin(u * 22) + 0.01 * math.sin(v * 9 + u * 40), ya + u * (yb - ya), 0.03 + v * 2.57)), 80, 6, SHEER)
 
     # ---- outside: the balcony, a neem tree, the building across the road, the ground four floors down ----
-    surf(lambda u, v: Vector((-4.9 + u * 1.7, Y0 + v * (Y1 - Y0 - 1.6), -0.02)), 1, 1, TILE, False)
-    box(-4.95, -1.4, 0.48, 0.15, 5.6, 0.96, M_OUTWALL)
-    box(-4.95, -1.4, 0.97, 0.22, 5.65, 0.04, M_OUTWALL)
-    box(-4.05, Y0 + 0.08, 1.5, 1.7, 0.15, 3.0, M_OUTWALL); box(-4.05, 1.4, 1.5, 1.7, 0.15, 3.0, M_OUTWALL)
-    box(-4.05, -1.4, ZT + 0.1, 1.8, 5.7, 0.2, M_OUTWALL)
-    for (x, y, h) in ((-4.6, -3.6, 0.7), (-4.6, -2.9, 0.45), (-4.6, 0.8, 0.6)):   # pots on the parapet's foot
+    surf(lambda u, v: Vector((-4.9 + u * 1.7, Y0 + v * (2.1 - Y0), -0.02)), 1, 1, TILE, False)
+    box(-4.95, -1.05, 0.48, 0.15, 6.3, 0.96, M_OUTWALL)
+    box(-4.95, -1.05, 0.97, 0.22, 6.35, 0.04, M_OUTWALL)
+    box(-4.05, Y0 + 0.08, 1.5, 1.7, 0.15, 3.0, M_OUTWALL); box(-4.05, 2.1, 1.5, 1.7, 0.15, 3.0, M_OUTWALL)
+    box(-4.05, -1.05, ZT + 0.1, 1.8, 6.4, 0.2, M_OUTWALL)
+    for (x, y, h) in ((-4.6, -3.6, 0.7), (-4.6, -2.9, 0.45), (-4.6, 1.6, 0.6)):   # pots on the parapet's foot
         cyl((x, y, 0), (x, y, 0.32), 0.15, M_POT, 16, r2=0.19)
         for k in range(9):
             sphere((x + rnd.uniform(-0.15, 0.15), y + rnd.uniform(-0.15, 0.15), 0.32 + rnd.uniform(0.05, h)), rnd.uniform(0.08, 0.14), M_LEAF2, 8, 6)
@@ -594,11 +594,11 @@ def build_window():
     cyl((0.4, Y0 + 0.005, 2.1), (0.4, Y0 + 0.035, 2.1), 0.16, TEAK, 32)
     cyl((0.4, Y0 + 0.035, 2.1), (0.4, Y0 + 0.04, 2.1), 0.145, mat("dial", (0.76, 0.74, 0.7), 0.4), 32)
     # a tall rubber plant by the window, a ceiling fan over the room, a round LED light (off)
-    cyl((-2.75, 1.0, 0), (-2.75, 1.0, 0.38), 0.17, M_POT, 20, r2=0.21)
+    cyl((-2.75, 2.45, 0), (-2.75, 2.45, 0.38), 0.17, M_POT, 20, r2=0.21)
     for k in range(26):
         h = rnd.uniform(0.5, 1.7); t = rnd.uniform(0, 2 * math.pi); r_ = rnd.uniform(0.05, 0.35)
-        sphere((-2.75 + r_ * math.cos(t), 1.0 + r_ * math.sin(t), 0.38 + h), 0.09, M_LEAF, 10, 6, s=(1, 0.35, 1.5))
-    cyl((-2.75, 1.0, 0.38), (-2.75, 1.0, 1.9), 0.015, M_BARK, 6)
+        sphere((-2.75 + r_ * math.cos(t), 2.45 + r_ * math.sin(t), 0.38 + h), 0.09, M_LEAF, 10, 6, s=(1, 0.35, 1.5))
+    cyl((-2.75, 2.45, 0.38), (-2.75, 2.45, 1.9), 0.015, M_BARK, 6)
     fx_, fy_ = 0.3, 0.6
     cyl((fx_, fy_, ZT), (fx_, fy_, ZT - 0.35), 0.012, M_FAN, 8)
     cyl((fx_, fy_, ZT - 0.33), (fx_, fy_, ZT - 0.45), 0.13, M_FAN, 24, r2=0.11)
@@ -810,13 +810,13 @@ def build_show():
 
 # ---------- the viewer's lights (scene.ts), three coordinates: name, pos, size, power, tint ----------
 STUDIO_LIGHTS = [
-    ("key", (-0.95, 2.35, 2.4), (1.2, 1.2), 170, (1, 0.985, 0.96)),
-    ("fill", (1.5, 1.7, 1.85), (0.9, 1.3), 55, (0.97, 0.98, 1)),
-    ("rimL", (-1.8, 2.2, -1.35), (0.35, 1.5), 95, (1, 1, 1)),
-    ("rimR", (1.85, 2.2, -1.45), (0.35, 1.5), 95, (1, 1, 1)),
-    ("top", (0.6, 3.25, -2.0), (1.0, 1.0), 110, (1, 0.99, 0.97)),
+    ("key", (-0.95, 2.35, 2.4), (1.2, 1.2), 90, (1, 0.985, 0.96)),
+    ("fill", (1.5, 1.7, 1.85), (0.9, 1.3), 25, (0.97, 0.98, 1)),
+    ("rimL", (-1.8, 2.2, -1.35), (0.35, 1.5), 50, (1, 1, 1)),
+    ("rimR", (1.85, 2.2, -1.45), (0.35, 1.5), 50, (1, 1, 1)),
+    ("top", (0.6, 3.25, -2.0), (1.0, 1.0), 55, (1, 0.99, 0.97)),
 ]
-CYCW = float(os.environ.get("CYCW", "12"))     # each cyc panel, Blender watts
+CYCW = float(os.environ.get("CYCW", "30"))     # each cyc panel, Blender watts
 SHOW_LIGHTS = [
     ("stage", (1.5, 10.35, 12.6), (0.4, 0.4), 6000, (1, 0.8, 0.6)),
     ("beam", (-2.5, 10.35, 12.6), (0.2, 0.2), 2700, (0.86, 0.91, 1)),
@@ -827,7 +827,7 @@ SHOW_LIGHTS = [
 SUN_DIR = three((-0.696, 0.264 + FLOOR, 0.668)).normalized()
 SUN_E = float(os.environ.get("SUNE", "14"))    # W/m2 on a surface facing it (Blender sun strength)
 SUN_TINT = (1.0, 0.8, 0.6)
-SKY_K = float(os.environ.get("SKYK", "3.0"))   # the sky, exposed for a room lit by it
+SKY_K = float(os.environ.get("SKYK", "5.0"))   # the sky, exposed for a room lit by it
 ZC = 100.0
 
 {"studio": build_studio, "window": build_window, "show": build_show}[PLACE]()
