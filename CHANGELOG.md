@@ -2,6 +2,24 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.4.0 — 2026-11-24
+Three shirts: the crowd for the whole tour, a map for each city. And a viewer you can get close to.
+
+### Shirts
+- 01 crowd (black) is now one drawing for the tour, built on the Bengaluru crowd. Bengaluru is on the left: the Green Line stopping at Madavara, rain trees, a train pulling in. Mumbai is on the right: the skyline behind the race course, the twin crowns, a crane, kites, a plane lining up. In front are people from both nights. The back reads again.. / india . 12 . 2026.
+- 02 map (off white): Mumbai's race course, unchanged.
+- 03 map (off white): Bengaluru's NICE Grounds from above, drawn in the Mumbai map's hand: the halls, the crowd and the stage, sound rings, the Green Line ending at Madavara beside the grounds, the NICE Road interchange, the lake. It replaces end of the line and breath.
+- The picker gets a "the tour" row for the shirt that belongs to no one city.
+- Flat inks everywhere: no grain in any art.
+
+### Viewer
+- Zoom up to 5x with the wheel, a pinch, a double-click or the +/− buttons, and keep turning the shirt while zoomed. Zoomed in, the print swaps to a full-resolution copy (3600 x 4800), fetched only then.
+- Livelier, lighter cloth: a quicker sway, a little more breeze, and the hem keeps its carry when you let go. Edges stay smooth when you drag hard.
+- The chest no longer shows through the shirt. The display form is a hull, and the meshes are lighter.
+- The small notches at the hem and the sleeve ends are closed.
+- Scrolling no longer stutters: the 3D pauses while the page scrolls and is capped at 60 fps at rest.
+- Smaller print files with sharper lines (area-averaged downsizing).
+
 ## 0.3.1 — 2026-11-24
 Runs on any laptop. The viewer decides per device how much to do, and the shirt is on screen at once.
 
