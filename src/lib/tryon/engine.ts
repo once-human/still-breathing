@@ -99,6 +99,9 @@ export class TryOn {
   private teeGeo: THREE.BufferGeometry | null = null; private basePos: Float32Array | null = null;
   private dims = { yTop: 0, zc: 0 };
   private mid = new THREE.Vector3();
+  // raise your arms and a real tee rides up with them: how far the hem has lifted on each side, and the hem
+  // bones' rest offsets it lifts from
+  private lift = [0, 0]; private hemRest = new Map<string, THREE.Vector3>(); private elev = { rest: -1.1, up: 0.87 };
   private hem: { name: string; b: THREE.Bone; dir: THREE.Vector3; out: THREE.Vector3 | null; len: number; K: number; cone: number; p: THREE.Vector3; v: THREE.Vector3; live: boolean }[] = [];
   private filt = new Map<number, Euro3>();
   private tFilt = new Euro3(1.0, 4, 0.35, 1.6);   // where the body stands; distance smoothed hardest
@@ -239,6 +242,10 @@ export class TryOn {
       this.hem.push({ name: b.name, b, dir: d.clone().normalize(), len: d.length(), out: null, K: 80, cone: 0.28, p: new THREE.Vector3(), v: new THREE.Vector3(), live: false });
     }
     this.modelShoulder = sL.distanceTo(sR);
+    // the upper arm's height as an angle above the shoulders' line: hanging as draped, and the cloth simulation's
+    // arms-up frame (50 degrees above, where the hem had risen 6 cm)
+    { const a = this.bp("lowerarm01.L").sub(sL).normalize(); this.elev.rest = Math.asin(a.y); this.elev.up = (50 * Math.PI) / 180; }
+    for (const h of this.hem) if (h.out) this.hemRest.set(h.name, h.b.position.clone());
     const xR = sL.clone().sub(sR).normalize(), yR = sL.clone().add(sR).multiplyScalar(0.5).sub(root).normalize();
     const zR = new THREE.Vector3().crossVectors(xR, yR).normalize(); yR.crossVectors(zR, xR);
     this.restTorso.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xR, yR, zR));
@@ -534,9 +541,26 @@ export class TryOn {
       this.armOn[k] = this.armOn[k] ? vis > 0.4 : vis > 0.6;
       aim(`upperarm01.${S}`, `lowerarm01.${S}`, sh, el, this.armOn[k]);
       aim(`lowerarm01.${S}`, `wrist.${S}`, el, wr, this.armOn[k] && (l![wr].visibility ?? 0) > 0.5);
+      // how high this arm is, measured against the shoulders so leaning doesn't count; past about level with them,
+      // the armhole pulls the side of the tee up and the hem rides up (6 cm in the simulation at 50 degrees above,
+      // up to 8 with the arm straight up)
+      const a = this.bone(`lowerarm01.${S}`)!.getWorldPosition(new THREE.Vector3()).sub(this.bone(`upperarm01.${S}`)!.getWorldPosition(new THREE.Vector3()));
+      a.applyQuaternion(carried(`upperarm01.${S}`).invert()).normalize();
+      const u = Math.min(1.3, Math.max(0, (Math.asin(a.y) - this.elev.rest) / (this.elev.up - this.elev.rest)));
+      const r = this.armOn[k] ? 0.06 * Math.min(1, Math.max(0, (u - 0.35) / 0.65)) ** 1.5 * (u > 1 ? 1 + (u - 1) : 1) : 0;
+      this.lift[k] += (r - this.lift[k]) * (1 - Math.exp(-dt * 12));
       // the shoulder helper turns half as far as the arm: the armhole hands over from torso to sleeve in two halves
       const ua = this.bone(`upperarm01.${S}`)!, hb = this.bone(`armhole.${S}`);
       if (hb) set(`armhole.${S}`, carried(`upperarm01.${S}`).slerp(ua.getWorldQuaternion(new THREE.Quaternion()).multiply(this.restQ.get(ua.name)!.clone().invert()), 0.5));
+    }
+    // the hem rides up: each hem bone lifted by its own side's arm (the front and back centre by both)
+    {
+      const root = this.bone("root")!, upL = new THREE.Vector3(0, 1, 0).applyQuaternion(this.restQ.get(root.name)!.clone().invert());
+      for (const h of this.hem) {
+        const p0 = this.hemRest.get(h.name); if (!p0) continue;
+        const x = this.restP.get(h.b.name)!.x, t = Math.min(1, Math.max(0, (x + 0.08) / 0.16)), wL = t * t * (3 - 2 * t);
+        h.b.position.copy(p0).addScaledVector(upL, this.lift[0] * wL + this.lift[1] * (1 - wL));
+      }
     }
     // the neck leans toward your head
     {
