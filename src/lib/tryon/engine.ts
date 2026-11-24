@@ -110,6 +110,8 @@ export class TryOn {
   private armOn = [false, false];
   private fctx: CanvasRenderingContext2D;
   private mask = document.createElement("canvas");
+  private tier = 0; private busy = 0; private over = 0; private swapping = false; private camInt = 1 / 30;
+  private makePose: ((model: "full" | "lite") => Promise<PoseLandmarker>) | null = null;
   private midU = new OneEuro(1.0, 0.015, 1.2); private midV = new OneEuro(1.0, 0.015, 1.2); private body = 0;
   private keyOff = new THREE.Vector3(0, 2, 2); private shown = false; private qSpeed = 0;
   private lit = false; private lum = 0.5; private tint = new THREE.Color(1, 1, 1); private side = new THREE.Vector2();
@@ -146,8 +148,12 @@ export class TryOn {
       baseOptions: { modelAssetPath: `/mediapipe/pose_landmarker_${model}.task`, delegate },
       runningMode: "VIDEO" as const, numPoses: 1, minPoseDetectionConfidence: 0.5, minPosePresenceConfidence: 0.5, minTrackingConfidence: 0.6,
     });
-    // the full model on the GPU; a machine without one gets the lighter model on the CPU
-    this.pose = await PoseLandmarker.createFromOptions(files, opts("GPU", "full")).catch(() => PoseLandmarker.createFromOptions(files, opts("CPU", "lite")));
+    // a phone, a small laptop or a browser without WebGPU starts one step down (the lighter pose model); every
+    // device is then watched frame by frame and eased down further only if it can't keep up (see govern)
+    const weak = /iPhone|iPad|Android/i.test(navigator.userAgent) || (navigator.hardwareConcurrency || 8) <= 4 || !("gpu" in navigator);
+    this.tier = weak ? 1 : 0;
+    this.makePose = (model) => PoseLandmarker.createFromOptions(files, opts("GPU", model)).catch(() => PoseLandmarker.createFromOptions(files, opts("CPU", "lite")));
+    this.pose = await this.makePose(this.tier ? "lite" : "full");
     if (this.dead) return;
     // a soft room-like environment; its strength and colour follow the video
     this.scene.environment = new THREE.PMREMGenerator(this.renderer).fromScene(new RoomEnvironment(), 0.04).texture;
@@ -155,6 +161,7 @@ export class TryOn {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 30, max: 30 } }, audio: false });
     if (this.dead) { stream.getTracks().forEach((t) => t.stop()); return; }
     this.video.srcObject = stream;
+    this.camInt = 1 / (stream.getVideoTracks()[0]?.getSettings().frameRate || 30);
     await this.video.play();
     await this.loadTee(design, tee);
     if (this.dead) return;
@@ -313,8 +320,27 @@ export class TryOn {
     this.sizeScale.set(w, l, w);
   }
 
+  /**
+   * Smooth on any device: the time each camera frame takes here (read the pose, place the tee, draw) is measured.
+   * If it keeps running past the camera's own frame time, the try-on eases down one step and stays there:
+   * 1 the lighter pose model, 2 lower render resolution and no soft shadow, 3 no cloth simulation.
+   * It never goes back up mid-session, so nothing flickers between levels.
+   */
+  private govern(busy: number, interval: number) {
+    this.busy = this.busy ? this.busy + (busy - this.busy) * 0.1 : busy;
+    const budget = Math.max(14, Math.min(40, interval * 1000)) * 0.85;
+    this.over = this.busy > budget ? this.over + 1 : 0;
+    if (this.over < 45 || this.tier >= 3 || this.swapping) return;
+    this.over = 0; this.busy = 0; this.tier++;
+    if (this.tier === 1 && this.makePose) {
+      this.swapping = true;
+      this.makePose("lite").then((p) => { if (this.dead) { p.close(); return; } const old = this.pose; this.pose = p; old?.close(); }).catch(() => {}).finally(() => { this.swapping = false; });
+    }
+    if (this.tier === 2) { this.key.castShadow = false; this.resize(); }
+  }
+
   resize() {
-    const r = this.canvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 1.5);
+    const r = this.canvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, this.tier >= 2 ? 1 : 1.5);
     this.renderer.setPixelRatio(dpr); this.renderer.setSize(r.width, r.height, false);
     this.arms.width = Math.round(r.width * dpr); this.arms.height = Math.round(r.height * dpr);
   }
@@ -323,6 +349,7 @@ export class TryOn {
     const v = this.video, t = now / 1000;
     const dt = this.prevT ? Math.min(0.1, t - this.prevT) : 1 / 30; this.prevT = t;
     if (v.readyState < 2 || !this.pose || !v.videoWidth) return;
+    const t0 = performance.now();
     // freeze this camera frame: the pose is read from it and it's what is shown, together with the tee
     const fc = this.frameCv;
     if (fc.width !== v.videoWidth || fc.height !== v.videoHeight) { fc.width = v.videoWidth; fc.height = v.videoHeight; }
@@ -330,13 +357,14 @@ export class TryOn {
     const r = this.pose.detectForVideo(fc, now);
     this.place(r.landmarks[0] ?? null, r.worldLandmarks[0] ?? null, t, dt);
     if (this.frameN++ % 10 === 0) this.light(dt * 10);
-    if (this.cloth && this.rig.visible) {
+    if (this.cloth && this.rig.visible && this.tier < 3) {
       this.cloth.setPose(this.m3.setFromMatrix4(this.m4.makeRotationFromQuaternion(this.rig.quaternion)), this.rig.position, this.rig.scale.x, dt);
       this.cloth.step(dt);
     }
     this.renderer.render(this.scene, this.camera);
     this.drawArms();
     if (!this.shown) { this.shown = true; v.style.opacity = "0"; }
+    this.govern(performance.now() - t0, this.camInt);
   }
 
   /** the room: brightness, colour, and which side the light comes from */
