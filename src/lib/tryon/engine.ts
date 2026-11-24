@@ -495,7 +495,12 @@ export class TryOn {
     };
     // the torso's turn is the noisiest thing the pose model gives (depth from one camera), so it gets its own
     // filter: it holds still when you hold still and follows with almost no lag when you turn
-    const qNew = frame(xA, up);
+    // Shrug one shoulder and only that shoulder rises: on a person the collarbone lifts it while the ribcage stays
+    // nearly level. So the chest takes half the tilt of your shoulder line (or the hips' tilt, when they're seen),
+    // and the collarbones below lift each shoulder of the tee the rest of the way, to where your shoulder is
+    const xH = hips ? this.P.get(R_HIP)!.clone().sub(this.P.get(L_HIP)!).normalize() : null;
+    const xT = new THREE.Vector3(xA.x, xH ? (xA.y + xH.y) / 2 : xA.y * 0.5, xA.z).normalize();
+    const qNew = frame(xT, up);
     if (!this.placed) { this.torsoQ.copy(qNew); this.hipQ.copy(qNew); this.qSpeed = 0; }
     else {
       const speed = this.torsoQ.angleTo(qNew) / Math.max(dt, 1e-3);
@@ -520,13 +525,35 @@ export class TryOn {
     this.rig.position.set(0, 0, 0); this.rig.scale.setScalar(this.body); this.rig.updateMatrixWorld(true);
     const inv = this.restTorso.clone().invert();
     const dC = this.torsoQ.clone().multiply(inv), dH = this.hipQ.clone().multiply(inv);
+    const ease = 1 - Math.exp(-dt * 32);
     const set = (name: string, delta: THREE.Quaternion, ease = 1) => this.setBone(name, delta, ease), carried = (name: string) => this.carried(name);
     set("root", dH);
     const spine = ["spine05", "spine04", "spine03", "spine02"];
     spine.forEach((nm, i) => set(nm, dH.clone().slerp(dC, (i + 1) / (spine.length + 1))));
     set("spine01", dC);
+    // the collarbones: each turned about the chest's forward axis so its shoulder joint meets yours, by the
+    // difference between your two shoulders (one shrugged, one dropped). Not both together: the pose model's
+    // shoulder points rise with raised arms and sit a little off the joints, and lifting both would balloon the sleeves
+    {
+      const jm0 = this.bone("upperarm01.L")!.getWorldPosition(new THREE.Vector3()).add(this.bone("upperarm01.R")!.getWorldPosition(new THREE.Vector3())).multiplyScalar(0.5);
+      this.rig.position.copy(mid).sub(jm0); this.rig.updateMatrixWorld(true);
+      const zc = new THREE.Vector3(0, 0, 1).applyQuaternion(this.torsoQ);
+      const ang: number[] = [];
+      for (const [S, sh] of [["L", R_SH], ["R", L_SH]] as const) {
+        const cb = this.bone(`clavicle.${S}`)!, head = cb.getWorldPosition(new THREE.Vector3());
+        const r = this.bone(`upperarm01.${S}`)!.getWorldPosition(new THREE.Vector3()).sub(head), t = this.P.get(sh)!.clone().sub(head);
+        r.addScaledVector(zc, -r.dot(zc)); t.addScaledVector(zc, -t.dot(zc));
+        ang.push(Math.atan2(zc.dot(new THREE.Vector3().crossVectors(r, t)), r.dot(t)));
+      }
+      // about the forward axis, raising the model's left (+x) shoulder is a positive turn, the right's negative
+      const lift = [ang[0], -ang[1]], both = (lift[0] + lift[1]) / 2;
+      (["L", "R"] as const).forEach((S, i) => {
+        const e = Math.max(-0.3, Math.min(0.3, lift[i] - both)) * (i ? -1 : 1);
+        set(`clavicle.${S}`, new THREE.Quaternion().setFromAxisAngle(zc, e).multiply(carried(`clavicle.${S}`)), ease);
+      });
+    }
     // each arm bone turns from where its parent carried it toward your elbow, then your wrist
-    const ease = 1 - Math.exp(-dt * 32), relax = 1 - Math.exp(-dt * 5);
+    const relax = 1 - Math.exp(-dt * 5);
     const aim = (bone: string, child: string, from: number, to: number, on: boolean) => {
       const D = carried(bone);
       if (!on) { set(bone, D, relax); return; }
@@ -571,7 +598,7 @@ export class TryOn {
     }
     // placed so the skeleton's shoulder joints straddle yours, exactly where the picture shows them
     const jm = this.bone("upperarm01.L")!.getWorldPosition(new THREE.Vector3()).add(this.bone("upperarm01.R")!.getWorldPosition(new THREE.Vector3())).multiplyScalar(0.5);
-    this.rig.position.copy(mid).sub(jm);
+    this.rig.position.add(mid.clone().sub(jm));
     this.rig.updateMatrixWorld(true);
     this.key.target.position.copy(mid); this.key.position.copy(mid).add(this.keyOff);
     this.hang(dt);
