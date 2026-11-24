@@ -106,7 +106,7 @@ export class TryOn {
   private tFilt = new Euro3(1.2, 4, 0.35, 1.2);   // where the body stands; distance smoothed hardest
   private armOn = [false, false];
   private fctx: CanvasRenderingContext2D;
-  private shown = false; private qSpeed = 0;
+  private keyOff = new THREE.Vector3(0, 2, 2); private shown = false; private qSpeed = 0;
   private lit = false; private lum = 0.5; private tint = new THREE.Color(1, 1, 1); private side = new THREE.Vector2();
   private P = new Map<number, THREE.Vector3>();   // filtered camera-space points (mirrored), metres
   private img: { x: number; y: number }[] = [];
@@ -116,6 +116,11 @@ export class TryOn {
     this.renderer = new THREE.WebGPURenderer({ canvas, antialias: true, alpha: true });
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.toneMapping = THREE.NeutralToneMapping;
+    // your head and neck throw a soft shadow on the collar and chest: the strongest cue that the tee is on a body
+    this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.key.castShadow = true; this.key.shadow.mapSize.set(1024, 1024);
+    Object.assign(this.key.shadow.camera, { left: -0.6, right: 0.6, top: 0.6, bottom: -0.6, near: 0.2, far: 8 });
+    this.key.shadow.bias = -0.0004; this.key.shadow.normalBias = 0.015; this.key.shadow.radius = 5;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.scene.add(this.key, this.key.target, this.fill, this.rig, this.occluders);
     this.probe.canvas.width = 16; this.probe.canvas.height = 9;
@@ -124,7 +129,7 @@ export class TryOn {
     const occ = new THREE.MeshBasicNodeMaterial({ colorWrite: false });
     this.neck = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 20, 1, true), occ);
     this.head = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), occ);
-    for (const m of [this.neck, this.head]) { m.renderOrder = -1; this.occluders.add(m); }
+    for (const m of [this.neck, this.head]) { m.renderOrder = -1; m.castShadow = true; this.occluders.add(m); }
     this.occluders.visible = false;
   }
 
@@ -235,7 +240,7 @@ export class TryOn {
       p.geo.setAttribute("sbI", new THREE.BufferAttribute(new Float32Array(4 * nv), 4));
       p.geo.setAttribute("sbW", new THREE.BufferAttribute(new Float32Array(4 * nv), 4));
       const sm = new THREE.SkinnedMesh(p.geo, outer);
-      sm.frustumCulled = false;
+      sm.frustumCulled = false; sm.receiveShadow = true;
       meshes.push(sm);
     }
     meshes[0].add(root);
@@ -304,7 +309,7 @@ export class TryOn {
     this.scene.environmentIntensity = 0.3 + this.lum * 1.3;
     this.key.color.copy(this.tint); this.key.intensity = 0.5 + this.lum * 2.4;
     this.fill.color.copy(this.tint); this.fill.intensity = 0.15 + this.lum * 0.4;
-    this.key.position.set(this.side.x * 3, 1.5 + this.side.y * 2, 1.5);
+    this.keyOff.set(this.side.x * 3, 1.5 + this.side.y * 2, 1.5);
     if (this.placed) this.key.target.position.copy(this.rig.position);
   }
 
@@ -372,6 +377,7 @@ export class TryOn {
     this.rig.scale.copy(this.sizeScale);
     this.rig.position.copy(mid).sub(this.anchor.clone().multiply(this.sizeScale).applyQuaternion(this.rig.quaternion));
     this.rig.updateMatrixWorld();
+    this.key.target.position.copy(this.rig.position); this.key.position.copy(this.rig.position).add(this.keyOff);
 
     // sleeves: each bone turns from the sleeve's rest line toward the upper arm (garment frame)
     const inv = this.rig.matrixWorld.clone().invert();
