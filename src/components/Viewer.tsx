@@ -6,6 +6,7 @@ import type { Format, Look, PhotoJob } from "@/lib/viewer/photo";
 import type { Variant } from "@/lib/viewer/raster";
 import { pickTier } from "@/lib/viewer/tier";
 import { prefetchTee, bitmap } from "@/lib/viewer/grab";
+import { printBackURL, printFrontURL } from "@/lib/viewer/print";
 import dynamic from "next/dynamic";
 
 // the camera try-on, and the pose model behind it, only download when someone asks for it
@@ -98,7 +99,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       const s = { design: lookRef.current.design, tee: lookRef.current.tee, yaw: angRef.current, goal: null as number | null, vel: 0, drag: false, dirty: true, photo: false, loading: false, variant: variantRef.current };
 
       const maps: Record<string, Promise<[ImageBitmap, ImageBitmap]>> = {};
-      const colourMaps = (d: Design, t: Colour) => (maps[`${d}-${t}`] ??= Promise.all([bitmap(`/tee/fit/tex/color-${d}-${t}.jpg`), bitmap(`/tee/fit/tex/orm-${d}-${t}.png`)]));
+      // the back and chest prints, at print resolution (the fabric itself is one flat colour)
+      const colourMaps = (d: Design, t: Colour) => (maps[`${d}-${t}`] ??= Promise.all([bitmap(printBackURL(d, t)), bitmap(printFrontURL(t))]));
       const normals: Record<string, Promise<ImageBitmap>> = {};
       let knitB: ImageBitmap | null = null;
       let geo: Awaited<ReturnType<typeof raster.load>> | null = null;
@@ -110,7 +112,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         knitB ??= await bitmap("/tee/fit/tex/knit-normal.png");
         p.imgNormal = nrm; p.imgKnit = knitB;
         await p.setGeometry(geo);
-        p.setImages({ color: c, orm: o, normal: nrm, knit: knitB });
+        p.setImages({ back: c, front: o, normal: nrm, knit: knitB });
         if (v.skin) p.skin = v.skin;
         p.setCamera(cam);
         p.setScene(scene, FABRIC[s.tee], s.tee === "cream");

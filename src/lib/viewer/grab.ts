@@ -24,7 +24,7 @@ export async function bitmap(url: string) {
 export function prefetchTee(v: { dir: string; size: string; pose: string; body: boolean }, design: string, tee: string) {
   const A = "/tee/fit/";
   const urls = [
-    `${A}${v.dir}/${v.pose}.glb`, `${A}tex/color-${design}-${tee}.jpg`, `${A}tex/orm-${design}-${tee}.png`,
+    `${A}${v.dir}/${v.pose}.glb`, `${A}tex/print-back-${design}-${tee}.webp`, `${A}tex/print-front-${tee}.webp`,
     `${A}tex/normal-${v.size}.png`, `${A}tex/knit-normal.png`, "/draco/draco_wasm_wrapper.js", "/draco/draco_decoder.wasm",
   ];
   if (v.body) urls.push(`${A}${v.dir}/body-${v.pose}.glb`);

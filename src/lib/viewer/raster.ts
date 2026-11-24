@@ -1,7 +1,8 @@
 // Real-time view on three.js WebGPURenderer (falls back to WebGL2 by itself where WebGPU is missing).
 // It is the preview you drag; the path tracer takes over the moment you let go.
 import * as THREE from "three/webgpu";
-import { texture, uv, vec2, vec3, float, normalMap, normalize, uniform, mix, vertexColor } from "three/tsl";
+import { texture, uv, vec2, vec3, float, normalMap, normalize, uniform, mix, vertexColor, step } from "three/tsl";
+import { PRINT_BACK, PRINT_FRONT, type Rect } from "./print";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RectAreaLightTexturesLib } from "three/addons/lights/RectAreaLightTexturesLib.js";
@@ -60,8 +61,10 @@ export class Raster {
   cloth: Cloth | null = null;
   maxAniso = 8;
   knit = uniform(0.55);
-  colorTex: Record<string, THREE.Texture> = {};
-  ormTex: Record<string, THREE.Texture> = {};
+  backTex: Record<string, THREE.Texture> = {};
+  frontTex: Record<string, THREE.Texture> = {};
+  /** the fabric's own colour (the prints are laid over it) */
+  private fabric = uniform(new THREE.Color());
   tris = 0;
   isWebGPU = false;
 
@@ -114,23 +117,37 @@ export class Raster {
     // the print stays crisp across the cloth as it turns away: full anisotropic filtering
     t.anisotropy = this.maxAniso; t.needsUpdate = true; return t;
   }
-  /** colour + roughness/ink maps for one design in one colourway, loaded once */
+  /** the back and chest prints for one design in one colourway, at print resolution, loaded once */
   private async look(design: string, t: "black" | "cream") {
     const key = `${design}-${t}`;
-    if (!this.colorTex[key]) {
-      const [c, o] = await Promise.all([this.tx(`tex/color-${key}.jpg`, true), this.tx(`tex/orm-${key}.png`, false)]);
-      this.colorTex[key] = c; this.ormTex[key] = o;
+    if (!this.backTex[key]) {
+      const [b, f] = await Promise.all([this.tx(`tex/print-back-${key}.webp`, true), this.frontTex[t] ? Promise.resolve(this.frontTex[t]) : this.tx(`tex/print-front-${t}.webp`, true)]);
+      this.backTex[key] = b; this.frontTex[t] = f;
     }
-    return [this.colorTex[key], this.ormTex[key]] as const;
+    return [this.backTex[key], this.frontTex[t]] as const;
   }
 
   async setLook(design: string, t: "black" | "cream") {
-    const [c, o] = await this.look(design, t);
-    if (this.nodes) { this.nodes.color.value = c; this.nodes.orm.value = o; }
+    const [b, f] = await this.look(design, t);
+    if (this.nodes) { this.nodes.back.value = b; this.nodes.front.value = f; }
+    this.fabric.value.setRGB(...FABRIC[t], THREE.LinearSRGBColorSpace);
     this.inner.color.setRGB(...FABRIC[t], THREE.LinearSRGBColorSpace);
   }
 
-  private nodes: { color: ReturnType<typeof texture>; orm: ReturnType<typeof texture>; normal: ReturnType<typeof texture> } | null = null;
+  /** swap in a sharper back print (the full source resolution, fetched when someone zooms in) */
+  setBackPrint(design: string, t: "black" | "cream", tex: THREE.Texture) {
+    tex.anisotropy = this.maxAniso;
+    this.backTex[`${design}-${t}`] = tex;
+    if (this.nodes && this.current === `${design}-${t}`) this.nodes.back.value = tex;
+  }
+  current = "";
+  async printTexture(url: string) {
+    const t = new THREE.Texture(await bitmap(url));
+    t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true;
+    return t;
+  }
+
+  private nodes: { back: ReturnType<typeof texture>; front: ReturnType<typeof texture>; normal: ReturnType<typeof texture> } | null = null;
   private normals: Record<string, THREE.Texture> = {};
   private gl: GLTFLoader | null = null;
   private loaded: THREE.Object3D[] = [];
@@ -154,16 +171,26 @@ export class Raster {
       this.nodes ? Promise.resolve(null) : this.tx("tex/knit-normal.png", false),
     ]);
     this.normals[v.size] = normalP;
+    this.current = `${design}-${tee}`;
+    this.fabric.value.setRGB(...FABRIC[tee], THREE.LinearSRGBColorSpace);
     if (!this.nodes && knitT) {
       knitT.wrapS = knitT.wrapT = THREE.RepeatWrapping;
-      const colorN = texture(c0), ormN = texture(o0), normalN = texture(normalP);
+      // the prints, each at its own resolution, laid over the fabric (stored premultiplied: fabric*(1-a) + ink)
+      const place = (r: Rect) => uv().sub(vec2(r[0], r[1])).div(vec2(r[2], r[3]));
+      const inside = (p: ReturnType<typeof place>) => step(0, p.x).mul(step(p.x, 1)).mul(step(0, p.y)).mul(step(p.y, 1));
+      const pB = place(PRINT_BACK), pF = place(PRINT_FRONT);
+      const backN = texture(c0, pB), frontN = texture(o0, pF), normalN = texture(normalP);
+      const kB = inside(pB), kF = inside(pF);
+      const aB = backN.a.mul(kB), aF = frontN.a.mul(kF);
+      const ink = aB.add(aF.mul(float(1).sub(aB)));
+      const inkRGB = backN.rgb.mul(kB).add(frontN.rgb.mul(kF).mul(float(1).sub(aB)));
       const m = new THREE.MeshPhysicalNodeMaterial({ roughness: 1, metalness: 0, specularIntensity: 0.5 });
-      m.colorNode = colorN;
-      m.roughnessNode = ormN.g;
+      m.colorNode = this.fabric.mul(float(1).sub(ink)).add(inkRGB);
+      m.roughnessNode = float(0.92).sub(ink.mul(0.32));
       // ambient occlusion is baked into the mesh (it changes with every size and pose)
       m.aoNode = mix(float(1), vertexColor().r, 0.85);
       // cotton fuzz only off the ink: over the print it reads as a white haze
-      m.sheenNode = vec3(float(0.35 * 0.06).mul(float(1).sub(ormN.b)));   // same fitted strength as the path tracer
+      m.sheenNode = vec3(float(0.35 * 0.06).mul(float(1).sub(ink)));   // same fitted strength as the path tracer
       m.sheenRoughnessNode = float(0.3);
       // construction relief (rib, stitches) + jersey loops, whiteout blend
       const n1 = normalN.xyz.mul(2).sub(1);
@@ -173,9 +200,9 @@ export class Raster {
       m.normalNode = cloth.bend(normalMap(blended.mul(0.5).add(0.5)));
       m.positionNode = cloth.position;
       this.outer = m;
-      this.nodes = { color: colorN, orm: ormN, normal: normalN };
+      this.nodes = { back: backN, front: frontN, normal: normalN };
     } else if (this.nodes) {
-      this.nodes.color.value = c0; this.nodes.orm.value = o0; this.nodes.normal.value = normalP;
+      this.nodes.back.value = c0; this.nodes.front.value = o0; this.nodes.normal.value = normalP;
     }
     this.inner.color.setRGB(...FABRIC[tee], THREE.LinearSRGBColorSpace);
     if (v.skin) this.skinMat.color.setRGB(...v.skin, THREE.LinearSRGBColorSpace);

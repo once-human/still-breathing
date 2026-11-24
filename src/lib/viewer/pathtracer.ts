@@ -5,7 +5,8 @@ import { buildBVHAsync } from "./bvh";
 import { CAMERA, VFOV, ASPECT, KNIT_REPEAT, cameraBasis, lightFrame, radiance, type Camera, type Scene, type V3 } from "./scene";
 
 export type TeeGeometry = { pos: Float32Array; nrm: Float32Array; uv: Float32Array; idx: Uint32Array; mat: Uint8Array };
-export type TeeImages = { color: ImageBitmap; orm: ImageBitmap; normal: ImageBitmap; knit: ImageBitmap };
+/** back: the back print, front: the chest print (both premultiplied, at print resolution) */
+export type TeeImages = { back: ImageBitmap; front: ImageBitmap; normal: ImageBitmap; knit: ImageBitmap };
 export type View = { yaw: number; crop: [number, number, number]; knit: boolean };
 
 const U_SIZE = 256 + 4 * 80;
@@ -151,13 +152,13 @@ export class PathTracer {
       return t;
     };
     for (const t of Object.values(this.tex)) t.destroy();
-    this.tex = { color: mk(im.color, true), orm: mk(im.orm, false), normal: mk(im.normal, false), knit: mk(im.knit, false) };
+    this.tex = { back: mk(im.back, true), front: mk(im.front, true), normal: mk(im.normal, false), knit: mk(im.knit, false) };
     this.traceBG = null; this.reset();
   }
 
   /** only the colourway maps change between black and off white */
-  setColourway(color: ImageBitmap, orm: ImageBitmap) {
-    this.setImages({ color, orm, normal: this.imgNormal!, knit: this.imgKnit! });
+  setColourway(back: ImageBitmap, front: ImageBitmap) {
+    this.setImages({ back, front, normal: this.imgNormal!, knit: this.imgKnit! });
   }
   imgNormal: ImageBitmap | null = null;
   imgKnit: ImageBitmap | null = null;
@@ -212,7 +213,7 @@ export class PathTracer {
     this.device.queue.writeBuffer(this.ubuf, 0, f);
   }
 
-  get ready() { return !!(this.geo && this.tex.color && this.accum && this.scene); }
+  get ready() { return !!(this.geo && this.tex.back && this.accum && this.scene); }
 
   /**
    * Background work in strips: traces as many rows as fit in `budgetMs` of GPU time (learned as it goes), so
@@ -252,8 +253,8 @@ export class PathTracer {
           { binding: 4, resource: { buffer: this.geo!.verts } },
           { binding: 5, resource: { buffer: this.accum! } },
           { binding: 6, resource: this.sampler },
-          { binding: 7, resource: this.tex.color.createView() },
-          { binding: 8, resource: this.tex.orm.createView() },
+          { binding: 7, resource: this.tex.back.createView() },
+          { binding: 8, resource: this.tex.front.createView() },
           { binding: 9, resource: this.tex.normal.createView() },
           { binding: 10, resource: this.tex.knit.createView() },
           { binding: 11, resource: { buffer: this.gbuf! } },

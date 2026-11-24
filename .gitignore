@@ -15,3 +15,5 @@ next-env.d.ts
 pipeline/detail-*.png
 pipeline/atlas-[CD]-*.png
 pipeline/inkmask-[CD]-*.png
+pipeline/figma-in/
+pipeline/figma-out/

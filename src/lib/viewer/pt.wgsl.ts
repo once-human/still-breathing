@@ -1,6 +1,9 @@
 // WebGPU path tracer: the same cotton + ink material, sweep and softboxes as the Cycles renders.
 // One sample per pixel per dispatch, accumulated in a float buffer, shown through Khronos PBR Neutral.
 
+import { PRINT_BACK, PRINT_FRONT, type Rect } from "./print";
+const r4 = (r: Rect) => `vec4f(${r.map((x) => x.toFixed(8)).join(", ")})`;
+
 export const TRACE_WGSL = /* wgsl */ `
 struct Light { pos: vec3f, cdf: f32, ex: vec3f, area: f32, ey: vec3f, psel: f32, L: vec3f, _p: f32, n: vec3f, _q: f32 };
 struct U {
@@ -26,8 +29,8 @@ struct U {
 @group(0) @binding(4) var<storage, read> verts: array<vec4f>;
 @group(0) @binding(5) var<storage, read_write> accum: array<vec4f>;
 @group(0) @binding(6) var samp: sampler;
-@group(0) @binding(7) var texColor: texture_2d<f32>;
-@group(0) @binding(8) var texOrm: texture_2d<f32>;
+@group(0) @binding(7) var texBack: texture_2d<f32>;    // back print, premultiplied
+@group(0) @binding(8) var texFront: texture_2d<f32>;   // chest print, premultiplied
 @group(0) @binding(9) var texNormal: texture_2d<f32>;
 @group(0) @binding(10) var texKnit: texture_2d<f32>;
 // first-hit guides for the denoiser, summed over samples: [normal.xyz, depth], [albedo.rgb, count]
@@ -141,6 +144,13 @@ fn vnoise(x: vec3f) -> f32 {
              mix(mix(hash3(i + vec3f(0, 0, 1)), hash3(i + vec3f(1, 0, 1)), w.x), mix(hash3(i + vec3f(0, 1, 1)), hash3(i + vec3f(1, 1, 1)), w.x), w.y), w.z);
 }
 
+// a print over its rectangle of the garment's texture; nothing outside it
+fn printAt(t: texture_2d<f32>, uv: vec2f, r: vec4f) -> vec4f {
+  let p = (uv - r.xy) / r.zw;
+  if (any(p < vec2f(0.0)) || any(p > vec2f(1.0))) { return vec4f(0.0); }
+  return textureSampleLevel(t, samp, p, 0.0);
+}
+
 fn teeSurf(h: Hit, ro: vec3f, rd: vec3f) -> Surf {
   let c = u.yaw.x; let s = u.yaw.y;
   let iv = triv[h.tri];
@@ -170,10 +180,13 @@ fn teeSurf(h: Hit, ro: vec3f, rd: vec3f) -> Surf {
     mn = normalize(vec3f(mn.xy + kn.xy, mn.z * kn.z));
     let np = normalize(T * mn.x + B * mn.y + n * mn.z);
     n = select(n, np, dot(np, ng) > 0.02);
-    let orm = textureSampleLevel(texOrm, samp, uv, 0.0);
+    let pb = printAt(texBack, uv, ${r4(PRINT_BACK)});
+    let pf = printAt(texFront, uv, ${r4(PRINT_FRONT)});
+    let ink = pb.a + pf.a * (1.0 - pb.a);
+    let inkRGB = pb.rgb + pf.rgb * (1.0 - pb.a);
     let g = mix(0.93, 1.06, vnoise(pObj * 900.0)) * u.grain + (1.0 - u.grain);
-    S.base = textureSampleLevel(texColor, samp, uv, 0.0).rgb * g;
-    S.rough = orm.g; S.sheen = 0.35 * (1.0 - orm.b); S.spec = 0.02;
+    S.base = (u.fabric * (1.0 - ink) + inkRGB) * g;
+    S.rough = 0.92 - 0.32 * ink; S.sheen = 0.35 * (1.0 - ink); S.spec = 0.02;
   } else if (iv.w == 3u) {
     S.base = vec3f(0.05, 0.045, 0.04); S.rough = 0.7; S.sheen = 0.0; S.spec = 0.03;   // the stool
   } else if (iv.w == 2u) {

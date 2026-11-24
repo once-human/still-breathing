@@ -1,0 +1,84 @@
+# python3 printtex.py <outdir> : the prints as their own sharp textures for the viewer and the path tracer
+#   print-back-<d>-<tee>.webp   the back, 2048 x 2731 (54 px/cm over 38.1 x 50.8 cm), RGBA, alpha = ink
+#   print-front-<tee>.webp      the chest lettering, 632 x 976 (60 px/cm over 10.5 cm), RGBA
+# The fabric itself is one flat colour, so the prints are all the detail there is: they get the pixels.
+# Stored premultiplied (colour already times coverage, exact bytes kept under clear pixels), so filtering and
+# mipmaps never pull a dark or light fringe in from the clear surround: shaded as fabric*(1-a) + rgb.
+import sys, numpy as np
+from PIL import Image
+OUT = sys.argv[1]
+BW, BH = 2048, 2731
+TEE = {"black": (21, 21, 21), "cream": (255, 250, 231)}
+HALO = {"black": (21, 21, 21), "cream": (236, 227, 206)}   # halo fill used in the Figma file: holes in the ink
+
+def knockout(a, tee):
+    # halos drawn in the tee colour are not ink; on the real print they're holes that show the fabric
+    d = np.abs(a[..., :3].astype(int) - np.array(TEE[tee])).sum(-1)
+    d2 = np.abs(a[..., :3].astype(int) - np.array(HALO[tee])).sum(-1)
+    a[..., 3] = np.where((d < 24) | (d2 < 24), 0, a[..., 3])
+    return a
+
+def resize_rgba(img, size):
+    # premultiplied, so edges don't pick up the colour of transparent pixels
+    a = np.array(img.convert("RGBA")).astype(np.float32) / 255
+    a[..., :3] *= a[..., 3:4]
+    ch = [np.array(Image.fromarray(a[..., i]).resize(size, Image.LANCZOS)) for i in range(4)]
+    out = np.clip(np.dstack(ch), 0, 1)
+    out[..., :3] /= np.maximum(out[..., 3:4], 1e-4)
+    return out
+
+def recut(img, size):
+    # flat-ink vector lettering exported small: scale it up, then cut the edges again to one pixel of
+    # antialiasing at the new size, as if it had been exported there
+    out = resize_rgba(img, size)
+    k = size[0] / img.width
+    out[..., 3] = np.clip((out[..., 3] - 0.5) * k + 0.5, 0, 1)
+    return out
+
+def over(dst, src):
+    a = src[..., 3:4]
+    rgb = src[..., :3] * a + dst[..., :3] * dst[..., 3:4] * (1 - a)
+    al = a + dst[..., 3:4] * (1 - a)
+    return np.dstack([rgb / np.maximum(al, 1e-4), al])
+
+def save8(a8, path):
+    a = a8.astype(np.float32)
+    a[..., :3] *= a[..., 3:4] / 255
+    Image.fromarray((a + 0.5).astype(np.uint8), "RGBA").save(path, lossless=True, quality=100, method=6, exact=True)
+
+def save(arr, path):
+    save8((np.clip(arr, 0, 1) * 255 + 0.5).astype(np.uint8), path)
+
+BACK = {("a", "cream"): ("art/art-a-map/art-cream-al3.png", "overlays/ov-back-cream.png"),
+        ("b", "black"): ("art/art-b-lines/art-black-al3.png", "overlays/ov-back-black.png"),
+        ("c", "black"): ("art/art-c-breath/art-black.png", None),
+        ("d", "cream"): ("art/art-d-line/art-cream.png", None)}
+pairs = [tuple(p.split("-")) for p in sys.argv[2].split(",")] if len(sys.argv) > 2 else list(BACK)
+for d, tee in pairs:
+    art, ov = BACK[(d, tee)]
+    b = resize_rgba(Image.open(art), (BW, BH))
+    if ov: b = over(b, recut(Image.open(ov), (BW, BH)))
+    b8 = knockout((np.clip(b, 0, 1) * 255 + 0.5).astype(np.uint8), tee)
+    save8(b8, f"{OUT}/print-back-{d}-{tee}.webp")
+
+# chest: again.. in four scripts, rebuilt at 4x from the Figma export (the old one was these lines at 1x)
+hi = np.array(Image.open("overlays/hi/front-B-black.png").convert("RGB")).astype(np.float32)
+bg = hi[5, 5]
+INK = {"black": [(241, 231, 208), (76, 102, 245)], "cream": [(29, 28, 26), (44, 70, 190)]}
+src_inks = np.array(INK["black"], np.float32)
+# per pixel: which ink, and how much of it over the background
+dist = np.stack([np.linalg.norm(hi - c, axis=-1) for c in src_inks])
+which = dist.argmin(0)
+span = np.linalg.norm(src_inks - bg, axis=-1)[which]
+alpha = np.clip(np.linalg.norm(hi - bg, axis=-1) / span, 0, 1)
+LINES = [((138, 333, 535, 1160), (0, 0)), ((374, 563, 120, 744), (2, 59)), ((610, 811, 121, 591), (2, 118)), ((860, 1112, 120, 570), (2, 181))]
+for tee in ("black", "cream"):
+    inks = np.array(INK[tee], np.float32) / 255
+    out = np.zeros((976, 632, 4), np.float32)
+    for (y0, y1, x0, x1), (ox, oy) in LINES:
+        X, Y = ox * 4, oy * 4
+        h, w = min(y1 - y0, 976 - Y), min(x1 - x0, 632 - X)
+        out[Y:Y + h, X:X + w, :3] = inks[which[y0:y0 + h, x0:x0 + w]]
+        out[Y:Y + h, X:X + w, 3] = alpha[y0:y0 + h, x0:x0 + w]
+    save(out, f"{OUT}/print-front-{tee}.webp")
+print("prints ok")
