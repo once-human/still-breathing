@@ -52,6 +52,9 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
   const [developing, setDeveloping] = useState<number | null>(null);
   const [photo, setPhoto] = useState<{ url: string; blob: Blob; name: string } | null>(null);
   const stopPhoto = useRef<AbortController | null>(null);
+  // no 3D at all (no WebGPU, no WebGL): show the path-traced frames instead, 12 angles, drag to turn
+  const [flat, setFlat] = useState<number | null>(null);
+  const flatDrag = useRef<{ x: number; a: number } | null>(null);
 
   useEffect(() => {
     let dead = false;
@@ -233,7 +236,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       if (JSON.stringify(variantRef.current) !== JSON.stringify(s.variant)) engine.current.setVariant(variantRef.current);
       const want = lookRef.current;
       if (want.tee !== s.tee || want.design !== s.design) engine.current.setLook(want.design, want.tee);
-    })().catch((e) => { console.error(e); setStatus("the 3D view could not start"); });
+    })().catch((e) => { console.warn("3D view off, showing the rendered frames", e); setStatus(""); setFlat(0); });
     return () => { dead = true; engine.current?.dispose(); engine.current = null; };
   }, []);
 
@@ -277,22 +280,36 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         <canvas ref={traceCv} className="absolute inset-0 h-full w-full opacity-0 transition-opacity duration-500" />
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img ref={still} alt="" className="pointer-events-none absolute inset-0 h-full w-full opacity-0" />
+        {flat !== null ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={`/tee/still/${design}/a${flat}.png`} alt="" draggable={false}
+            className="absolute inset-0 h-full w-full"
+            onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); flatDrag.current = { x: e.clientX, a: flat }; }}
+            onPointerMove={(e) => {
+              const d = flatDrag.current; if (!d) return;
+              const steps = Math.round((e.clientX - d.x) / 45);
+              setFlat((((d.a + steps * 30) % 360) + 360) % 360);
+            }}
+            onPointerUp={() => { flatDrag.current = null; }}
+          />
+        ) : null}
         <p className="pointer-events-none absolute bottom-3 left-3 text-[12px] text-black/60 tnum">{status}</p>
       </div>
       <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1 text-[13px]">
         {VIEWS.map((v, i) => (
-          <button key={v.label} onClick={() => { setView(i); engine.current?.turnTo(v.yaw); }} className={i === view && !magnify ? "font-semibold" : "text-quiet hover:text-ink"}>
+          <button key={v.label} onClick={() => { setView(i); engine.current?.turnTo(v.yaw); if (flat !== null) setFlat(((Math.round(v.yaw / 30) * 30) % 360 + 360) % 360); }} className={`hit ${i === view && !magnify ? "font-semibold" : "text-quiet hover:text-ink"}`}>
             {v.label}
           </button>
         ))}
-        <button onClick={() => { const on = !magnify; setMagnify(on); engine.current?.setMagnify(on); }} className={`ml-auto ${magnify ? "font-semibold" : "text-quiet hover:text-ink"}`}>
+        <button onClick={() => { const on = !magnify; setMagnify(on); engine.current?.setMagnify(on); }} className={`hit ml-auto ${magnify ? "font-semibold" : "text-quiet hover:text-ink"}`}>
           {magnify ? "close loupe" : "loupe"}
         </button>
       </div>
       <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-line pt-1.5 text-[13px]" role="group" aria-label="Light">
         <span className="text-quiet">light</span>
         {SCENE_LIST.map((x) => (
-          <button key={x.id} onClick={() => { sceneRef.current = x.id; setSceneId(x.id); engine.current?.setScene(x.id); }} className={x.id === sceneId ? "font-semibold" : "text-quiet hover:text-ink"}>
+          <button key={x.id} onClick={() => { sceneRef.current = x.id; setSceneId(x.id); engine.current?.setScene(x.id); }} className={`hit ${x.id === sceneId ? "font-semibold" : "text-quiet hover:text-ink"}`}>
             {x.label}
           </button>
         ))}

@@ -1,16 +1,22 @@
 import sizes from "../../public/tee/fred/sizes.json";
 
-/** Lineup 01: the Mumbai tee. Everything the page says about it lives here. */
+/** Lineup 01: again.., the shirts for the December shows. Everything the page says about them lives here. */
 
 export type Colour = "black" | "cream";
-export type Design = "b" | "a";
+export type Design = "b" | "a" | "c" | "d";
+export type City = "mumbai" | "bengaluru";
 
-/** Lineup 01 has two shirts. Same blank, same front; the back is what changes. */
-/** Each shirt comes in one colour only: the crowd is a night shirt, the map is a day shirt. */
-export const DESIGNS: Record<Design, { no: string; name: string; colour: Colour; back: string }> = {
-  b: { no: "01", name: "crowd", colour: "black", back: "the crowd at the barrier, drawn in lines, lit by the stage" },
-  a: { no: "02", name: "map", colour: "cream", back: "the race course from above, the sea beside it, the sound rolling out from the stage" },
+/**
+ * Two shirts per city. Same blank, same front (again.. in four scripts); the back is what changes.
+ * Each shirt comes in one colour only: a night shirt in black, a day shirt in off white.
+ */
+export const DESIGNS: Record<Design, { no: string; name: string; city: City; colour: Colour; back: string }> = {
+  b: { no: "01", name: "crowd", city: "mumbai", colour: "black", back: "the crowd at the barrier, drawn in lines, lit by the stage" },
+  a: { no: "02", name: "map", city: "mumbai", colour: "cream", back: "the race course from above, the sea beside it, the sound rolling out from the stage" },
+  c: { no: "03", name: "breath", city: "bengaluru", colour: "black", back: "the crowd through a heat camera on a cold December night, hands up, every breath rising" },
+  d: { no: "04", name: "end of the line", city: "bengaluru", colour: "cream", back: "the green line out to Madavara, its last station, where the show is: the last city, the end of the line" },
 };
+export const CITIES: City[] = ["mumbai", "bengaluru"];
 
 export const COLOURS: Record<Colour, { name: string; hex: string; ink: string }> = {
   black: { name: "black", hex: "#151515", ink: "#4C66F5" },
@@ -34,8 +40,7 @@ export const SHOWS = [
 
 export const THE_TEE = {
   lineup: "lineup 01",
-  name: "again.. mumbai",
-  lede: "again.. in four scripts across the chest, a drawing of the night across the whole back. Heavy cotton, cut loose, made for a long night on your feet.",
+  lede: "again.. in four scripts across the chest, the city across the whole back. Heavy cotton, cut loose, made for a long night on your feet.",
   cloth: [
     ["cotton", "100% combed cotton, single jersey"],
     ["weight", "240 g/m², heavy and dense, not see-through"],

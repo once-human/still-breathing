@@ -42,9 +42,9 @@ jobs:
       - name: Atlases, per-size construction detail, web maps
         working-directory: pipeline
         run: |
-          python3 texture.py B black; python3 texture.py A cream
+          python3 texture.py B black; python3 texture.py A cream; python3 texture.py C black; python3 texture.py D cream
           for s in XS S M L XL 2XL; do SIZE=$s python3 texture.py detail; done
-          mkdir -p ../tex && python3 webtex.py ../tex B-black,A-cream
+          mkdir -p ../tex && python3 webtex.py ../tex B-black,A-cream,C-black,D-cream
           ls -la ../tex
       - uses: actions/upload-artifact@v4
         with: { name: fit-tex, path: tex, retention-days: 7 }

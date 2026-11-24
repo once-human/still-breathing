@@ -2,6 +2,43 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.3.0 — 2026-11-24
+Bengaluru gets its two shirts. Everything is for sale, one colour per shirt, a cleaner print, and the tee on bodies like the people buying it.
+
+### Shirts
+- Bengaluru, drawn from scratch:
+  - 03 breath (black): the crowd as a heat camera on the stage sees it on a December night, hands up, breath rising into the cold. Rendered from our own five Indian bodies (460 people), with a thermal readout, ಉಸಿರು / breath.
+  - 04 end of the line (off white): the Green Line northbound from Majestic to Madavara, its last station and the show's, set in Kannada and English. Bengaluru is the last city of the tour. Mahalakshmi carries two blue dots for Mumbai's ground.
+- The picker groups the shirts by city; the heading follows the shirt (again.. mumbai / again.. bengaluru).
+- One colour each: 01 crowd is black, 02 map is off white. No colour picker.
+- Front: "again.." in four scripts (again.. / फिर से.. / पुन्हा.. / ಮತ್ತೆ..) on the left chest at chest height. No name, no date.
+- Back: the art fills the largest print the blank allows (15 x 20 in at 3:4).
+- Copy says what it is: made to order, for sale, sent anywhere in India.
+
+### Viewer
+- No grain, ever: the path tracer works out of sight and the denoised frame fades in over the real-time view. No sample counters.
+- Edge-avoiding à-trous denoiser (normal, depth and luminance guided, albedo demodulated), so folds and print edges stay sharp at 40 samples.
+- Photo mode: story (1080 x 1920) or post (1080 x 1350), clean or film, with a caption. 64 samples + denoise, seconds instead of minutes. Save or share.
+- Lights cut to three that look real: studio, window, the show (dark room, cool stage wash, one warm spot, a dim front-of-house fill). Overcast, tube light and phone flash are gone.
+- The shop tee hangs on a smooth ghost form, so the empty tee shows no chest shape.
+- Fit mode: say man or woman, height and weight, pick a skin tone; the tee is shown in your size on the nearest of five simulated Indian bodies, standing, hands up or sitting, with plain words for how it fits (room round the chest, where the hem falls, how far it rides up).
+- Fallback frames are re-rendered from the ghost-form tee. With no 3D at all, the page shows them instead of an error, drag to turn.
+- Bigger tap targets for the small text buttons on phones.
+- The shop camera steps back a little so the collar has room.
+
+### Page
+- A live "now" strip that writes itself: days to the next show, the sky over it right now, the sunset, the show-night forecast once it's in range. Public forecast for three fixed places; nothing about the visitor leaves the browser.
+
+### Pipeline
+- `body.py` builds five Indian bodies from height and chest (m163, m170, m177, f155, f162); chest is measured on the connected torso loop.
+- `pattern.py` grades every size from the chart; the atlas is neck-anchored so the print sits at the same place on every size.
+- `build.py` sews any size onto any body and moves it through standing, hands up and sitting (stool collider); `FORM=1` swaps the torso for the ghost form.
+- `export.py` bakes cloth AO into the vertices, exports tee + body per pose, `fit.json` measures and `proxy.glb`.
+- `.github/workflows/fit.yml` runs all 15 body-size sims plus the ghost form in parallel and publishes them to `public/tee/fit/`.
+- `render.yml` renders fallback frames from the published ghost-form tee (`GLB=` mode in `render.py`).
+- `export.py` uses plain Catmull-Clark (the limit-surface evaluator needed ~3 GB and killed CI runners) and measures the body on frame 1 (it was measured on the saved sitting frame, which shifted every waistband reading by the sit drop; published numbers corrected).
+- `art/make_line.py`, `art/make_breath.py` + `art/breath_post.py` generate the Bengaluru backs; `fonts/` holds Bricolage Grotesque and Noto Sans Kannada for them.
+
 ## 0.2.0 — 2026-11-24
 Lineup 01 is now two shirts, and the viewer path-traces in the browser.
 

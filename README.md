@@ -9,16 +9,17 @@ Live: https://still-breathing-studio.vercel.app (Vercel, deploys on every push t
 - `public/tee/` meshes, maps and offline frames the viewer loads
 - `pipeline/` pattern, body, cloth sim, textures and renders
   - `pattern.py` flat pattern of the Qikink UC22 blank (sizes in `sizes.py`)
-  - `body.py` the body the tee is draped on (MakeHuman via the MPFB Blender extension)
-  - `build.py` sews and drapes the tee -> `tee-drape.blend`
+  - `body.py` builds a body from height and chest (MakeHuman via the MPFB Blender extension); `bodies.sh` makes the five in `bodies/`
+  - `build.py` sews a size onto a body and poses it (standing, hands up, sitting); `FORM=1` drapes the shop tee on a ghost form
   - `texture.py`, `knit.py` colour atlas, ink mask, stitch relief, knit map
-  - `render.py` Cycles stills and turntable frames; `export.py`, `webtex.py` web model and textures
+  - `render.py` Cycles stills and turntable frames; `export.py` web meshes + fit numbers per pose; `webtex.py` web textures
 - `render.ipynb` one-click GPU rendering on Google Colab
-- `.github/workflows/render.yml` turntable rendering on GitHub Actions
+- `.github/workflows/fit.yml` every body x size simulation, published to `public/tee/fit/`
+- `.github/workflows/render.yml` fallback turntable frames from the ghost-form tee, published to `public/tee/still/`
 
 ## Rendering
 - Laptop: `cd pipeline && blender -b tee-drape.blend -P render.py -- B black front out.png 96`
-- GitHub: Actions → *render* → Run workflow. Frames are split across runners and committed to `public/tee/`.
+- GitHub: Actions → *fit* → Run workflow first (sims), then *render* → Run workflow. Both split the work across runners and commit to `public/tee/`.
 - Colab: open `render.ipynb` in Colab, Runtime → Change runtime type → T4 GPU, Run all.
 
 ## Versions

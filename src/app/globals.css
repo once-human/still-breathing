@@ -58,3 +58,6 @@ html.lenis, html.lenis body { height: auto; }
 @media (prefers-reduced-motion: reduce) {
   [class*="animate-["] { animation: none !important; }
 }
+
+/* a thumb-sized hit area around small text buttons, without moving the layout */
+.hit { padding-block: 0.6rem; margin-block: -0.6rem; }

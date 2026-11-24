@@ -5,7 +5,7 @@ import { Viewer } from "@/components/Viewer";
 import { Countdown } from "@/components/Countdown";
 import { Fit, SHOP } from "@/components/Fit";
 import type { Variant } from "@/lib/viewer/raster";
-import { COLOURS, DESIGNS, SIZES, SIZE_ORDER, SHOWS, THE_TEE, type Design, type Size } from "@/content/tee";
+import { CITIES, COLOURS, DESIGNS, SIZES, SIZE_ORDER, SHOWS, THE_TEE, type Design, type Size } from "@/content/tee";
 
 const fmtDays = (days: string[]) => days.map((d) => d.slice(8, 10)).join("+") + "." + days[0].slice(5, 7);
 
@@ -24,16 +24,21 @@ export function Product() {
       <div className="md:col-span-5 lg:col-span-4 lg:col-start-9">
         <div className="md:sticky md:top-16">
           <p className="border-t border-line pt-1.5 text-[13px] text-quiet">{THE_TEE.lineup} · the india shows, december</p>
-          <div className="mt-4 flex gap-5 text-[15px]" role="group" aria-label="Design">
-            {(Object.keys(DESIGNS) as Design[]).map((d) => (
-              <button key={d} onClick={() => setDesign(d)} aria-pressed={d === design} className={`flex items-baseline gap-1.5 ${d === design ? "text-ink" : "text-quiet hover:text-ink"}`}>
-                <span className="text-[11px] tnum">{DESIGNS[d].no}</span>
-                <span className={d === design ? "border-b border-blue font-semibold" : ""}>{DESIGNS[d].name}</span>
-              </button>
+          <div className="mt-4 space-y-2 text-[15px]" role="group" aria-label="Design">
+            {CITIES.map((c) => (
+              <div key={c} className="flex flex-wrap items-baseline gap-x-5 gap-y-1">
+                <span className="w-[5.5rem] text-[13px] text-quiet">{c}</span>
+                {(Object.keys(DESIGNS) as Design[]).filter((d) => DESIGNS[d].city === c).map((d) => (
+                  <button key={d} onClick={() => setDesign(d)} aria-pressed={d === design} className={`hit flex items-baseline gap-1.5 ${d === design ? "text-ink" : "text-quiet hover:text-ink"}`}>
+                    <span className="text-[11px] tnum">{DESIGNS[d].no}</span>
+                    <span className={d === design ? "border-b border-blue font-semibold" : ""}>{DESIGNS[d].name}</span>
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
           <h1 className="mt-6 text-[44px] leading-[0.9] font-extrabold tracking-[-0.04em] lg:text-[64px]">
-            {THE_TEE.name}<span className="block text-quiet">{DESIGNS[design].name}</span>
+            again.. {DESIGNS[design].city}<span className="block text-quiet">{DESIGNS[design].name}</span>
           </h1>
           <p className="mt-5 max-w-[34ch] text-ink/85">{THE_TEE.lede}</p>
           <p className="mt-3 max-w-[34ch] text-[13px] text-quiet">back: {DESIGNS[design].back}.</p>

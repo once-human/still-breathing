@@ -91,13 +91,13 @@ export function Fit({ size, onVariant }: { size: Size; onVariant: (v: Variant) =
     <div className="mt-8 border-t border-line pt-1.5 text-[13px]">
       <div className="flex items-baseline justify-between">
         <p className="text-quiet">fit</p>
-        <button onClick={() => setOn(!on)} aria-pressed={on} className={on ? "font-semibold" : "text-blue hover:text-ink"}>{on ? "back to the tee" : "see it on a body like yours →"}</button>
+        <button onClick={() => setOn(!on)} aria-pressed={on} className={`hit ${on ? "font-semibold" : "text-blue hover:text-ink"}`}>{on ? "back to the tee" : "see it on a body like yours →"}</button>
       </div>
       {on ? (
         <div className="mt-3 space-y-3">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             {(["m", "f"] as const).map((x) => (
-              <button key={x} onClick={() => setSex(x)} className={x === sex ? "font-semibold" : "text-quiet hover:text-ink"}>{x === "m" ? "man" : "woman"}</button>
+              <button key={x} onClick={() => setSex(x)} className={`hit ${x === sex ? "font-semibold" : "text-quiet hover:text-ink"}`}>{x === "m" ? "man" : "woman"}</button>
             ))}
             <label className="flex items-baseline gap-1.5 tnum">
               <input type="number" inputMode="numeric" min={140} max={200} value={height} onChange={(e) => setHeight(+e.target.value || 0)} className="w-14 border-b border-line bg-transparent text-[15px] font-semibold outline-none focus:border-ink" />
@@ -116,7 +116,7 @@ export function Fit({ size, onVariant }: { size: Size; onVariant: (v: Variant) =
           </div>
           <div className="flex gap-4" role="group" aria-label="Pose">
             {POSES.map((p) => (
-              <button key={p.id} onClick={() => setPose(p.id)} className={p.id === pose ? "font-semibold" : "text-quiet hover:text-ink"}>{p.label}</button>
+              <button key={p.id} onClick={() => setPose(p.id)} className={`hit ${p.id === pose ? "font-semibold" : "text-quiet hover:text-ink"}`}>{p.label}</button>
             ))}
           </div>
           <p className="text-quiet">
