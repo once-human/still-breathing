@@ -1,8 +1,9 @@
 # blender -b --factory-startup -P human.py -- pipeline/bodies/m170.blend public/tee/fit/m170-M/stand.glb public/tee/human/m170-stand.glb
 # The person who wears the shop tee: the same MakeHuman body (MPFB, CC0) the tee was sewn onto and simulated on,
 # in the same standing pose, so the tee sits exactly as it was simulated. What makes it a person, not a form:
-#   - relaxed hands: elbows a little bent, forearms in toward the thighs, fingers softly curled (below the
-#     sleeves, so the simulated tee is untouched)
+#   - standing easy, below the sleeves and above the collar (so the simulated tee is untouched): elbows a little
+#     bent, the left more than the right; relaxed hands, fingers together and curling more toward the little
+#     finger, the thumb along the index finger; the head turned and tipped a few degrees
 #   - painted skin (per vertex, linear albedo): an even Indian brown with a slow mottle, warmer lips and ears,
 #     lighter palms and nails, a close-cropped beard shadow, darker brows, a short buzz cut
 #   - black jeans: MakeHuman's own tights helper, loosened into a straight leg and smoothed of muscle
@@ -63,32 +64,56 @@ def aim(pb, want, end=None):
     turn(pb, (tail - head).normalized().rotation_difference(want.normalized()))
 
 
+def spin(pb, axis, deg):
+    """turn a bone (and everything after it) about a world axis through its head"""
+    turn(pb, Quaternion(axis.normalized(), math.radians(deg)))
+
+
+def bdir(name):
+    upd(); pb = rig.pose.bones[name]
+    return (pb.tail - pb.head).normalized()
+
+
+# Nobody hangs both arms the same: the left elbow is a little more bent, the right hand hangs nearer straight.
+# A relaxed hand: the fingers close up side by side and curl more toward the little finger (index about 50 deg
+# over its three joints, little finger about 90), the thumb lies along the side of the index finger.
+EASE = {"L": dict(fore=(0.05, -0.3, -1), wrist=(-0.03, -0.16, -1), curl=1.12, thumb=0.85),
+        "R": dict(fore=(0.04, -0.13, -1), wrist=(0.0, -0.08, -1), curl=0.9, thumb=0.8)}
+CURL = {2: (16, 17, 8), 3: (20, 21, 10), 4: (24, 25, 12), 5: (28, 27, 14)}    # MCP, PIP, DIP, degrees
 for side, s in (("L", 1), ("R", -1)):
-    aim(rig.pose.bones["lowerarm01." + side], Vector((s * 0.05, -0.2, -1)), "lowerarm02." + side)   # elbow eased
-    aim(rig.pose.bones["wrist." + side], Vector((s * -0.02, -0.12, -1)))                             # wrist easy
-    # palm toward the thigh: the side of the hand faces forward, as hands hang
+    e = EASE[side]
+    aim(rig.pose.bones["lowerarm01." + side], Vector((s * e["fore"][0], e["fore"][1], e["fore"][2])), "lowerarm02." + side)
+    aim(rig.pose.bones["wrist." + side], Vector((s * e["wrist"][0], e["wrist"][1], e["wrist"][2])))
     upd()
-    wr = rig.pose.bones["wrist." + side]
-    palm_n = Vector((-s, 0, 0))
-    # fingers: each joint curls toward the palm, a little more toward the little finger
-    for f, base in ((2, 6), (3, 8), (4, 10), (5, 12)):
-        for j, k in ((1, 0.8), (2, 1.6), (3, 0.7)):
-            pb = rig.pose.bones[f"finger{f}-{j}.{side}"]; pb.rotation_mode = "QUATERNION"
-            upd(); t0 = pb.tail.copy()
-            best = None
-            for sign in (1, -1):
-                pb.rotation_quaternion = Quaternion((1, 0, 0), math.radians(sign * base * k)); upd()
-                d = (pb.tail - t0).dot(palm_n)
-                if best is None or d > best[0]: best = (d, sign)
-            pb.rotation_quaternion = Quaternion((1, 0, 0), math.radians(best[1] * base * k)); upd()
-    for j in (2, 3):                                               # thumb, a touch in
-        pb = rig.pose.bones[f"finger1-{j}.{side}"]; pb.rotation_mode = "QUATERNION"
-        upd(); t0 = pb.tail.copy(); best = None
-        for sign in (1, -1):
-            pb.rotation_quaternion = Quaternion((1, 0, 0), math.radians(sign * 8)); upd()
-            d = (pb.tail - t0).dot(palm_n)
-            if best is None or d > best[0]: best = (d, sign)
-        pb.rotation_quaternion = Quaternion((1, 0, 0), math.radians(best[1] * 8)); upd()
+    B = rig.pose.bones
+    # the palm's normal from the knuckles and the wrist; the palm faces the thigh
+    w0, i0, p0 = B["wrist." + side].head.copy(), B["finger2-1." + side].head.copy(), B["finger5-1." + side].head.copy()
+    palm = (p0 - i0).cross(i0 - w0).normalized()
+    if palm.dot(Vector((-s, 0, 0))) < 0: palm = -palm
+    # fingers together: each turns most of the way to lie beside the middle finger
+    mid = bdir(f"finger3-1.{side}")
+    for f in (2, 4, 5):
+        d = bdir(f"finger{f}-1.{side}")
+        a_ = d - palm * d.dot(palm); m_ = mid - palm * mid.dot(palm)
+        ang = math.degrees(a_.angle(m_, 0.0)) * (1 if a_.cross(m_).dot(palm) > 0 else -1)
+        spin(B[f"finger{f}-1.{side}"], palm, ang * 0.65)
+    # curl, about one axis per finger (the knuckle line), joint by joint from the knuckle out
+    for f, angs in CURL.items():
+        ax = bdir(f"finger{f}-1.{side}").cross(palm)
+        for j, deg in enumerate(angs, 1):
+            spin(B[f"finger{f}-{j}.{side}"], ax, deg * e["curl"] * (1 + 0.06 * math.sin(f * 2.3 + j + s)))
+    # thumb: in toward the side of the index finger, the pad turned to it, both joints a little bent
+    t0 = B["finger1-1." + side]
+    upd(); cur = (B["finger1-3." + side].tail - t0.head).normalized()
+    side_of_index = (B["finger2-1." + side].head + B["finger2-2." + side].head) / 2 + palm * 0.008
+    want = (side_of_index - t0.head).normalized()
+    turn(t0, Quaternion().slerp(cur.rotation_difference(want), e["thumb"]))
+    tax = bdir(f"finger1-2.{side}").cross(palm)
+    spin(B["finger1-2." + side], tax, 8 * e["curl"]); spin(B["finger1-3." + side], tax, 20 * e["curl"])
+upd()
+# the head: turned a few degrees to his right and tipped a touch, above the collar (neck02 up), so the tee is untouched
+for name, yaw, roll in (("neck02", -1.5, 0.6), ("neck03", -1.5, 0.6), ("head", -2.5, 1.0)):
+    spin(rig.pose.bones[name], Vector((0, 0, 1)), yaw); spin(rig.pose.bones[name], Vector((0, -1, 0)), roll)
 upd()
 
 # ---------- the posed mesh, helpers and all ----------
