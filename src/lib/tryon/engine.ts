@@ -1,40 +1,37 @@
-// Live try-on: your camera, the real tee on you, at its real size. Everything runs in this tab: the pose model
-// reads each video frame on this device; nothing is recorded, nothing is uploaded.
+// Live try-on: your camera, the real tee on you, at its real size, moving the way a game character's clothes do.
+// Everything runs in this tab: the pose model reads each video frame on this device; nothing is recorded or sent.
 //
-// 1. Pose. MediaPipe's pose landmarker (full model) gives 33 body points per frame: where they are in the
-//    picture, and where they are in metres around the hips.
-// 2. Camera solve. Those two sets are tied by the camera's projection. A small least-squares solve per frame
-//    recovers the camera's focal length (slowly, it doesn't change) and where the body stands in front of it,
-//    in metres, from every point the model is sure of: shoulders, elbows, hips, ears, nose.
-// 3. The body's frame. Shoulders (and hips when they're in view) give the torso's turn, lean and tilt as a
-//    proper 3D rotation, not a flat sticker.
-// 4. The tee. The shop tee, the same simulated garment and textures as the viewer, is set on that frame at its
-//    real size for the size you pick: the collar at the base of your neck, its depth centred on your chest.
-//    Each sleeve hangs from a bone at the shoulder that turns toward your upper arm, blended smoothly into the
-//    yoke (normals turn with it, so the light stays right). The cloth simulation runs on top, so the hem and sleeves swing and settle as you move.
-// 5. In front and behind. Your neck and head are invisible occluders, so the collar wraps behind your neck and
-//    your chin can come down over it. Forearms in front of you are cut from the video and laid back on top.
-// 6. Light. The room is read from the video (how bright, what colour, which side the light comes from) and
-//    lights the tee through an image-based environment, so black cotton shows its folds.
-// 7. Steadiness. The picture you see is not the live video: it is the very camera frame the pose was read
-//    from, drawn in the same instant as the tee on it, so the two can never slide against each other however
-//    long the pose model takes. The body's shape and where it stands are smoothed separately (One Euro: still
-//    when you're still, no lag when you move), the distance to the camera most of all, since that's the
-//    noisiest number and the one that would make the tee breathe in size. The sleeves ease to the arms.
+// 1. Pose. MediaPipe's pose landmarker gives 33 body points per frame: where they are in the picture, and where
+//    they are in metres around the hips.
+// 2. Camera solve. A small least-squares solve per frame recovers the camera's focal length (slowly) and where the
+//    body stands in front of it, in metres. The result is pinned to the picture: the shoulders' midpoint lands
+//    exactly where the model sees your shoulders in the frame.
+// 3. The tee is a rigged character garment. pipeline/tryon_rig.py takes the tee exactly as it hung on a real
+//    (Indian, 170 cm) body in the cloth simulation, and carries that body's skin weights onto it, smoothed the way
+//    garment weights are. Its skeleton (hips, spine, neck, head, clavicles, shoulders, upper and lower arms) is
+//    driven from your pose like a game character's: the torso from your shoulders and hips, each arm bone turned
+//    toward your elbow and wrist. Raise an arm and the whole sleeve goes up with it, the side of the tee following.
+// 4. In front and behind. The body it was draped on comes with it as an invisible occluder on the same skeleton:
+//    your neck, head and shoulders hide the inside of the collar and the back, as on a person. Hands and forearms
+//    in front of you are cut from the video and laid back on top.
+// 5. Light. The room is read from the video (how bright, what colour, which side the light comes from) and lights
+//    the tee through an image-based environment; your head and neck throw a soft shadow on the collar.
+// 6. Steadiness. The picture is the very camera frame the pose was read from, drawn in the same instant as the tee.
+//    Body shape and distance are smoothed apart (One Euro), the torso's turn has its own filter.
 //
-// The preview is a mirror (the video is flipped). The tee is placed in that mirrored space without being
-// flipped itself, so its print reads the right way round.
+// The preview is a mirror (the video is flipped). The tee is placed in that mirrored space without being flipped
+// itself, so its print reads the right way round.
 import * as THREE from "three/webgpu";
 import { texture, uv, vec2, vec3, float, normalMap, normalize, vertexColor, mix, positionGeometry, normalGeometry } from "three/tsl";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import type { PoseLandmarker, NormalizedLandmark, Landmark } from "@mediapipe/tasks-vision";
-import { Cloth, buildNetAsync, offsetTexture, slopeTextures, clothNodes } from "@/lib/viewer/cloth";
 import { KNIT_REPEAT } from "@/lib/viewer/scene";
 import { SIZES, type Size } from "@/content/tee";
 
 const ASSET = "/tee/fit/";
+const RIG = "/tee/tryon/m170-M.glb";
 export type TryOnStatus = "model" | "camera" | "look" | "ready" | "nobody";
 
 const NOSE = 0, L_EAR = 7, R_EAR = 8, L_SH = 11, R_SH = 12, L_EL = 13, R_EL = 14, L_WR = 15, R_WR = 16, L_IDX = 19, R_IDX = 20, L_HIP = 23, R_HIP = 24;
@@ -75,7 +72,6 @@ function lsq(rows: number[][], rhs: number[], n: number) {
   return M.map((r, i) => r[n] / r[i]);
 }
 
-const ss = (a: number, b: number, v: number) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 export class TryOn {
   private renderer: THREE.WebGPURenderer;
@@ -83,13 +79,8 @@ export class TryOn {
   private camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.05, 20);
   private rig = new THREE.Group();
   private pose: PoseLandmarker | null = null;
-  private offsets = offsetTexture();
-  private slopes = slopeTextures();
   private key = new THREE.DirectionalLight(0xffffff, 1);
   private fill = new THREE.HemisphereLight(0xffffff, 0x444444, 0.3);
-  private occluders = new THREE.Group();
-  private neck: THREE.Mesh; private head: THREE.Mesh;
-  private cloth: Cloth | null = null; private m3 = new THREE.Matrix3(); private m4 = new THREE.Matrix4();
   private occMat = new THREE.MeshBasicNodeMaterial({ colorWrite: false });
   private probe = document.createElement("canvas").getContext("2d", { willReadFrequently: true })!;
   private colorN: { value: THREE.Texture } | null = null;
@@ -100,11 +91,14 @@ export class TryOn {
   private lost = 0; private placed = false;
   private f = 0;                                  // focal length in video pixels, learned
   private prevT = 0; private frameN = 0;
-  private anchor = new THREE.Vector3();           // garment frame: between the shoulder joints
-  private bones: THREE.Bone[] = [];               // shoulder bones (+x, -x), waist
-  private sleeves: THREE.Bone[] = []; private lifts: THREE.Bone[] = []; private tmpV = new THREE.Vector3(); private armQ = [new THREE.Quaternion(), new THREE.Quaternion()];
-  private restArm = [new THREE.Vector3(), new THREE.Vector3()];
-  private sizeScale = new THREE.Vector3(1, 1, 1);
+  // the skeleton, by bone name, with each bone's rest orientation and head position in the model's own space
+  private B = new Map<string, THREE.Bone>();
+  private restQ = new Map<string, THREE.Quaternion>(); private restP = new Map<string, THREE.Vector3>();
+  private restTorso = new THREE.Quaternion(); private modelShoulder = 0.34;
+  private torsoQ = new THREE.Quaternion(); private hipQ = new THREE.Quaternion();
+  private teeGeo: THREE.BufferGeometry | null = null; private basePos: Float32Array | null = null;
+  private dims = { yTop: 0, zc: 0 };
+  private mid = new THREE.Vector3();
   private filt = new Map<number, Euro3>();
   private tFilt = new Euro3(1.0, 2, 0.35, 0.8);   // where the body stands; distance smoothed hardest
   private armOn = [false, false];
@@ -129,15 +123,9 @@ export class TryOn {
     Object.assign(this.key.shadow.camera, { left: -0.6, right: 0.6, top: 0.6, bottom: -0.6, near: 0.2, far: 8 });
     this.key.shadow.bias = -0.0004; this.key.shadow.normalBias = 0.015; this.key.shadow.radius = 5;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.scene.add(this.key, this.key.target, this.fill, this.rig, this.occluders);
+    this.scene.add(this.key, this.key.target, this.fill, this.rig);
     this.probe.canvas.width = 16; this.probe.canvas.height = 9;
     this.fctx = frameCv.getContext("2d", { alpha: false, desynchronized: true })!;
-    // neck and head: depth only, drawn first, so the tee is hidden wherever they are in front of it
-    const occ = this.occMat;
-    this.neck = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 20, 1, true), occ);
-    this.head = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), occ);
-    for (const m of [this.neck, this.head]) { m.renderOrder = -1; m.castShadow = true; this.occluders.add(m); }
-    this.occluders.visible = false;
   }
 
   async start(design: string, tee: "black" | "cream", size: Size) {
@@ -184,16 +172,14 @@ export class TryOn {
   }
 
   private async loadTee(design: string, tee: "black" | "cream") {
-    void tee;
     const gl = new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath("/draco/"));
     const [gltf, c, o, n, k] = await Promise.all([
-      gl.loadAsync(`${ASSET}form-M/stand.glb`), this.tx(`tex/color-${design}-${tee}.jpg`, true), this.tx(`tex/orm-${design}-${tee}.png`, false),
+      gl.loadAsync(RIG), this.tx(`tex/color-${design}-${tee}.jpg`, true), this.tx(`tex/orm-${design}-${tee}.png`, false),
       this.tx("tex/normal-M.png", false), this.tx("tex/knit-normal.png", false),
     ]);
     k.wrapS = k.wrapT = THREE.RepeatWrapping;
     const colorN = texture(c), ormN = texture(o);
     this.colorN = colorN; this.ormN = ormN;
-    const cloth = clothNodes(this.offsets, this.slopes);
     const outer = new THREE.MeshPhysicalNodeMaterial({ roughness: 1, metalness: 0, specularIntensity: 0.5 });
     outer.colorNode = colorN;
     outer.roughnessNode = ormN.g;
@@ -201,109 +187,58 @@ export class TryOn {
     outer.sheenNode = vec3(float(0.35 * 0.06).mul(float(1).sub(ormN.b)));
     outer.sheenRoughnessNode = float(0.3);
     const n1 = texture(n).xyz.mul(2).sub(1), kk = texture(k, uv().mul(vec2(KNIT_REPEAT[0], KNIT_REPEAT[1]))).xyz.mul(2).sub(1);
-    outer.normalNode = cloth.bend(normalMap(normalize(vec3(n1.xy.add(kk.xy.mul(0.55)), n1.z.mul(kk.z))).mul(0.5).add(0.5)));
-    outer.positionNode = cloth.position;
+    outer.normalNode = normalMap(normalize(vec3(n1.xy.add(kk.xy.mul(0.55)), n1.z.mul(kk.z))).mul(0.5).add(0.5));
 
-    // the tee's geometry in its own frame. Only the outer shell: the inner one is only ever seen through the neck
-    // and sleeve openings, and on a body those are filled by you (it showed as black shards round the collar)
-    let parts: { geo: THREE.BufferGeometry; pos: Float32Array; idx: Uint32Array }[] = [];
-    gltf.scene.updateMatrixWorld(true);
+    let teeMesh: THREE.SkinnedMesh | null = null, occ: THREE.SkinnedMesh | null = null;
     gltf.scene.traverse((ob) => {
-      const m = ob as THREE.Mesh;
-      if (!m.isMesh) return;
-      const geo = m.geometry.clone().applyMatrix4(m.matrixWorld);
-      const pos = geo.attributes.position.array as Float32Array;
-      const idx = geo.index ? Uint32Array.from(geo.index.array) : Uint32Array.from({ length: pos.length / 3 }, (_, i) => i);
-      parts.push({ geo, pos, idx });
+      const b = ob as THREE.Bone;
+      if (b.isBone) this.B.set(b.name, b);
+      const m = ob as THREE.SkinnedMesh;
+      if (m.isSkinnedMesh) { if (/occluder/.test(m.name)) occ = m; else teeMesh = m; }
     });
-    const girth = (p: { geo: THREE.BufferGeometry }) => { p.geo.computeBoundingBox(); const b = p.geo.boundingBox!; return b.max.x - b.min.x + b.max.z - b.min.z; };
-    parts = [parts.reduce((a, b) => (girth(b) > girth(a) ? b : a))];
-
-    // its landmarks, measured on the mesh
-    let yTop = -1e9;
-    for (const p of parts) for (let i = 1; i < p.pos.length; i += 3) yTop = Math.max(yTop, p.pos[i]);
-    let zs = 0, zn = 0;
-    for (const p of parts) for (let i = 0; i < p.pos.length; i += 3) { const y = p.pos[i + 1]; if (y < yTop - 0.08 && y > yTop - 0.16 && Math.abs(p.pos[i]) < 0.1) { zs += p.pos[i + 2]; zn++; } }
-    // between the shoulder joints: 6 cm under the top of the shoulder line, at the chest's mid depth
-    this.anchor.set(0, yTop - 0.06, zn ? zs / zn : 0);
-    // the body's side and the armpit, measured on the draped mesh (the cut-on sleeve starts where the body ends)
-    let B = 0;
-    for (const p of parts) for (let i = 0; i < p.pos.length; i += 3) { const y = p.pos[i + 1]; if (y < yTop - 0.38 && y > yTop - 0.46) B = Math.max(B, Math.abs(p.pos[i])); }
-    let armpit = yTop - 0.29;
-    for (let d = 0.2; d < 0.4; d += 0.01) {
-      let m = 0;
-      for (const p of parts) for (let i = 0; i < p.pos.length; i += 3) { const y = p.pos[i + 1]; if (y < yTop - d && y > yTop - d - 0.01) m = Math.max(m, Math.abs(p.pos[i])); }
-      if (m < B + 0.012) { armpit = yTop - d + 0.03; break; }
+    if (!teeMesh) throw new Error("try-on rig has no tee");
+    const tm = teeMesh as THREE.SkinnedMesh;
+    tm.material = outer; tm.frustumCulled = false; tm.receiveShadow = true;
+    if (occ) {
+      // the body the tee was draped on: depth only, drawn first, and it throws the head and neck's shadow
+      const om = occ as THREE.SkinnedMesh;
+      om.material = this.occMat; om.renderOrder = -1; om.frustumCulled = false; om.castShadow = true;
     }
-    // round the collar, any surface that faces in toward the body (the inside of the neckband, mostly the back
-    // half) is never seen on a person: your neck and shoulders fill it. It's cut, so only the outside shows
+    this.rig.add(gltf.scene);
+    this.rig.updateMatrixWorld(true);
+    // the rest pose, in the model's own space (the rig is still at identity here)
+    for (const [name, b] of this.B) {
+      this.restQ.set(name, b.getWorldQuaternion(new THREE.Quaternion()));
+      this.restP.set(name, b.getWorldPosition(new THREE.Vector3()));
+    }
+    const sL = this.bp("upperarm01.L"), sR = this.bp("upperarm01.R"), root = this.bp("root");
+    this.modelShoulder = sL.distanceTo(sR);
+    const xR = sL.clone().sub(sR).normalize(), yR = sL.clone().add(sR).multiplyScalar(0.5).sub(root).normalize();
+    const zR = new THREE.Vector3().crossVectors(xR, yR).normalize(); yR.crossVectors(zR, xR);
+    this.restTorso.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xR, yR, zR));
+
+    // the tee as simulated (size M), kept so the other sizes can be made from it
+    this.teeGeo = tm.geometry;
+    const pa = tm.geometry.attributes.position.array as Float32Array;
+    this.basePos = pa.slice();
+    let yTop = -1e9; for (let i = 1; i < pa.length; i += 3) yTop = Math.max(yTop, pa[i]);
+    let zs = 0, zn = 0;
+    for (let i = 0; i < pa.length; i += 3) { const y = pa[i + 1]; if (y < yTop - 0.08 && y > yTop - 0.16 && Math.abs(pa[i]) < 0.1) { zs += pa[i + 2]; zn++; } }
+    this.dims = { yTop, zc: zn ? zs / zn : 0 };
+    // round the collar, any surface that faces in toward the body (the inside of the neckband) is never seen on a
+    // person: your neck fills it. It's cut, so only the outside shows
     {
       const P = positionGeometry, N = normalGeometry;
       const collar = P.y.greaterThan(yTop - 0.13).and(P.x.abs().lessThan(0.17));
-      const inward = N.x.mul(P.x).add(N.z.mul(P.z.sub(this.anchor.z))).lessThan(0);
+      const inward = N.x.mul(P.x).add(N.z.mul(P.z.sub(this.dims.zc))).lessThan(0);
       outer.maskNode = collar.and(inward).not();
     }
-    const joints = [new THREE.Vector3(0.18, yTop - 0.06, this.anchor.z), new THREE.Vector3(-0.18, yTop - 0.06, this.anchor.z)];
-
-    // a skeleton: the body; a shoulder bone per side across the yoke with the sleeve hanging from it; a waist bone
-    // that follows your hips; and a bone per side that lifts the body under the arm when the arm goes up
-    const root = new THREE.Bone();
-    this.bones = joints.map((j) => { const b = new THREE.Bone(); b.position.copy(j); root.add(b); return b; });
-    let yBot = 1e9;
-    for (const p of parts) for (let i = 1; i < p.pos.length; i += 3) yBot = Math.min(yBot, p.pos[i]);
-    { const b = new THREE.Bone(); b.position.set(0, yTop - 0.45, this.anchor.z); root.add(b); this.bones.push(b); }
-    this.sleeves = this.bones.slice(0, 2).map((sb) => { const b = new THREE.Bone(); sb.add(b); return b; });
-    this.lifts = [0, 1].map(() => { const b = new THREE.Bone(); root.add(b); return b; });
-    root.updateMatrixWorld(true);
-    // bone indices: 0 root, 1-2 shoulders, 3 waist, 4-5 sleeves, 6-7 lifts
-    const skeleton = new THREE.Skeleton([root, ...this.bones, ...this.sleeves, ...this.lifts]);
-    const sums = [new THREE.Vector3(), new THREE.Vector3()], cnt = [0, 0];
-    const meshes: THREE.SkinnedMesh[] = [];
-    for (const p of parts) {
-      const nv = p.pos.length / 3, SI = new Uint16Array(4 * nv), SW = new Float32Array(4 * nv);
-      for (let v = 0; v < nv; v++) {
-        const x = p.pos[3 * v], y = p.pos[3 * v + 1], ax = Math.abs(x), s = x >= 0 ? 0 : 1;
-        const above = ss(armpit - 0.02, armpit + 0.03, y);
-        // the whole sleeve, underside included: everything outside the body's side line, so it rises as a tube
-        const a = ss(B - 0.005, B + 0.03, ax) * Math.max(above, ss(B + 0.005, B + 0.025, ax) * ss(armpit - 0.09, armpit - 0.04, y));
-        // the yoke between the neck and the sleeve takes a share of the turn
-        const w = Math.max(a, ss(0.07, B, ax) * above);
-        // the side under the arm rises with it (the hem lifts on that side, as on a real tee)
-        const lift = (1 - w) * ss(0.04, B, ax) * ss(yBot - 0.1, armpit, y) * (1 - ss(armpit, armpit + 0.1, y));
-        const h = (1 - w - lift) * ss(armpit - 0.05, yBot + 0.04, y);
-        const inf: [number, number][] = [[0, 1 - w - lift - h], [1 + s, w - a], [4 + s, a], [6 + s, lift], [3, h]];
-        inf.sort((m, n) => n[1] - m[1]);
-        const tot = inf[0][1] + inf[1][1] + inf[2][1] + inf[3][1] || 1;
-        for (let k = 0; k < 4; k++) { SI[4 * v + k] = inf[k][0]; SW[4 * v + k] = Math.max(0, inf[k][1]) / tot; }
-        if (a > 0.9) { sums[s].x += x; sums[s].y += y; sums[s].z += p.pos[3 * v + 2]; cnt[s]++; }
-      }
-      p.geo.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(SI, 4));
-      p.geo.setAttribute("skinWeight", new THREE.Float32BufferAttribute(SW, 4));
-      p.geo.setAttribute("sbI", new THREE.BufferAttribute(new Float32Array(4 * nv), 4));
-      p.geo.setAttribute("sbW", new THREE.BufferAttribute(new Float32Array(4 * nv), 4));
-      const sm = new THREE.SkinnedMesh(p.geo, outer);
-      sm.frustumCulled = false; sm.receiveShadow = true;
-      meshes.push(sm);
-    }
-    meshes[0].add(root);
-    for (const sm of meshes) { sm.bind(skeleton); this.rig.add(sm); }
-    for (const s of [0, 1] as const) {
-      this.restArm[s].copy(cnt[s] ? sums[s].divideScalar(cnt[s]).sub(joints[s]).normalize() : new THREE.Vector3(s ? -0.64 : 0.64, -0.77, 0));
-    }
     this.rig.visible = false;
-    // the cloth net builds in a worker; until it's ready the tee is simply held on the body
-    buildNetAsync(parts.map((p) => ({ pos: p.pos, idx: p.idx }))).then((net) => {
-      if (this.dead) return;
-      parts.forEach((p, i) => {
-        const I = p.geo.attributes.sbI as THREE.BufferAttribute, W = p.geo.attributes.sbW as THREE.BufferAttribute;
-        (I.array as Float32Array).set(net.skins[i].I); (W.array as Float32Array).set(net.skins[i].W); I.needsUpdate = W.needsUpdate = true;
-      });
-      this.cloth = new Cloth(net, this.offsets, this.slopes);
-      // worn cloth: no breeze, and the same gentle inertia as the shop viewer. More than that and every bit of
-      // tracking noise reads as motion: the whole tee shivers and the sleeves tear
-      this.cloth.wind = false;
-    }).catch(() => {});
   }
+
+  /** a bone's rest head position in the model's space (names as in Blender; the loader drops the dots) */
+  private bone(name: string) { return this.B.get(THREE.PropertyBinding.sanitizeNodeName(name)) ?? this.B.get(name); }
+  private bp(name: string) { const b = this.bone(name); return b ? this.restP.get(b.name)!.clone() : new THREE.Vector3(); }
 
   /** a different design on the same tee */
   async setLook(design: string, tee: "black" | "cream") {
@@ -312,10 +247,15 @@ export class TryOn {
     this.colorN.value = c; this.ormN.value = o;
   }
 
-  /** the real garment for that size: wider and longer by the size chart, from the simulated M */
-  setSize(s: Size) {
-    const w = SIZES[s].chest_round / SIZES.M.chest_round, l = SIZES[s].length / SIZES.M.length;
-    this.sizeScale.set(w, l, w);
+  /** the real garment for that size: wider and longer by the size chart, made from the simulated M on the same body */
+  setSize(sz: Size) {
+    const g = this.teeGeo, src = this.basePos; if (!g || !src) return;
+    const w = SIZES[sz].chest_round / SIZES.M.chest_round, l = SIZES[sz].length / SIZES.M.length, { yTop, zc } = this.dims;
+    const dst = g.attributes.position.array as Float32Array;
+    for (let i = 0; i < src.length; i += 3) {
+      dst[i] = src[i] * w; dst[i + 1] = yTop - (yTop - src[i + 1]) * l; dst[i + 2] = zc + (src[i + 2] - zc) * w;
+    }
+    g.attributes.position.needsUpdate = true;
   }
 
   /**
@@ -356,10 +296,6 @@ export class TryOn {
     const r = this.pose.detectForVideo(fc, now);
     this.place(r.landmarks[0] ?? null, r.worldLandmarks[0] ?? null, t, dt);
     if (this.frameN++ % 10 === 0) this.light(dt * 10);
-    if (this.cloth && this.rig.visible) {
-      this.cloth.setPose(this.m3.setFromMatrix4(this.m4.makeRotationFromQuaternion(this.rig.quaternion)), this.rig.position, this.rig.scale.x, dt);
-      this.cloth.step(dt);
-    }
     this.renderer.render(this.scene, this.camera);
     this.drawArms();
     if (!this.shown) { this.shown = true; v.style.opacity = "0"; }
@@ -388,14 +324,14 @@ export class TryOn {
     this.key.color.copy(this.tint); this.key.intensity = 0.5 + this.lum * 2.4;
     this.fill.color.copy(this.tint); this.fill.intensity = 0.15 + this.lum * 0.4;
     this.keyOff.set(this.side.x * 3, 1.5 + this.side.y * 2, 1.5);
-    if (this.placed) this.key.target.position.copy(this.rig.position);
+    if (this.placed) this.key.target.position.copy(this.mid);
   }
 
   /** the camera solve, the body's frame, and the tee on it */
   private place(l: NormalizedLandmark[] | null, w: Landmark[] | null, t: number, dt: number) {
     const ok = l && w && (l[L_SH].visibility ?? 0) > 0.55 && (l[R_SH].visibility ?? 0) > 0.55;
     if (!ok) {
-      if (++this.lost > 6) { this.rig.visible = false; this.occluders.visible = false; this.placed = false; this.lms = null; this.filt.forEach((f) => f.reset()); this.tFilt.reset(); this.midU.reset(); this.midV.reset(); this.body = 0; this.onStatus("nobody"); }
+      if (++this.lost > 6) { this.rig.visible = false; this.placed = false; this.lms = null; this.filt.forEach((f) => f.reset()); this.tFilt.reset(); this.midU.reset(); this.midV.reset(); this.body = 0; this.onStatus("nobody"); }
       return;
     }
     this.lost = 0;
@@ -441,87 +377,90 @@ export class TryOn {
       const m0 = this.P.get(L_SH)!.clone().add(this.P.get(R_SH)!).multiplyScalar(0.5), Zc = -m0.z;
       const shift = new THREE.Vector3((mu * Zc) / this.f, (mv * Zc) / this.f, -Zc).sub(m0);
       this.P.forEach((p) => p.add(shift));
-      // and fitted to you: the form's shoulder joints are 36 cm apart, yours are what the model measures. Learned
-      // over a second or two, so the tee never breathes in size, and the size you pick is on top of that
-      const k = Math.min(1.35, Math.max(0.8, this.P.get(L_SH)!.distanceTo(this.P.get(R_SH)!) / 0.36));
+      // and fitted to you: the draped body's shoulder joints against yours as the model measures them. Learned over
+      // a second or two, so the tee never breathes in size, and the size you pick is on top of that
+      const k = Math.min(1.3, Math.max(0.8, this.P.get(L_SH)!.distanceTo(this.P.get(R_SH)!) / this.modelShoulder));
       this.body = this.body ? this.body + (k - this.body) * (1 - Math.exp(-dt / 1.5)) : k;
     }
     this.lms = l;
     this.img = l!.map((p) => ({ x: p.x, y: p.y }));
 
-    // the torso's frame: the tee's +x is the shoulder on the preview's right (landmark 12, mirrored)
-    const sL = this.P.get(L_SH)!, sR = this.P.get(R_SH)!, mid = sL.clone().add(sR).multiplyScalar(0.5);
+    // the torso's frame: the model's left (+x) is the shoulder on the preview's right (landmark 12, mirrored)
+    const sL = this.P.get(L_SH)!, sR = this.P.get(R_SH)!, mid = this.mid.copy(sL).add(sR).multiplyScalar(0.5);
     const xA = sR.clone().sub(sL).normalize();
-    let up = new THREE.Vector3(0, 1, 0);
-    if ((l![L_HIP].visibility ?? 0) > 0.6 && (l![R_HIP].visibility ?? 0) > 0.6) up = mid.clone().sub(this.P.get(L_HIP)!.clone().add(this.P.get(R_HIP)!).multiplyScalar(0.5)).normalize();
-    const zA = new THREE.Vector3().crossVectors(xA, up).normalize(), yA = new THREE.Vector3().crossVectors(zA, xA).normalize();
+    const hips = (l![L_HIP].visibility ?? 0) > 0.6 && (l![R_HIP].visibility ?? 0) > 0.6;
+    const hipMid = hips ? this.P.get(L_HIP)!.clone().add(this.P.get(R_HIP)!).multiplyScalar(0.5) : null;
+    const up = hipMid ? mid.clone().sub(hipMid).normalize() : new THREE.Vector3(0, 1, 0);
+    const frame = (x: THREE.Vector3, y: THREE.Vector3) => {
+      const z = new THREE.Vector3().crossVectors(x, y).normalize(), yy = new THREE.Vector3().crossVectors(z, x).normalize();
+      return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x.clone().normalize(), yy, z));
+    };
     // the torso's turn is the noisiest thing the pose model gives (depth from one camera), so it gets its own
     // filter: it holds still when you hold still and follows with almost no lag when you turn
-    const qNew = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(xA, yA, zA));
-    if (!this.placed) { this.rig.quaternion.copy(qNew); this.qSpeed = 0; }
+    const qNew = frame(xA, up);
+    if (!this.placed) { this.torsoQ.copy(qNew); this.hipQ.copy(qNew); this.qSpeed = 0; }
     else {
-      const speed = this.rig.quaternion.angleTo(qNew) / Math.max(dt, 1e-3);
+      const speed = this.torsoQ.angleTo(qNew) / Math.max(dt, 1e-3);
       this.qSpeed += (speed - this.qSpeed) * (1 - Math.exp(-dt * 8));
       const cut = 1.2 + 2.2 * this.qSpeed, rr = 2 * Math.PI * cut * dt;
-      this.rig.quaternion.slerp(qNew, rr / (rr + 1));
+      this.torsoQ.slerp(qNew, rr / (rr + 1));
     }
-    this.rig.scale.copy(this.sizeScale).multiplyScalar(this.body);
-    this.rig.position.copy(mid).sub(this.anchor.clone().multiply(this.rig.scale).applyQuaternion(this.rig.quaternion));
-    this.rig.updateMatrixWorld();
-    this.key.target.position.copy(this.rig.position); this.key.position.copy(this.rig.position).add(this.keyOff);
+    // the hips turn on their own (a twist at the waist), when they're in view
+    this.hipQ.slerp(hips ? frame(this.P.get(R_HIP)!.clone().sub(this.P.get(L_HIP)!), up) : this.torsoQ, 1 - Math.exp(-dt * (hips ? 10 : 4)));
 
-    // sleeves: each bone turns from the sleeve's rest line toward the upper arm (garment frame)
-    const inv = this.rig.matrixWorld.clone().invert();
-    const pairs: [number, number, 0 | 1][] = [[R_SH, R_EL, 0], [L_SH, L_EL, 1]];
-    const ease = 1 - Math.exp(-dt * 16);
-    for (const [sh, el, s] of pairs) {
+    // ---- the skeleton, posed like a game character's ----
+    this.rig.position.set(0, 0, 0); this.rig.scale.setScalar(this.body); this.rig.updateMatrixWorld(true);
+    const inv = this.restTorso.clone().invert();
+    const dC = this.torsoQ.clone().multiply(inv), dH = this.hipQ.clone().multiply(inv);
+    const set = (name: string, delta: THREE.Quaternion, ease = 1) => {
+      const b = this.bone(name); if (!b) return;
+      const pq = b.parent ? b.parent.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion();
+      const local = pq.invert().multiply(delta.clone().multiply(this.restQ.get(b.name)!));
+      if (ease >= 1) b.quaternion.copy(local); else b.quaternion.slerp(local, ease);
+      b.updateMatrixWorld(true);
+    };
+    // how far a bone's parent has turned from rest: what the bone carries before it turns itself
+    const carried = (name: string) => {
+      const p = this.bone(name)?.parent as THREE.Bone | undefined;
+      if (!p || !this.restQ.has(p.name)) return new THREE.Quaternion();
+      return p.getWorldQuaternion(new THREE.Quaternion()).multiply(this.restQ.get(p.name)!.clone().invert());
+    };
+    set("root", dH);
+    const spine = ["spine05", "spine04", "spine03", "spine02"];
+    spine.forEach((nm, i) => set(nm, dH.clone().slerp(dC, (i + 1) / (spine.length + 1))));
+    set("spine01", dC);
+    // each arm bone turns from where its parent carried it toward your elbow, then your wrist
+    const ease = 1 - Math.exp(-dt * 18), relax = 1 - Math.exp(-dt * 5);
+    const aim = (bone: string, child: string, from: number, to: number, on: boolean) => {
+      const D = carried(bone);
+      if (!on) { set(bone, D, relax); return; }
+      const rest = this.bp(child).sub(this.bp(bone)).normalize().applyQuaternion(D);
+      const target = this.P.get(to)!.clone().sub(this.P.get(from)!).normalize();
+      set(bone, new THREE.Quaternion().setFromUnitVectors(rest, target).multiply(D), ease);
+    };
+    const sides: ["L" | "R", number, number, number, 0 | 1][] = [["L", R_SH, R_EL, R_WR, 0], ["R", L_SH, L_EL, L_WR, 1]];
+    for (const [S, sh, el, wr, k] of sides) {
       const vis = l![el].visibility ?? 0;
       // an arm counts once it's clearly seen and stops counting only once it's clearly gone: no flicker
-      this.armOn[s] = this.armOn[s] ? vis > 0.4 : vis > 0.6;
-      const cur = this.armQ[s];
-      if (!this.armOn[s]) { cur.slerp(new THREE.Quaternion(), 1 - Math.exp(-dt * 5)); this.splitArm(s); continue; }
-      const J = this.P.get(sh)!.clone().applyMatrix4(inv), E = this.P.get(el)!.clone().applyMatrix4(inv);
-      const q = new THREE.Quaternion().setFromUnitVectors(this.restArm[s], E.sub(J).normalize());
-      // past about 100 degrees a cut-on sleeve can't follow without tearing the yoke: hold it there
-      const ang = 2 * Math.acos(Math.min(1, Math.abs(q.w)));
-      if (ang > 1.75) q.slerp(new THREE.Quaternion(), 1 - 1.75 / ang);
-      cur.slerp(q, ease); this.splitArm(s);
+      this.armOn[k] = this.armOn[k] ? vis > 0.4 : vis > 0.6;
+      aim(`upperarm01.${S}`, `lowerarm01.${S}`, sh, el, this.armOn[k]);
+      aim(`lowerarm01.${S}`, `wrist.${S}`, el, wr, this.armOn[k] && (l![wr].visibility ?? 0) > 0.5);
     }
-
-    // the lower body follows the hips: their line, relative to the shoulders', twists and tilts the hem
+    // the neck leans toward your head
     {
-      const hip = this.bones[2], both = (l![L_HIP].visibility ?? 0) > 0.6 && (l![R_HIP].visibility ?? 0) > 0.6;
-      if (both) {
-        const hl = this.P.get(L_HIP)!.clone().applyMatrix4(inv), hr = this.P.get(R_HIP)!.clone().applyMatrix4(inv);
-        const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), hr.sub(hl).normalize());
-        const ang = 2 * Math.acos(Math.min(1, Math.abs(q.w)));
-        if (ang > 0.6) q.slerp(new THREE.Quaternion(), 1 - 0.6 / ang);
-        hip.quaternion.slerp(q, 1 - Math.exp(-dt * 10));
-      } else hip.quaternion.slerp(new THREE.Quaternion(), 1 - Math.exp(-dt * 4));
+      const eM = this.P.get(L_EAR)!.clone().add(this.P.get(R_EAR)!).multiplyScalar(0.5);
+      const D = carried("neck01"), rest = this.bp("head").sub(this.bp("neck01")).normalize().applyQuaternion(D);
+      const target = eM.sub(mid).normalize();
+      set("neck01", new THREE.Quaternion().slerp(new THREE.Quaternion().setFromUnitVectors(rest, target), 0.6).multiply(D), ease);
     }
-
-    // neck and head occluders
-    const eL = this.P.get(L_EAR)!, eR = this.P.get(R_EAR)!, headC = eL.clone().add(eR).multiplyScalar(0.5);
-    const headR = Math.max(0.07, eL.distanceTo(eR) * 0.62);
-    this.head.position.copy(headC); this.head.scale.setScalar(headR);
-    const neckBase = mid.clone().add(zA.clone().multiplyScalar(-0.02)), neckTop = headC.clone().add(yA.clone().multiplyScalar(-headR * 0.5));
-    const nl = Math.max(0.02, neckBase.distanceTo(neckTop)), nr = Math.max(0.045, sL.distanceTo(sR) * 0.16);
-    this.neck.position.copy(neckBase).add(neckTop).multiplyScalar(0.5);
-    this.neck.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), neckTop.clone().sub(neckBase).normalize());
-    this.neck.scale.set(nr, nl, nr * 0.9);
-    this.occluders.visible = true;
+    // placed so the skeleton's shoulder joints straddle yours, exactly where the picture shows them
+    const jm = this.bone("upperarm01.L")!.getWorldPosition(new THREE.Vector3()).add(this.bone("upperarm01.R")!.getWorldPosition(new THREE.Vector3())).multiplyScalar(0.5);
+    this.rig.position.copy(mid).sub(jm);
+    this.rig.updateMatrixWorld(true);
+    this.key.target.position.copy(mid); this.key.position.copy(mid).add(this.keyOff);
 
     this.placed = true;
     if (!this.rig.visible) { this.rig.visible = true; this.onStatus("ready"); }
-  }
-
-  /** the arm's turn, shared: 25% at the shoulder across the yoke, the rest in the sleeve */
-  private splitArm(s: 0 | 1) {
-    const q = this.armQ[s], sh = this.bones[s].quaternion.identity().slerp(q, 0.25);
-    this.sleeves[s].quaternion.copy(sh).invert().multiply(q);
-    // how far the arm has come up from hanging: 0 at rest, about 1 at shoulder height
-    const r = this.restArm[s], dy = this.tmpV.copy(r).applyQuaternion(q).y;
-    this.lifts[s].position.y = 0.055 * Math.min(1.6, Math.max(0, (dy - r.y) / Math.max(0.2, -r.y)));
   }
 
   /** forearms and hands in front of the body, cut from the video and laid back over the tee */
