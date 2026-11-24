@@ -20,8 +20,45 @@ type Engine = {
   setScene: (id: string) => void;
   photo: (job: PhotoJob) => Promise<Blob>;
   setVariant: (v: Variant) => Promise<void>;
+  setShot: (sh: Shot) => Promise<void>;
   dispose: () => void;
 };
+
+/**
+ * The carousel: each view is made for one thing and locked to it. The cloth and the air stay live in every one.
+ *   worn      someone wearing it at the place you pick: turn, zoom, the lot
+ *   alone     the tee by itself on paper: turn it, nothing else
+ *   ¾ back    the hero angle, fixed; it leans a little toward the pointer
+ *   flat      the back straight on, as the print sits on the shirt
+ *   close     right in on the print: slide along it, no turning
+ *   the art   the artwork itself, flat: pan and zoom over it
+ */
+type Shot = {
+  id: string; label: string;
+  /** who's in it: the person (the page's fit pick) or the tee on its own */
+  who: "worn" | "alone";
+  /** the place, or the paper studio */
+  paper: boolean;
+  /** where it starts (null: wherever the last worn view was) */
+  yaw: number | null;
+  turn: boolean; spin: boolean;
+  /** zoom range and where it opens */
+  zoom: [number, number]; open: [number, number, number];
+  pan: boolean;
+  /** degrees it leans toward the pointer */
+  parallax: number;
+  art?: boolean;
+};
+const SHOTS: Shot[] = [
+  { id: "worn", label: "worn", who: "worn", paper: false, yaw: null, turn: true, spin: true, zoom: [1, 5], open: [1, 0, 0], pan: true, parallax: 0 },
+  { id: "alone", label: "alone", who: "alone", paper: true, yaw: 200, turn: true, spin: true, zoom: [1, 1], open: [1, 0, 0], pan: false, parallax: 0 },
+  { id: "hero", label: "¾ back", who: "worn", paper: false, yaw: 148, turn: false, spin: false, zoom: [1, 1], open: [1, 0, 0], pan: false, parallax: 9 },
+  { id: "flat", label: "flat", who: "alone", paper: true, yaw: 180, turn: false, spin: false, zoom: [1, 1], open: [1, 0, 0], pan: false, parallax: 0 },
+  { id: "close", label: "close", who: "alone", paper: true, yaw: 180, turn: false, spin: false, zoom: [3.2, 3.2], open: [3.2, 0, 0.12], pan: true, parallax: 0 },
+  { id: "art", label: "the art", who: "alone", paper: true, yaw: 180, turn: false, spin: false, zoom: [1, 1], open: [1, 0, 0], pan: false, parallax: 0, art: true },
+];
+/** the shop tee on its own form, no one in it */
+const ALONE: Variant = { dir: "form-M", size: "M", pose: "stand", body: false };
 
 const VIEWS = [
   { label: "front", yaw: 0 },
@@ -72,6 +109,11 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
   const [ang, setAng] = useState(0);
   const angRef = useRef(0);
   const flatDrag = useRef<{ x: number; a: number } | null>(null);
+  const [shotI, setShotI] = useState(0);
+  const shotRef = useRef<Shot>(SHOTS[0]);
+  const [switching, setSwitching] = useState(false);
+  const [art, setArt] = useState({ z: 1, x: 0, y: 0 });
+  const artDrag = useRef<{ x: number; y: number; ax: number; ay: number } | null>(null);
 
   useEffect(() => {
     let dead = false;
@@ -96,7 +138,10 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       await raster.init();
       // the place picked, and the scene the current shot uses there (fit mode keeps the paper sweep)
       let place = SCENES.find((x) => x.id === sceneRef.current) ?? SCENES[0];
-      let scene = sceneFor(place, variantRef.current.body);
+      // the paper studio for the views of the tee on its own
+      const PAPER = sceneFor(SCENES.find((x) => x.id === "studio") ?? SCENES[0], true);
+      const sceneOf = (v: Variant) => (shotRef.current.paper ? PAPER : sceneFor(place, v.body));
+      let scene = sceneOf(variantRef.current);
       raster.setScene(scene, lookRef.current.tee === "cream");
 
       type PathTracer = import("@/lib/viewer/pathtracer").PathTracer;
@@ -104,16 +149,16 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       const s = { design: lookRef.current.design, tee: lookRef.current.tee, yaw: angRef.current, goal: null as number | null, vel: 0, drag: false, dirty: true, photo: false, loading: false, variant: variantRef.current };
       // zoom: a crop of the same frame (the lens never moves, so the perspective never changes), eased
       const zm = { z: 1, cx: 0, cy: 0, zt: 1, cxt: 0, cyt: 0 };
-      const ZMAX = 5;
+      const zlim = () => shotRef.current.zoom;
       const clampZoom = () => {
-        zm.zt = Math.min(ZMAX, Math.max(1, zm.zt));
+        zm.zt = Math.min(zlim()[1], Math.max(zlim()[0], zm.zt));
         const lim = 1 - 1 / zm.zt;
         zm.cxt = Math.min(lim, Math.max(-lim, zm.cxt)); zm.cyt = Math.min(lim, Math.max(-lim, zm.cyt));
       };
       /** zoom to zt keeping the point under (sx, sy) (viewport NDC) where it is */
       const zoomAt = (zt: number, sx: number, sy: number) => {
         const px = zm.cxt + sx / zm.zt, py = zm.cyt + sy / zm.zt;
-        zm.zt = Math.min(ZMAX, Math.max(1, zt));
+        zm.zt = Math.min(zlim()[1], Math.max(zlim()[0], zt));
         zm.cxt = px - sx / zm.zt; zm.cyt = py - sy / zm.zt;
         clampZoom(); s.dirty = true; s.goal = null;
         if (zm.zt > 1.5) void sharpen();
@@ -161,7 +206,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         s.loading = true;
         while (busy) await new Promise((r) => setTimeout(r, 16));
         try {
-          const sc = sceneFor(place, v.body);
+          const sc = sceneOf(v);
           if (sc !== scene) { scene = sc; raster.setScene(scene, s.tee === "cream"); if (!firstFrame) void loadEnv(); }
           geo = await raster.load(s.design, s.tee, v);
           raster.setCamera(cameraFor(v));
@@ -169,7 +214,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           s.variant = v;
         } finally { s.loading = false; s.dirty = true; lastSig = ""; }
       };
-      let busy = false, lastSig = "";
+      let busy = false, lastSig = "", wornYaw = 0;
       // the place around the person (one picture of the whole hall): fetched only once the tee is on screen
       let envBmp: ImageBitmap | null = null, envUrl = "";
       const loadEnv = async () => {
@@ -210,7 +255,10 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       let hover = false, holdUntil = 0, spin = still.matches ? 0 : SPIN;
       let lx = 0, ly = 0, lt = 0;
       const enter = (e: PointerEvent) => { if (e.pointerType !== "touch") hover = true; };
-      const leave = (e: PointerEvent) => { if (e.pointerType !== "touch") hover = false; };
+      const leave = (e: PointerEvent) => {
+        if (e.pointerType !== "touch") hover = false;
+        const sh = shotRef.current; if (sh.parallax && sh.yaw !== null) { s.goal = sh.yaw; s.dirty = true; }
+      };
       // two fingers: pinch to zoom around their midpoint
       const touches = new Map<number, { x: number; y: number }>();
       let shiftPan = false;
@@ -220,9 +268,10 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       let pinch: { d: number; z: number; mx: number; my: number } | null = null;
       const spread = () => { const [a, b] = [...touches.values()]; return { d: Math.hypot(a.x - b.x, a.y - b.y), m: { clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 } }; };
       const down = (e: PointerEvent) => {
+        if (shotRef.current.art) return;
         touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
         st.setPointerCapture(e.pointerId);
-        if (touches.size === 2) { s.drag = false; const g = spread(); pinch = { d: g.d, z: zm.zt, mx: g.m.clientX, my: g.m.clientY }; return; }
+        if (touches.size === 2 && zlim()[1] > zlim()[0]) { s.drag = false; const g = spread(); pinch = { d: g.d, z: zm.zt, mx: g.m.clientX, my: g.m.clientY }; return; }
         shiftPan = e.shiftKey;
         s.drag = true; lx = e.clientX; ly = e.clientY; lt = performance.now(); s.vel = 0; s.goal = null; s.dirty = true;
         if (e.pointerType === "touch") holdUntil = Infinity;
@@ -235,8 +284,19 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           panBy(g.m.clientX - pinch.mx, g.m.clientY - pinch.my); pinch.mx = g.m.clientX; pinch.my = g.m.clientY;
           zoomAt(pinch.z * (g.d / Math.max(1, pinch.d)), sx, sy); return;
         }
+        const sh = shotRef.current;
+        // the hero view leans toward the pointer, a few degrees either way, and nothing more
+        if (sh.parallax && sh.yaw !== null && e.pointerType !== "touch") {
+          const [nx] = ndc(e); s.goal = sh.yaw + nx * sh.parallax; s.dirty = true;
+        }
         if (!s.drag) return;
         const dx = e.clientX - lx, dy = e.clientY - ly, now = performance.now();
+        if (!sh.turn) {
+          // locked views: a drag only slides along the print where the view allows it
+          if (sh.pan && zm.zt > 1.01) panBy(dx, dy);
+          if (sh.parallax && sh.yaw !== null && e.pointerType === "touch") { s.yaw = Math.max(sh.yaw - sh.parallax, Math.min(sh.yaw + sh.parallax, s.yaw - dx * 0.08)); }
+          lx = e.clientX; ly = e.clientY; lt = now; s.dirty = true; return;
+        }
         if (zm.zt > 1.01 && (shiftPan || e.shiftKey)) panBy(dx, dy);
         else {
           // sideways always turns the tee, zoomed in or not (slower when close, so the print doesn't fly past);
@@ -251,13 +311,14 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         touches.delete(e.pointerId);
         if (touches.size < 2) pinch = null;
         if (!s.drag) return;
-        s.drag = false; if (Math.abs(s.vel) > 0.3) s.goal = s.yaw + s.vel * 8; s.dirty = true;
+        s.drag = false; if (shotRef.current.turn && Math.abs(s.vel) > 0.3) s.goal = s.yaw + s.vel * 8; s.dirty = true;
         if (e.pointerType === "touch") holdUntil = performance.now() + 2500;   // no hover on a phone: a pause, then it turns again
       };
       // double-click: in close where you point, again to step back out
-      const dbl = (e: MouseEvent) => { const [sx, sy] = ndc(e); zoomAt(zm.zt > 1.2 ? 1 : 3, sx, sy); };
+      const dbl = (e: MouseEvent) => { if (shotRef.current.art || zlim()[1] <= zlim()[0]) return; const [sx, sy] = ndc(e); zoomAt(zm.zt > 1.2 ? 1 : 3, sx, sy); };
       // pinch on a trackpad (ctrl+wheel), or the wheel once already zoomed in
       const wheel = (e: WheelEvent) => {
+        if (shotRef.current.art || zlim()[1] <= zlim()[0]) return;
         if (!e.ctrlKey && !e.metaKey && zm.zt <= 1.01) return;
         e.preventDefault();
         const [sx, sy] = ndc(e);
@@ -300,7 +361,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       const loop = (now: number) => {
         raf = requestAnimationFrame(loop);
         if (process.env.NODE_ENV !== "production") Object.assign(window, { __sb: { pt, raster, s, SCENES, spin: () => spin } });
-        if (!onScreen) { prevT = 0; return; }
+        if (!onScreen || shotRef.current.art) { prevT = 0; return; }
         // while the page scrolls the viewer holds its frame and the page gets the whole GPU: a tee sliding past
         // doesn't need to breathe, and the scroll must never stutter
         if (!s.drag && !firstFrame && now - pageScroll < 200) { prevT = 0; return; }
@@ -311,7 +372,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         prevT = now;
         if (firstFrame) s.yaw = angRef.current;   // pick up wherever the photos were turned to while this loaded
         // auto-turn: eases out when the pointer comes over the tee (or it's being turned, or a view was picked)
-        const want = still.matches || hover || s.drag || s.goal !== null || s.photo || now < holdUntil || zm.zt > 1.01 ? 0 : SPIN;
+        const want = !shotRef.current.spin || still.matches || hover || s.drag || s.goal !== null || s.photo || now < holdUntil || zm.zt > 1.01 ? 0 : SPIN;
         spin += (want - spin) * (1 - Math.exp(-dt / 0.45));
         if (Math.abs(spin) < 0.02 && want === 0) spin = 0;
         if (spin) { s.yaw += spin * dt; s.dirty = true; }
@@ -401,7 +462,21 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
             s.dirty = true; lastSig = "";
           }
         },
-        setVariant: (v) => loadVariant(v),
+        setVariant: (v) => (shotRef.current.who === "worn" ? loadVariant(v) : Promise.resolve()),
+        setShot: async (sh) => {
+          const was = shotRef.current;
+          if (was.who === "worn" && was.yaw === null) wornYaw = s.yaw;
+          shotRef.current = sh;
+          const v = sh.who === "worn" ? variantRef.current : ALONE;
+          const z = sh.open;
+          zm.z = zm.zt = z[0]; zm.cx = zm.cxt = z[1]; zm.cy = zm.cyt = z[2];
+          if (z[0] > 1.5) void sharpen();
+          s.goal = null; s.vel = 0; spin = 0;
+          s.yaw = sh.yaw ?? wornYaw;
+          if (sh.art) return;
+          if (JSON.stringify(v) !== JSON.stringify(s.variant) || sceneOf(v) !== scene) await loadVariant(v);
+          s.dirty = true; lastSig = "";
+        },
         dispose: () => {
           cancelAnimationFrame(raf); ro.disconnect(); vis.disconnect();
           st.removeEventListener("pointerenter", enter); st.removeEventListener("pointerleave", leave);
@@ -412,7 +487,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           raster.renderer.dispose(); pt?.device.destroy();
         },
       };
-      if (JSON.stringify(variantRef.current) !== JSON.stringify(s.variant)) engine.current.setVariant(variantRef.current);
+      if (shotRef.current.id !== "worn") void engine.current.setShot(shotRef.current);
+      else if (JSON.stringify(variantRef.current) !== JSON.stringify(s.variant)) engine.current.setVariant(variantRef.current);
       const want = lookRef.current;
       if (want.tee !== s.tee || want.design !== s.design) engine.current.setLook(want.design, want.tee);
     })().catch((e) => { console.warn("3D view off, showing the rendered frames", e); setStatus(""); setMode("flat"); });
@@ -446,17 +522,41 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
     if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], title: "still breathing" }); } catch { /* closed */ } }
   };
 
+  const shot = SHOTS[shotI];
+  const goShot = async (i: number) => {
+    const n = (i + SHOTS.length) % SHOTS.length, sh = SHOTS[n];
+    setShotI(n); setArt({ z: 1, x: 0, y: 0 });
+    if (!engine.current) {
+      // still the photos: the nearest rendered angle stands in until the 3D is up
+      shotRef.current = sh;
+      if (sh.yaw !== null) { const a = ((Math.round(sh.yaw / 30) * 30) % 360 + 360) % 360; angRef.current = a; setAng(a); }
+      return;
+    }
+    setSwitching(true);
+    try { await engine.current.setShot(sh); } finally { setSwitching(false); }
+  };
+  // the art: pan and zoom over the flat file
+  const artZoom = (z: number) => setArt((a) => { const zz = Math.min(6, Math.max(1, z)); const k = zz / a.z; return { z: zz, x: zz === 1 ? 0 : a.x * k, y: zz === 1 ? 0 : a.y * k }; });
+  const artLimit = (a: { z: number; x: number; y: number }, w: number, h: number) => {
+    const lx = (w * (a.z - 1)) / 2, ly = (h * (a.z - 1)) / 2;
+    return { z: a.z, x: Math.max(-lx, Math.min(lx, a.x)), y: Math.max(-ly, Math.min(ly, a.y)) };
+  };
+
   return (
     <div>
       <div
         ref={stage}
         data-lenis-prevent
-        className={`relative aspect-[880/1120] w-full touch-none overflow-hidden ${sceneId === "show" ? "bg-[#0b0a0a]" : "bg-studio"} select-none cursor-grab active:cursor-grabbing`}
-        aria-label="Someone wearing the tee, in 3D, the view slowly going round them. Point at it to stop, drag to walk round."
-        role="img"
+        className={`group relative aspect-[880/1120] w-full touch-none overflow-hidden ${!shot.paper && sceneId === "show" ? "bg-[#0b0a0a]" : "bg-studio"} select-none ${shot.turn || shot.pan ? "cursor-grab active:cursor-grabbing" : ""}`}
+        aria-label={`The tee, view ${shotI + 1} of ${SHOTS.length}: ${shot.label}`}
+        aria-roledescription="carousel"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === "ArrowRight") void goShot(shotI + 1); else if (e.key === "ArrowLeft") void goShot(shotI - 1); }}
       >
-        <canvas ref={rasterCv} className="absolute inset-0 h-full w-full" />
-        <canvas ref={traceCv} className="absolute inset-0 h-full w-full opacity-0 transition-opacity duration-500" />
+        <div className={`absolute inset-0 transition-opacity duration-200 ${switching ? "opacity-0" : ""}`}>
+          <canvas ref={rasterCv} className="absolute inset-0 h-full w-full" />
+          <canvas ref={traceCv} className="absolute inset-0 h-full w-full opacity-0 transition-opacity duration-500" />
+        </div>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={STILL(design, ang)} alt="" draggable={false} fetchPriority="high"
@@ -469,9 +569,45 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           }}
           onPointerUp={() => { flatDrag.current = null; }}
         />
+        {shot.art ? (
+          <div
+            className="absolute inset-0 z-10 cursor-grab overflow-hidden active:cursor-grabbing"
+            style={{ background: COLOURS[tee].hex }}
+            onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); artDrag.current = { x: e.clientX, y: e.clientY, ax: art.x, ay: art.y }; }}
+            onPointerMove={(e) => {
+              const d = artDrag.current; if (!d) return;
+              const r = e.currentTarget.getBoundingClientRect();
+              setArt((a) => artLimit({ z: a.z, x: d.ax + e.clientX - d.x, y: d.ay + e.clientY - d.y }, r.width, r.height));
+            }}
+            onPointerUp={() => { artDrag.current = null; }}
+            onDoubleClick={() => artZoom(art.z > 1.2 ? 1 : 3)}
+            onWheel={(e) => artZoom(art.z * Math.exp(-e.deltaY * 0.002))}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={printBackURL(design, tee, true)} alt={`The back print of ${DESIGNS[design].name}, flat`} draggable={false}
+              className="absolute inset-[6%] h-[88%] w-[88%] object-contain"
+              style={{ transform: `translate(${art.x}px, ${art.y}px) scale(${art.z})`, transition: artDrag.current ? "none" : "transform 160ms ease-out" }}
+            />
+          </div>
+        ) : null}
+        <button onClick={() => void goShot(shotI - 1)} aria-label="Previous view"
+          className={`absolute top-1/2 left-2 z-20 -translate-y-1/2 px-2 py-3 text-[22px] leading-none opacity-70 transition hover:opacity-100 ${(!shot.paper && sceneId === "show") || (shot.art && tee === "black") ? "text-white" : "text-black"}`}>←</button>
+        <button onClick={() => void goShot(shotI + 1)} aria-label="Next view"
+          className={`absolute top-1/2 right-2 z-20 -translate-y-1/2 px-2 py-3 text-[22px] leading-none opacity-70 transition hover:opacity-100 ${(!shot.paper && sceneId === "show") || (shot.art && tee === "black") ? "text-white" : "text-black"}`}>→</button>
+        <p className={`pointer-events-none absolute right-3 bottom-3 z-20 text-[12px] tnum ${(!shot.paper && sceneId === "show") || (shot.art && tee === "black") ? "text-white/70" : "text-black/55"}`}>{shotI + 1} / {SHOTS.length}</p>
         <p className="pointer-events-none absolute bottom-3 left-3 text-[12px] text-black/60 tnum">{status}</p>
       </div>
-      <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1 text-[13px]">
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[13px]" role="tablist" aria-label="Views">
+        {SHOTS.map((x, i) => (
+          <button key={x.id} role="tab" aria-selected={i === shotI} onClick={() => void goShot(i)} className={`hit ${i === shotI ? "font-semibold" : "text-quiet hover:text-ink"}`}>
+            {x.label}
+          </button>
+        ))}
+        <button onClick={() => setTryOn(true)} className="hit ml-auto font-semibold text-blue hover:text-ink">try it on →</button>
+      </div>
+      {shot.id === "worn" ? (
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1 border-t border-line pt-1.5 text-[13px]">
         {VIEWS.map((v, i) => (
           <button key={v.label} onClick={() => { setView(i); engine.current?.zoomBy(0); engine.current?.turnTo(v.yaw); if (mode !== "3d") { const a = ((Math.round(v.yaw / 30) * 30) % 360 + 360) % 360; angRef.current = a; setAng(a); } }} className={`hit ${i === view ? "font-semibold" : "text-quiet hover:text-ink"}`}>
             {v.label}
@@ -482,8 +618,19 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           <span className="text-quiet">zoom</span>
           <button onClick={() => engine.current?.zoomBy(1.6)} className="hit text-quiet hover:text-ink" aria-label="Zoom in">+</button>
         </span>
-        <button onClick={() => setTryOn(true)} className="hit font-semibold text-blue hover:text-ink">try it on →</button>
       </div>
+      ) : null}
+      {shot.art ? (
+        <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1 border-t border-line pt-1.5 text-[13px]">
+          <span className="text-quiet">the artwork, flat · drag to move over it</span>
+          <span className="ml-auto flex items-baseline gap-3" role="group" aria-label="Zoom">
+            <button onClick={() => artZoom(art.z / 1.6)} className="hit text-quiet hover:text-ink" aria-label="Zoom out">−</button>
+            <span className="text-quiet">zoom</span>
+            <button onClick={() => artZoom(art.z * 1.6)} className="hit text-quiet hover:text-ink" aria-label="Zoom in">+</button>
+          </span>
+        </div>
+      ) : null}
+      {!shot.paper ? (
       <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-line pt-1.5 text-[13px]" role="group" aria-label="Light">
         <span className="text-quiet">light</span>
         {SCENE_LIST.map((x) => (
@@ -492,7 +639,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           </button>
         ))}
       </div>
-      {canPhoto ? (
+      ) : null}
+      {canPhoto && shot.id === "worn" ? (
         <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-line pt-1.5 text-[13px]" role="group" aria-label="Photo">
           <span className="text-quiet">photo</span>
           {FORMAT_LIST.map((x) => (

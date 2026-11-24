@@ -2,6 +2,10 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.10.0 — 2026-11-25
+### Studio
+- The 3D view is a carousel of six views, each locked to what it shows: worn (someone in it at the place you pick, turn and zoom), alone (the tee by itself on paper, turn it), ¾ back (the hero angle, leaning toward the pointer), flat (the back straight on), close (right in on the print, slide along it) and the art (the artwork flat, pan and zoom). The cloth keeps moving in the air in every 3D view. Arrows on the picture, or the arrow keys.
+
 ## 0.9.3 — 2026-11-25
 ### Shirts
 - Breath is a tour shirt now, next to the crowd: 01 crowd, 02 breath, 03 the Mumbai map, 04 the Bengaluru map.
