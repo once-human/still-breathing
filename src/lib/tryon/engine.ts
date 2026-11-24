@@ -240,6 +240,11 @@ export class TryOn {
     // a skeleton: the body, and one bone per sleeve at the shoulder joint
     const root = new THREE.Bone();
     this.bones = joints.map((j) => { const b = new THREE.Bone(); b.position.copy(j); root.add(b); return b; });
+    // a third bone at the waist: the lower body of the tee follows your hips, so it twists and leans with you
+    let yBot = 1e9;
+    for (const p of parts) for (let i = 1; i < p.pos.length; i += 3) yBot = Math.min(yBot, p.pos[i]);
+    const waistY = yTop - 0.45;
+    { const b = new THREE.Bone(); b.position.set(0, waistY, this.anchor.z); root.add(b); this.bones.push(b); }
     root.updateMatrixWorld(true);
     const skeleton = new THREE.Skeleton([root, ...this.bones]);
     const sums = [new THREE.Vector3(), new THREE.Vector3()], cnt = [0, 0];
@@ -252,7 +257,8 @@ export class TryOn {
         // below it, only what's outside the side seam is sleeve
         const w = y > armpit ? ss(0.12, half + 0.03, ax) * ss(armpit - 0.03, armpit + 0.05, y) : ss(half + 0.005, half + 0.05, ax);
         const s = x >= 0 ? 0 : 1;
-        SI[4 * v] = 0; SI[4 * v + 1] = 1 + s; SW[4 * v] = 1 - w; SW[4 * v + 1] = w;
+        const h = (1 - w) * ss(armpit, yBot + 0.04, y);
+        SI[4 * v] = 0; SI[4 * v + 1] = 1 + s; SI[4 * v + 2] = 3; SW[4 * v] = (1 - w) - h; SW[4 * v + 1] = w; SW[4 * v + 2] = h;
         if (w > 0.9) { sums[s].x += x; sums[s].y += y; sums[s].z += p.pos[3 * v + 2]; cnt[s]++; }
       }
       p.geo.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(SI, 4));
@@ -423,6 +429,18 @@ export class TryOn {
       const ang = 2 * Math.acos(Math.min(1, Math.abs(q.w)));
       if (ang > 1.75) q.slerp(new THREE.Quaternion(), 1 - 1.75 / ang);
       bone.quaternion.slerp(q, ease);
+    }
+
+    // the lower body follows the hips: their line, relative to the shoulders', twists and tilts the hem
+    {
+      const hip = this.bones[2], both = (l![L_HIP].visibility ?? 0) > 0.6 && (l![R_HIP].visibility ?? 0) > 0.6;
+      if (both) {
+        const hl = this.P.get(L_HIP)!.clone().applyMatrix4(inv), hr = this.P.get(R_HIP)!.clone().applyMatrix4(inv);
+        const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), hr.sub(hl).normalize());
+        const ang = 2 * Math.acos(Math.min(1, Math.abs(q.w)));
+        if (ang > 0.6) q.slerp(new THREE.Quaternion(), 1 - 0.6 / ang);
+        hip.quaternion.slerp(q, 1 - Math.exp(-dt * 10));
+      } else hip.quaternion.slerp(new THREE.Quaternion(), 1 - Math.exp(-dt * 4));
     }
 
     // neck and head occluders
