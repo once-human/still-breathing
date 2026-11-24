@@ -198,6 +198,13 @@ fn teeSurf(h: Hit, ro: vec3f, rd: vec3f) -> Surf {
     S.rough = 0.92 - 0.32 * ink; S.sheen = 0.35 * (1.0 - ink); S.spec = 0.02;
   } else if (iv.w == 3u) {
     S.base = vec3f(0.05, 0.045, 0.04); S.rough = 0.7; S.sheen = 0.0; S.spec = 0.03;   // the stool
+  } else if (iv.w >= 4u) {
+    // someone wearing it: colour painted per vertex; 4 skin (a little oil), 5 denim, 6 eyes (wet)
+    let k0 = verts[iv.x * 2u + 1u].yzw; let k1 = verts[iv.y * 2u + 1u].yzw; let k2 = verts[iv.z * 2u + 1u].yzw;
+    S.base = k0 * w + k1 * h.b.x + k2 * h.b.y;
+    if (iv.w == 4u) { S.rough = 0.5; S.sheen = 0.0; S.spec = 0.028; }
+    else if (iv.w == 5u) { S.rough = 0.85; S.sheen = 0.35; S.spec = 0.02; }
+    else { S.rough = 0.12; S.sheen = 0.0; S.spec = 0.03; }
   } else if (iv.w == 2u) {
     // skin (fit mode): diffuse-dominant, a soft sheen of oil, no subsurface (too costly here, too small to read)
     S.base = u.skin; S.rough = 0.48; S.sheen = 0.0; S.spec = 0.028;

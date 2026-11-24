@@ -13,8 +13,12 @@ import { Cloth, buildNetAsync, offsetTexture, slopeTextures, clothNodes } from "
 
 export const ASSET = "/tee/fit/";
 export type Pose = "stand" | "up" | "sit";
-/** One simulated tee: `dir` is a body + size from the fit pipeline (e.g. m170-M) or the shop tee (form-M). */
-export type Variant = { dir: string; size: string; pose: Pose; body: boolean; seat?: number; skin?: V3 };
+/**
+ * One simulated tee: `dir` is a body + size from the fit pipeline (e.g. m170-M) or the shop tee (form-M).
+ * `body` shows fit mode's plain body; `person` is someone wearing it (a GLB from pipeline/human.py: painted skin,
+ * jeans, eyes, the same body in the same pose the tee was simulated on).
+ */
+export type Variant = { dir: string; size: string; pose: Pose; body: boolean; seat?: number; skin?: V3; person?: string };
 export const FABRIC: Record<"black" | "cream", V3> = { black: srgbToLinear(0x151515), cream: srgbToLinear(0xfffae7) };
 
 function srgbToLinear(hex: number): V3 {
@@ -200,6 +204,17 @@ export class Raster {
   private gl: GLTFLoader | null = null;
   private loaded: THREE.Object3D[] = [];
   skinMat = new THREE.MeshPhysicalMaterial({ roughness: 0.48, metalness: 0, specularIntensity: 0.7, sheen: 0 });
+  /** someone wearing it: the colours are painted per vertex (skin, denim, eyes), the surfaces differ */
+  private painted(o: { roughness: number; spec: number; sheen?: number; sheenColor?: V3 }) {
+    const m = new THREE.MeshPhysicalNodeMaterial({ roughness: o.roughness, metalness: 0, specularIntensity: o.spec });
+    m.colorNode = vec3(vertexColor());
+    if (o.sheen) { m.sheen = o.sheen; m.sheenRoughness = 0.5; m.sheenColor = new THREE.Color().setRGB(...(o.sheenColor ?? [1, 1, 1]), THREE.LinearSRGBColorSpace); }
+    return m;
+  }
+  // skin: a little oil, and a soft warm fuzz at grazing angles where light goes into skin and comes back out
+  personSkin = this.painted({ roughness: 0.5, spec: 0.7, sheen: 1, sheenColor: [0.16, 0.07, 0.045] });
+  personDenim = this.painted({ roughness: 0.85, spec: 0.5, sheen: 1, sheenColor: [0.035, 0.035, 0.04] });
+  personEyes = this.painted({ roughness: 0.12, spec: 0.75 });
   stoolMat = new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0, color: new THREE.Color(0.05, 0.045, 0.04) });
 
   /**
@@ -213,7 +228,7 @@ export class Raster {
     // everything at once (most of it is already downloading: the viewer started it before this code arrived)
     const [gltf, bodyGltf, [c0, o0], normalP, knitT] = await Promise.all([
       glb(`${v.dir}/${v.pose}.glb`),
-      v.body ? glb(`${v.dir}/body-${v.pose}.glb`) : Promise.resolve(null),
+      v.person ? grab(v.person).then(async (b) => gl.parseAsync(await b.arrayBuffer(), ASSET)) : v.body ? glb(`${v.dir}/body-${v.pose}.glb`) : Promise.resolve(null),
       this.look(design, tee),
       this.normals[v.size] ? Promise.resolve(this.normals[v.size]) : this.tx(`tex/normal-${v.size}.png`, false),
       this.nodes ? Promise.resolve(null) : this.tx("tex/knit-normal.png", false),
@@ -266,25 +281,30 @@ export class Raster {
       o.traverse((x) => { const mm = x as THREE.Mesh; if (mm.isMesh) mm.geometry.dispose(); });
     }
     this.loaded = [];
-    const lift = v.body ? FLOOR : 0;
+    const lift = v.body || v.person ? FLOOR : 0;
     this.pivot.position.y = lift;
 
-    const P: number[] = [], N: number[] = [], UV: number[] = [], I: number[] = [], M: number[] = [];
+    const P: number[] = [], N: number[] = [], UV: number[] = [], I: number[] = [], M: number[] = [], C: number[] = [];
     const teeMeshes: { mesh: THREE.Mesh; pos: Float32Array; idx: ArrayLike<number>; plain: boolean }[] = [];
-    const take = (root: THREE.Object3D, kind: "tee" | "body" | "stool") => {
+    const take = (root: THREE.Object3D, kind: "tee" | "body" | "stool" | "person") => {
       root.updateMatrixWorld(true);
       root.traverse((o) => {
         const mesh = o as THREE.Mesh;
         if (!mesh.isMesh) return;
-        const isInner = kind === "tee" && /inner/i.test((mesh.material as THREE.Material)?.name || "");
-        mesh.material = kind === "body" ? this.skinMat : kind === "stool" ? this.stoolMat : isInner ? this.inner : this.outer!;
-        const g = mesh.geometry, pa = g.attributes.position, na = g.attributes.normal, ua = g.attributes.uv;
+        const mname = (mesh.material as THREE.Material)?.name || "";
+        const isInner = kind === "tee" && /inner/i.test(mname);
+        // the person: 4 skin, 5 denim, 6 eyes (the path tracer reads their colour per vertex too)
+        const pid = /jeans/i.test(mname) ? 5 : /eye/i.test(mname) ? 6 : 4;
+        mesh.material = kind === "person" ? [this.personSkin, this.personDenim, this.personEyes][pid - 4]
+          : kind === "body" ? this.skinMat : kind === "stool" ? this.stoolMat : isInner ? this.inner : this.outer!;
+        const g = mesh.geometry, pa = g.attributes.position, na = g.attributes.normal, ua = g.attributes.uv, ca = g.attributes.color;
         const base = P.length / 3, mw = mesh.matrixWorld, nm = new THREE.Matrix3().getNormalMatrix(mw);
         const vv = new THREE.Vector3();
         for (let i = 0; i < pa.count; i++) {
           vv.fromBufferAttribute(pa, i).applyMatrix4(mw); P.push(vv.x, vv.y + lift, vv.z);
           vv.fromBufferAttribute(na, i).applyMatrix3(nm).normalize(); N.push(vv.x, vv.y, vv.z);
           UV.push(ua ? ua.getX(i) : 0, ua ? ua.getY(i) : 0);
+          if (kind === "person" && ca) C.push(ca.getX(i), ca.getY(i), ca.getZ(i)); else C.push(1, 1, 1);
         }
         const ix = g.index ? Array.from(g.index.array) : Array.from({ length: pa.count }, (_, i) => i);
         for (let i = 0; i < ix.length; i++) I.push(ix[i] + base);
@@ -295,7 +315,7 @@ export class Raster {
           for (let i = 0; i < pa.count; i++) { pos[3 * i] = P[3 * (base + i)]; pos[3 * i + 1] = P[3 * (base + i) + 1] - lift; pos[3 * i + 2] = P[3 * (base + i) + 2]; }
           teeMeshes.push({ mesh, pos, idx: ix, plain });
         }
-        const id = kind === "body" ? 2 : kind === "stool" ? 3 : isInner ? 1 : 0;
+        const id = kind === "person" ? pid : kind === "body" ? 2 : kind === "stool" ? 3 : isInner ? 1 : 0;
         for (let i = 0; i < ix.length / 3; i++) M.push(id);
       });
       this.pivot.add(root); this.loaded.push(root);
@@ -325,7 +345,7 @@ export class Raster {
         this.cloth = cloth;
       }).catch((e) => console.info("cloth off", e));
     }
-    if (bodyGltf) take(bodyGltf.scene, "body");
+    if (bodyGltf) take(bodyGltf.scene, v.person ? "person" : "body");
     if (v.body && v.pose === "sit" && v.seat) {
       // a plain stool, its top where the simulation's seat was (Blender y forward -> three z back)
       const box = new THREE.Mesh(new THREE.BoxGeometry(0.46, v.seat, 0.42));
@@ -333,7 +353,7 @@ export class Raster {
       const grp = new THREE.Group(); grp.add(box); take(grp, "stool");
     }
     this.tris = I.length / 3;
-    return { pos: new Float32Array(P), nrm: new Float32Array(N), uv: new Float32Array(UV), idx: new Uint32Array(I), mat: new Uint8Array(M) };
+    return { pos: new Float32Array(P), nrm: new Float32Array(N), uv: new Float32Array(UV), idx: new Uint32Array(I), mat: new Uint8Array(M), col: new Float32Array(C) };
   }
 
   setCamera(c: Camera) {

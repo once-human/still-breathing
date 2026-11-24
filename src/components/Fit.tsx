@@ -21,7 +21,8 @@ const SKINS: { name: string; lin: V3; hex: string }[] = [
   { name: "deep", lin: [0.15, 0.078, 0.045], hex: "#6a4a37" },
 ];
 const POSES: { id: Pose; label: string }[] = [{ id: "stand", label: "standing" }, { id: "up", label: "hands up" }, { id: "sit", label: "sitting" }];
-export const SHOP: Variant = { dir: "form-M", size: "M", pose: "stand", body: false };
+/** The shop view: the tee in M, worn by someone (the 170 cm body it was simulated on, made a person) */
+export const SHOP: Variant = { dir: "m170-M", size: "M", pose: "stand", body: false, person: "/tee/human/m170-stand.glb" };
 
 type FitData = {
   size: string; body: { height_cm: number; chest_cm: number }; chest_ease_cm: number;

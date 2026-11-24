@@ -88,7 +88,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         io.observe(stage.current!);
       });
       if (dead) return;
-      const [{ Raster, FABRIC }, { SCENES, CAMERA, BODY_CAMERA }] = await code;
+      const [{ Raster, FABRIC }, { SCENES, CAMERA, BODY_CAMERA, WEAR_CAMERA }] = await code;
+      const cameraFor = (v: Variant) => (v.body ? BODY_CAMERA[v.pose] : v.person ? WEAR_CAMERA : CAMERA);
       if (dead || !stage.current || !rasterCv.current || !traceCv.current) return;
       const st = stage.current, tc = traceCv.current;
       const raster = new Raster(rasterCv.current);
@@ -143,7 +144,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       /** hands the current tee to the path tracer (it builds its own acceleration structure in a worker) */
       const ptLoad = async (p: PathTracer, v: Variant) => {
         if (!geo) return;
-        const cam = v.body ? BODY_CAMERA[v.pose] : CAMERA;
+        const cam = cameraFor(v);
         const [[c, o], nrm] = await Promise.all([colourMaps(s.design, s.tee), (normals[v.size] ??= bitmap(`/tee/fit/tex/normal-${v.size}.png`))]);
         knitB ??= await bitmap("/tee/fit/tex/knit-normal.png");
         p.imgNormal = nrm; p.imgKnit = knitB;
@@ -159,7 +160,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         while (busy) await new Promise((r) => setTimeout(r, 16));
         try {
           geo = await raster.load(s.design, s.tee, v);
-          raster.setCamera(v.body ? BODY_CAMERA[v.pose] : CAMERA);
+          raster.setCamera(cameraFor(v));
           if (pt) await ptLoad(pt, v);
           s.variant = v;
         } finally { s.loading = false; s.dirty = true; lastSig = ""; }
@@ -443,8 +444,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       <div
         ref={stage}
         data-lenis-prevent
-        className={`relative aspect-[880/1120] w-full touch-none overflow-hidden bg-studio select-none cursor-grab active:cursor-grabbing`}
-        aria-label="The tee in 3D, turning slowly. Point at it to stop it, drag to turn it."
+        className={`relative aspect-[880/1120] w-full touch-none overflow-hidden ${sceneId === "show" ? "bg-[#0b0a0a]" : "bg-studio"} select-none cursor-grab active:cursor-grabbing`}
+        aria-label="Someone wearing the tee, in 3D, the view slowly going round them. Point at it to stop, drag to walk round."
         role="img"
       >
         <canvas ref={rasterCv} className="absolute inset-0 h-full w-full" />

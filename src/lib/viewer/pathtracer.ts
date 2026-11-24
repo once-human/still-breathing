@@ -4,7 +4,8 @@ import { TRACE_WGSL, SHOW_WGSL, DENOISE_WGSL } from "./pt.wgsl";
 import { buildBVHAsync } from "./bvh";
 import { CAMERA, VFOV, ASPECT, KNIT_REPEAT, cameraBasis, lightFrame, radiance, turnY, type Camera, type Scene, type V3 } from "./scene";
 
-export type TeeGeometry = { pos: Float32Array; nrm: Float32Array; uv: Float32Array; idx: Uint32Array; mat: Uint8Array };
+/** col: linear albedo per vertex (the person's painted skin, denim, eyes); white elsewhere */
+export type TeeGeometry = { pos: Float32Array; nrm: Float32Array; uv: Float32Array; idx: Uint32Array; mat: Uint8Array; col?: Float32Array };
 /** back: the back print, front: the chest print (both premultiplied, at print resolution) */
 export type TeeImages = { back: ImageBitmap; front: ImageBitmap; normal: ImageBitmap; knit: ImageBitmap };
 export type View = { yaw: number; crop: [number, number, number]; knit: boolean };
@@ -134,6 +135,7 @@ export class PathTracer {
     for (let v = 0; v < nv; v++) {
       verts[v * 8] = g.nrm[v * 3]; verts[v * 8 + 1] = g.nrm[v * 3 + 1]; verts[v * 8 + 2] = g.nrm[v * 3 + 2];
       verts[v * 8 + 3] = g.uv[v * 2]; verts[v * 8 + 4] = g.uv[v * 2 + 1];
+      if (g.col) { verts[v * 8 + 5] = g.col[v * 3]; verts[v * 8 + 6] = g.col[v * 3 + 1]; verts[v * 8 + 7] = g.col[v * 3 + 2]; }
     }
     const up = (data: ArrayBufferView) => {
       const b = this.device.createBuffer({ size: Math.max(16, data.byteLength), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
