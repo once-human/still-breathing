@@ -2,6 +2,11 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.10.1 — 2026-11-25
+### Studio
+- No more flicker while turning the tee. The twelve rendered frames load together and swap in place, so a drag never shows an empty stage. The path-traced still no longer comes and goes over the live cloth; it only develops the photos you ask for. The last view stays up while the next one loads.
+- Each device gets what runs well on it: WebGPU desktops get everything plus photos; WebGL2, phones and machines with 4 GB or less get the same live view at up to 1.5x sharpness; with no real graphics, the rendered frames.
+
 ## 0.10.0 — 2026-11-25
 ### Studio
 - The 3D view is a carousel of six views, each locked to what it shows: worn (someone in it at the place you pick, turn and zoom), alone (the tee by itself on paper, turn it), ¾ back (the hero angle, leaning toward the pointer), flat (the back straight on), close (right in on the print, slide along it) and the art (the artwork flat, pan and zoom). The cloth keeps moving in the air in every 3D view. Arrows on the picture, or the arrow keys.

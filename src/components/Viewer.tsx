@@ -68,6 +68,8 @@ const VIEWS = [
 ];
 // samples before the denoiser runs and the traced frame replaces the real-time one: enough for clean soft shadows
 const MAX_SPP = 32;
+/** lay the path-traced frame over the live view at rest (off: the live cloth never rests) */
+const TRACE_OVER_LIVE = false;
 // the turntable's own speed, degrees a second: one slow turn in about 51 s
 const SPIN = 7;
 // labels only; the rigs live in lib/viewer/scene.ts (kept out of the page bundle until the viewer loads)
@@ -77,6 +79,7 @@ const PHOTO_SPP = 64;
 const TRACE_MS = 3;
 const SLOW_MS = 600;
 const STILL = (d: string, a: number) => `/tee/still/${d}/a${a}.webp`;
+const ANGLES = Array.from({ length: 12 }, (_, i) => i * 30);
 const FORMAT_LIST: { id: Format; label: string }[] = [{ id: "story", label: "story 9:16" }, { id: "post", label: "post 4:5" }];
 const LOOK_LIST: Look[] = ["clean", "film"];
 
@@ -121,6 +124,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       const tier = await pickTier();
       if (dead) return;
       if (tier === "photos") { setMode("flat"); return; }   // the 3D code is never downloaded
+      const lite = tier === "lite";
       // the tee, its textures and the decoder start downloading now, alongside the 3D code, not after it
       prefetchTee(variantRef.current, lookRef.current.design, lookRef.current.tee);
       const code = Promise.all([import("@/lib/viewer/raster"), import("@/lib/viewer/scene")]);
@@ -235,7 +239,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       if (dead) return;
 
       // ---------- sizing: always full sharpness, never a lower-resolution stand-in while it moves ----------
-      const dpr = () => Math.min(devicePixelRatio || 1, 2);
+      // a phone or a small machine draws at 1.5x at most: still sharp, and every drag stays at full frame rate
+      const dpr = () => Math.min(devicePixelRatio || 1, lite ? 1.5 : 2);
       const traceK = () => Math.min(devicePixelRatio || 1, 1.5);
       const size = () => {
         const w = st.clientWidth, h = st.clientHeight;
@@ -401,13 +406,16 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
             firstFrame = false;
             // the photo steps aside only once the 3D has actually reached the screen, textures and all (two
             // frames on): never an empty or half-dressed tee in between
-            requestAnimationFrame(() => requestAnimationFrame(() => { if (!dead) { setMode("3d"); setStatus(""); void loadEnv(); void startTracer(); } }));
+            requestAnimationFrame(() => requestAnimationFrame(() => { if (!dead) { setMode("3d"); setStatus(""); void loadEnv(); if (!lite) void startTracer(); } }));
           }
         }
         const busyCloth = moving || swinging;
         if (busyCloth) restSince = now;
         // the still steps aside at once: a fading still over a turning tee reads as a blur
         if (busyCloth && traced) { tc.style.transition = "none"; tc.style.opacity = "0"; traced = false; shown = -1; }
+        // the cloth is always live in the air, so a traced still laid over it would come and go with every gust (a
+        // flicker, and a frame that never quite matches): the path tracer only develops the photos people ask for
+        if (!TRACE_OVER_LIVE) return;
         if (!pt || busyCloth || s.photo || s.loading || busy || now - restSince < 300 || !quiet(now)) return;
         // the full-resolution print for the path tracer, swapped in at rest when zoomed in (and back out)
         const ptWant = zm.z > 1.3 && ptFull && ptFull.key === `${s.design}-${s.tee}` ? ptFull.url : "";
@@ -553,22 +561,33 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         tabIndex={0}
         onKeyDown={(e) => { if (e.key === "ArrowRight") void goShot(shotI + 1); else if (e.key === "ArrowLeft") void goShot(shotI - 1); }}
       >
-        <div className={`absolute inset-0 transition-opacity duration-200 ${switching ? "opacity-0" : ""}`}>
+        {/* the last view stays up while the next one loads (never an empty stage in between) */}
+        <div className="absolute inset-0" aria-busy={switching}>
           <canvas ref={rasterCv} className="absolute inset-0 h-full w-full" />
           <canvas ref={traceCv} className="absolute inset-0 h-full w-full opacity-0 transition-opacity duration-500" />
         </div>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={STILL(design, ang)} alt="" draggable={false} fetchPriority="high"
-          className={`absolute inset-0 h-full w-full transition-opacity duration-500 ${mode === "3d" ? "pointer-events-none opacity-0" : ""}`}
-          onPointerDown={(e) => { if (mode === "3d") return; e.currentTarget.setPointerCapture(e.pointerId); flatDrag.current = { x: e.clientX, a: ang }; }}
+        {/* the rendered frames: all twelve stacked and loaded together, so turning only changes which one shows
+            (never a blank while the next one decodes). Shown while the 3D loads, and for good without it. */}
+        <div
+          className={`absolute inset-0 transition-opacity duration-500 ${mode === "3d" ? "pointer-events-none opacity-0" : ""}`}
+          onPointerDown={(e) => { if (mode === "3d" || !(shot.turn || shot.parallax)) return; e.currentTarget.setPointerCapture(e.pointerId); flatDrag.current = { x: e.clientX, a: ang }; }}
           onPointerMove={(e) => {
             const d = flatDrag.current; if (!d) return;
             const steps = Math.round((e.clientX - d.x) / 45);
             const a = (((d.a + steps * 30) % 360) + 360) % 360; angRef.current = a; setAng(a);
           }}
           onPointerUp={() => { flatDrag.current = null; }}
-        />
+        >
+          {ANGLES.map((a) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={`${design}-${a}`} src={STILL(design, a)} alt="" draggable={false}
+              fetchPriority={a === ang ? "high" : "low"} decoding="async"
+              className={`absolute inset-0 h-full w-full ${a === ang ? "" : "opacity-0"}`}
+              style={shot.id === "close" ? { transform: "scale(2.6) translateY(4%)" } : undefined}
+            />
+          ))}
+        </div>
         {shot.art ? (
           <div
             className="absolute inset-0 z-10 cursor-grab overflow-hidden active:cursor-grabbing"
