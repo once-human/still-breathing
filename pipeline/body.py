@@ -1,10 +1,14 @@
-# blender -b --factory-startup -P body.py -- out.blend [height_cm chest_cm m|f]
+# blender -b --factory-startup -P body.py -- out.blend [height_cm chest_cm m|f [muscle [weight]]]
+#   muscle: MakeHuman's muscle macro held there (0.5 average) with the weight held lean (0.4, or as given): an athletic body.
+#   Only the height is fitted then; the chest is whatever that build gives (it is printed)
 # Real human body (MakeHuman / MPFB, CC0 assets) with the default rig, sized to a target height and chest girth.
 import bpy, sys, math, addon_utils
 from mathutils import Vector
 a = sys.argv[sys.argv.index("--") + 1:]
 OUT = a[0]; H = float(a[1]) if len(a) > 1 else 170.0; CHEST = float(a[2]) if len(a) > 2 else 94.0
 FEMALE = len(a) > 3 and a[3] == "f"
+MUSCLE = float(a[4]) if len(a) > 4 else None
+LEAN = float(a[5]) if len(a) > 5 else 0.4
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.preferences.addon_enable(module="bl_ext.user_default.mpfb")
 from bl_ext.user_default.mpfb.services.humanservice import HumanService
@@ -60,6 +64,8 @@ def measure(b):
 
 macro = TargetService.get_default_macro_info_dict()
 macro.update({"gender": 0.0 if FEMALE else 1.0, "age": 0.5, "muscle": 0.5 if not FEMALE else 0.45, "weight": 0.55, "proportions": 0.5, "height": 0.5 if not FEMALE else 0.4})
+if MUSCLE is not None:   # athletic: muscled, lean, in their twenties, with a trained body's proportions
+    macro.update({"muscle": MUSCLE, "weight": LEAN, "age": 0.4, "proportions": 0.85})
 # South Asian: MakeHuman has no Indian base, so blend its three ethnic shape sets
 # (caucasian skull/limb proportions, softer asian torso, a little african) and set the measurements from Indian data
 macro["race"] = {"asian": 0.3, "caucasian": 0.55, "african": 0.15}
@@ -67,11 +73,12 @@ macro["race"] = {"asian": 0.3, "caucasian": 0.55, "african": 0.15}
 for it in range(12):
     b = build(macro); h, c = measure(b)
     print(f"iter {it}: height {h:.1f} chest {c:.1f}  (h={macro['height']:.3f} w={macro['weight']:.3f})", flush=True)
-    if abs(h - H) < 0.8 and abs(c - CHEST) < 1.0: break
+    if abs(h - H) < 0.8 and (MUSCLE is not None or abs(c - CHEST) < 1.0): break
     macro["height"] = min(1, max(0, macro["height"] + (H - h) / 105))
+    if MUSCLE is not None: continue
     w = macro["weight"] + (CHEST - c) / 28          # weight + muscle move chest girth ~25-30 cm per unit
     macro["weight"] = min(1, max(0, w))
-    if w != macro["weight"]:                          # pinned: build or slim the frame instead
+    if w != macro["weight"] and MUSCLE is None:       # pinned: build or slim the frame instead
         macro["muscle"] = min(1, max(0, macro["muscle"] + (w - macro["weight"]) * 0.5))
 rig = HumanService.add_builtin_rig(b, "default")
 b.name = "body"; rig.name = "rig"

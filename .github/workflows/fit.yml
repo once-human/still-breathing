@@ -30,6 +30,8 @@ jobs:
           only = [x.strip() for x in "${{ inputs.only }}".split(",") if x.strip()]
           inc = [{"body": b, "size": s, "name": f"{b}-{s}", "form": ""} for b, ss in PLAN.items() for s in ss]
           inc.append({"body": "m170", "size": "M", "name": "form-M", "form": "1"})   # the shop tee, on a ghost form
+          # the two people who wear it in the shop view: the athletic man in M, the athletic woman in S
+          inc += [{"body": "ma175", "size": "M", "name": "ma175-M", "form": ""}, {"body": "fa163", "size": "S", "name": "fa163-S", "form": ""}]
           inc = [x for x in inc if not only or x["name"] in only]
           print("matrix=" + json.dumps({"include": inc}))
           EOF
