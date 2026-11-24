@@ -2113,46 +2113,67 @@ class Scene(Art):
         return srcs
 
     def beams(self, srcs, rng):
-        """the light goes up and crosses, then stops: no glow, just lines"""
-        # left cans lean right, right cans lean left
-        targets = [(STX + 120, 486), (STX + 205, 520), (STX + 30, 470), (STX - 40, 476), (STX - 200, 512), (STX - 118, 484)]
-        for (sx, sy), (tx, ty) in zip(srcs, targets):
-            ang = math.atan2(ty - sy, tx - sx)
-            L = math.hypot(tx - sx, ty - sy)
-            for k in (-1, 1):
-                a = ang + k * rng.uniform(0.018, 0.03)
-                ln = L * rng.uniform(0.82, 1.0)
-                # broken into two or three dashes, like a pen lifted
-                pos = 14.0
+        """the light goes up: a loose, uneven fan of cones, each one two pen lines
+        that open out and give up at different heights; one pair crosses"""
+        # two heads per can on the outer ones; spread wide and uneven
+        plan = []
+        n = len(srcs)
+        for i, (sx, sy) in enumerate(srcs):
+            t = (i + 0.5) / n
+            plan.append((sx, sy, -90 + (t - 0.5) * 96 + rng.gauss(0, 6)))
+            if i in (0, n - 1):
+                plan.append((sx + rng.gauss(0, 2), sy, -90 + (t - 0.5) * 150 + rng.gauss(0, 5)))
+        plan[2] = (plan[2][0], plan[2][1], -66 + rng.gauss(0, 3))        # this one leans across the others
+        plan[-3] = (plan[-3][0], plan[-3][1], -113 + rng.gauss(0, 3))
+        for (sx, sy, deg) in plan:
+            a = math.radians(deg)
+            L = rng.uniform(150, 260)
+            # keep clear of the dates
+            if sy + math.sin(a) * L < 466:
+                L = (sy - 466) / -math.sin(a)
+            half = math.radians(rng.uniform(2.2, 4.2))
+            edges = (-1, 1) if rng.random() < 0.8 else (rng.choice((-1, 1)),)
+            for k in edges:
+                ae = a + k * half
+                ln = L * rng.uniform(0.75, 1.0)
+                pos = rng.uniform(8, 16)
                 while pos < ln:
-                    seg = rng.uniform(40, 95)
+                    seg = rng.uniform(30, 80)
                     e = min(ln, pos + seg)
-                    pa = (sx + math.cos(a) * pos, sy + math.sin(a) * pos)
-                    pb = (sx + math.cos(a) * e, sy + math.sin(a) * e)
-                    self.line([pa, ((pa[0] + pb[0]) / 2 + rng.gauss(0, 1), (pa[1] + pb[1]) / 2 + rng.gauss(0, 1)), pb], MINW, rng=rng, layer='Y',
-                              wob=0.5, trem=0.6, a0=1.5, a1=4.0, pv=0.2)
-                    pos = e + rng.uniform(6, 16)
+                    pa = (sx + math.cos(ae) * pos, sy + math.sin(ae) * pos)
+                    pb = (sx + math.cos(ae) * e, sy + math.sin(ae) * e)
+                    self.line([pa, ((pa[0] + pb[0]) / 2 + rng.gauss(0, 1.2), (pa[1] + pb[1]) / 2 + rng.gauss(0, 1.2)), pb], MINW, rng=rng, layer='Y',
+                              wob=0.6, trem=0.7, a0=1.5, a1=4.0, pv=0.25)
+                    pos = e + rng.uniform(5, 18)
+            # a few strokes across the cone, where the haze catches it
+            if rng.random() < 0.45 and len(edges) == 2:
+                for j in range(rng.randint(2, 4)):
+                    d = L * rng.uniform(0.3, 0.85)
+                    pa = (sx + math.cos(a - half) * d, sy + math.sin(a - half) * d)
+                    pb = (sx + math.cos(a + half) * d, sy + math.sin(a + half) * d)
+                    self.line([pa, pb], MINW, rng=rng, layer='Y', wob=0.4, trem=0, a0=0.4, a1=0.6)
 
     def sound_marks(self, rng):
-        # coiled sound off the sub stacks, like a phone cord
-        for (x, y, ex, ey, ph) in ((STX - 128, 738, STX - 196, 630, 0.0), (STX + 132, 738, STX + 206, 628, 1.4)):
-            pts = []
-            n = 120
-            loops = 6.5
-            for i in range(n + 1):
-                t = i / n
-                bx = x + (ex - x) * t + 10 * math.sin(math.pi * t) * (1 if ex > x else -1)
-                by = y + (ey - y) * t
-                r = 6.5 * (0.6 + 0.6 * t)
-                a = TAU * loops * t + ph
-                pts.append((bx + math.cos(a) * r, by + math.sin(a) * r * 0.75))
-            self.line(pts[::2], MINW, rng=rng, wob=0.2, trem=0.2, a0=1.5, a1=5.0, pv=0.3)
+        # sound off the stacks: nested arcs, uneven, a couple of them broken
+        for (x, y, sg) in ((STX - 140, 772, -1), (STX + 136, 772, 1)):
+            for j in range(4):
+                r_ = 16 + j * rng.uniform(11, 15)
+                a0 = math.radians(-58 + rng.gauss(0, 7))
+                a1 = math.radians(18 + rng.gauss(0, 8))
+                pts = []
+                for i in range(9):
+                    a = a0 + (a1 - a0) * i / 8
+                    pts.append((x + sg * math.cos(a) * r_, y + math.sin(a) * r_ * 1.05))
+                if rng.random() < 0.35:
+                    cut = rng.randint(3, 5)
+                    self.line(pts[:cut], MINW, rng=rng, wob=0.5, trem=0.3, a0=0.5, a1=1.0, pv=0.25)
+                    self.line(pts[cut + 1:], MINW, rng=rng, wob=0.5, trem=0.3, a0=0.5, a1=1.0, pv=0.25)
+                else:
+                    self.line(pts, MINW, rng=rng, wob=0.5, trem=0.3, a0=0.6, a1=1.4, pv=0.25)
         # little crosses and ticks over the arch
-        for (x, y, s_) in ((STX - 70, 612, 5), (STX + 64, 606, 6), (STX - 6, 596, 4.5), (STX + 150, 640, 4.5), (STX - 160, 646, 4)):
+        for (x, y, s_) in ((STX - 70, 612, 5), (STX + 64, 600, 6), (STX + 150, 640, 4.5), (STX - 170, 650, 4)):
             self.line([(x - s_, y + rng.gauss(0, 0.5)), (x + s_, y + rng.gauss(0, 0.5))], MINW, rng=rng, wob=0.2, trem=0, a0=0.3, a1=0.4)
             self.line([(x + rng.gauss(0, 0.5), y - s_), (x + rng.gauss(0, 0.5), y + s_)], MINW, rng=rng, wob=0.2, trem=0, a0=0.3, a1=0.4)
-        for (x, y, a) in ((STX - 44, 622, -2.0), (STX + 40, 618, -1.1), (STX - 118, 636, -2.5), (STX + 120, 634, -0.6)):
-            self.line([(x, y), (x + math.cos(a) * 11, y + math.sin(a) * 11)], MINW, rng=rng, wob=0.3, trem=0, a0=0.4, a1=1.0)
 
     def foh(self, x, y, rng):
         """the sound desk tent out in the crowd"""
@@ -2228,6 +2249,8 @@ class Scene(Art):
             x = 600 + sg * r.uniform(330, 560)
             y = r.uniform(798, 880)
             if abs(x - STX) < 340 + (y - 800) * 3.6:
+                continue
+            if y < 806 and (x < 300 or x > 930):     # room for the hand-lettered notes
                 continue
             if r.random() < 0.5:
                 s_ = r.uniform(4, 7)
@@ -2320,33 +2343,45 @@ class Scene(Art):
 
     def heroes(self, r):
         LW = 4.6
-        # --- the torch: a tall guy, arm straight up, phone light on (centre, furthest back)
-        Tx, Ty, Tw = 604, 1146, 94
+        # --- the tall one: a head over everyone, arm straight up, phone torch on
+        Tx, Ty, Tw = 622, 1004, 88
         Th = Tw * 1.13
-        self.person(Tx, Ty, Tw, LW, r, {'garment': 'jacket', 'gfill': None, 'hair': 'cap', 'capfill': None, 'sw': 1.22, 'yend': 2.6, 'trail': True,
-                                         'tilt': -4, 'arms': {1: 'torch'},
-                                         'arm_1': {'elbow': (Tx + 0.95 * Tw, Ty - 0.25 * Th), 'wrist': (Tx + 0.5 * Tw, Ty - 1.7 * Th), 'psize': 0.8 * Tw,
-                                                   'reach': 1.6, 'nray': 15}})
-        self.marks['torch'] = (Tx + 0.5 * Tw, Ty - 2.3 * Th)
+        Tsw = 1.24
+        self.person(Tx, Ty, Tw, LW * 0.95, r, {'garment': 'jacket', 'gfill': None, 'hair': 'cap', 'capfill': None, 'sw': Tsw, 'yend': 2.6, 'trail': True,
+                                                'hr': 1.13, 'tilt': -3, 'arms': {1: 'torch'},
+                                                'arm_1': {'elbow': (Tx + 0.98 * Tw, Ty - 0.22 * Th), 'wrist': (Tx + 0.52 * Tw, Ty - 1.75 * Th), 'psize': 0.8 * Tw,
+                                                          'reach': 1.7, 'nray': 15}})
+        self.marks['torch'] = (Tx + 0.52 * Tw, Ty - 2.4 * Th)
 
-        # --- mallige: a girl with jasmine pinned in her braid (centre-right), arms down, swaying
-        Mx, My, Mw = 812, 1226, 110
-        self.person(Mx, My, Mw, LW, r, {'garment': 'jacket', 'gfill': None, 'hair': 'braid', 'hairlen': 2.5, 'mallige': True, 'tiefill': 'B',
-                                         'sw': 1.1, 'yend': 2.7, 'trail': False, 'tilt': 7, 'lean': 0.04})
+        # --- his short friend behind him, up on her toes, both hands on his shoulders to see over
+        Kx, Ky, Kw = 640, 1204, 96
+        Kh = Kw * 1.13
+        shL = (Tx - 0.8 * Tsw * Tw + 8, Ty + 1.04 * Th + 6)
+        shR = (Tx + 0.8 * Tsw * Tw - 6, Ty + 1.02 * Th + 4)
+        self.person(Kx, Ky, Kw, LW, r, {'garment': 'jacket', 'gfill': 'Y', 'hair': 'curly', 'sw': 1.12, 'yend': 2.6, 'trail': False, 'hr': 1.1,
+                                         'tilt': 7, 'lean': -0.02, 'arms': {-1: 'mitten', 1: 'mitten'},
+                                         'arm_-1': {'elbow': (Kx - 1.05 * Kw, Ky + 0.4 * Kh), 'wrist': (shL[0] + 4, shL[1] + 4)},
+                                         'arm_1': {'elbow': (Kx + 1.1 * Kw, Ky + 0.38 * Kh), 'wrist': (shR[0] - 2, shR[1] + 6)}})
+        self.marks['tiptoe'] = (Kx, Ky - 0.6 * Kh)
+
+        # --- mallige: a girl with jasmine pinned in her braid (right of centre), arms down, swaying
+        Mx, My, Mw = 846, 1188, 112
+        self.person(Mx, My, Mw, LW, r, {'garment': 'jacket', 'gfill': None, 'hair': 'braid', 'hairlen': 2.4, 'mallige': True, 'tiefill': 'B',
+                                         'sw': 1.1, 'yend': 2.7, 'trail': False, 'tilt': 6, 'lean': 0.04})
         self.marks['mallige'] = (Mx + 0.3 * Mw, My + 0.2 * Mw)
 
-        # --- monkey cap: big, bottom left of centre, both arms up
-        Cx, Cy, Cw = 336, 1300, 146
+        # --- monkey cap: big, left, both arms up
+        Cx, Cy, Cw = 318, 1200, 150
         Ch = Cw * 1.13
         self.person(Cx, Cy, Cw, LW * 1.05, r, {'garment': 'hoodie', 'gfill': 'G', 'hair': 'monkeycap', 'capfill': 'Y', 'pomfill': 'B', 'pompom': True,
                                                 'sw': 1.3, 'yend': 2.5, 'trail': False, 'tilt': 3, 'arms': {-1: 'fist', 1: 'open'},
-                                                'arm_-1': {'elbow': (Cx - 1.62 * Cw, Cy - 0.05 * Ch), 'wrist': (Cx - 1.32 * Cw, Cy - 1.2 * Ch)},
-                                                'arm_1': {'elbow': (Cx + 1.48 * Cw, Cy + 0.05 * Ch), 'wrist': (Cx + 1.02 * Cw, Cy - 1.36 * Ch)}})
+                                                'arm_-1': {'elbow': (Cx - 1.6 * Cw, Cy - 0.08 * Ch), 'wrist': (Cx - 1.3 * Cw, Cy - 1.22 * Ch)},
+                                                'arm_1': {'elbow': (Cx + 1.42 * Cw, Cy + 0.02 * Ch), 'wrist': (Cx + 0.98 * Cw, Cy - 1.3 * Ch)}})
         self.marks['monkeycap'] = (Cx, Cy - 0.65 * Ch)
 
         # --- two friends under one shawl (right, near)
-        Lx, Ly, Lw = 980, 1346, 106
-        Rx, Ry, Rw = 1108, 1328, 100
+        Lx, Ly, Lw = 1004, 1296, 104
+        Rx, Ry, Rw = 1122, 1278, 98
         oL = {'garment': 'tee', 'gfill': None, 'hair': 'long', 'hairlen': 1.25, 'sw': 1.16, 'yend': 2.6, 'trail': False, 'tilt': 9, '_skiphead': True}
         oR = {'garment': 'hoodie', 'gfill': None, 'hair': 'beanie', 'capfill': 'G', 'sw': 1.2, 'yend': 2.6, 'trail': False, 'tilt': -8, '_skiphead': True}
         self.person(Lx, Ly, Lw, LW, r, dict(oL))
@@ -2401,10 +2436,10 @@ class Scene(Art):
         self.marks['shawl'] = ((Lx + Rx) / 2, Ly + 1.3 * Lh)
 
         # --- the coffee: left edge, a steel tumbler held under his chin, steam
-        Fx, Fy, Fw = 104, 1378, 116
+        Fx, Fy, Fw = 548, 1418, 104
         self.person(Fx, Fy, Fw, LW * 1.04, r, {'garment': 'muffler', 'mufflerfill': 'G', 'gfill': None, 'hair': 'short', 'sw': 1.12, 'yend': 2.6,
                                                'trail': False, '_skiphead': True})
-        HP = self.head_profile(Fx + 6, Fy - 4, Fw * 1.02, LW * 1.04, r, face=1, back=-4, hair='beanie', capfill='Y', smile=True)
+        HP = self.head_profile(Fx + 6, Fy - 4, Fw * 1.02, LW * 1.04, r, face=1, back=-4, hair='beanie', capfill=None, smile=True)
         # tumbler
         rc = HP(0.83, 0.58)
         th, tw0, tw1 = Fw * 0.36, Fw * 0.25, Fw * 0.2
@@ -2540,11 +2575,12 @@ def main():
     manifest = {
         'concept': ("line drawings of the night, a different night: a cool december night on the city's north-west edge. a hand-inked crowd "
                     "on the nice grounds by biec, madavara, seen from behind, looking at a small loud stage under an arched truss whose "
-                    "light goes up and crosses. behind it the green line viaduct comes in on its piers and stops at madavara, the end of the "
-                    "line, a train pulling in with people standing in its lit windows; a lorry on tumakuru road; the long low exhibition halls; "
+                    "light goes up in an uneven fan and gives out before the sky. behind it the green line viaduct comes in on its piers and stops at madavara, the end of the "
+                    "line, a train pulling in with people standing in its lit windows; a lorry and a green-and-yellow auto on tumakuru road; the long low exhibition halls; "
                     "wide rain-tree umbrellas; a high-mast lamp at the interchange; a four-day moon. the crowd is dressed for 15 degrees: hoods "
                     "up, beanies, mufflers, shawls, phone torches held up like small stars. foreground: a guy in a yellow monkey cap with both "
-                    "arms up, a tall guy holding up his phone torch, a girl with mallige pinned in her braid, two friends under one shawl, a "
+                    "arms up, a tall guy holding up his phone torch with his short friend behind him on her toes, both hands on his shoulders to see over, "
+                    "a girl with mallige pinned in her braid, two friends under one shawl, a "
                     "guy with a steel tumbler of coffee steaming under his chin. brush lines with pressure and wobble; spot inks printed loose, "
                     "off-register and grainy. the drawing trails off at the bottom like a sketchbook page."),
         'palette': {'tee': PAL['black']['tee'], 'line': PAL['black']['line'], 'ink_yellow': PAL['black']['Y'], 'ink_green': PAL['black']['G'],
@@ -2552,11 +2588,11 @@ def main():
         'units': '1200 x 1600 (multiply by 3 for px on the 3600 x 4800 art)',
         'type_zones': TYPE_ZONES,
         'annotations': [
-            {'text': 'the green line ends here, madavara', 'x': 120, 'y': 486, 'rotation': -3, 'points_to': list(m['station'])},
-            {'text': 'tumakuru road, lorries all night', 'x': 30, 'y': 790, 'rotation': 2, 'points_to': list(m['lorry'])},
-            {'text': 'biec halls', 'x': 1020, 'y': 642, 'rotation': -2, 'points_to': list(m['halls'])},
-            {'text': 'rain trees, the city\'s umbrellas', 'x': 860, 'y': 538, 'rotation': -4, 'points_to': list(m['trees'])},
-            {'text': '15 degrees. monkey caps out', 'x': 24, 'y': 1040, 'rotation': -5, 'points_to': list(m['monkeycap'])},
+            {'text': 'the green line ends here. madavara', 'x': 40, 'y': 470, 'rotation': -3, 'points_to': list(m['station'])},
+            {'text': 'tumakuru road, nh48 back to mumbai', 'x': 30, 'y': 768, 'rotation': 2, 'points_to': list(m['lorry'])},
+            {'text': 'biec halls next door', 'x': 960, 'y': 774, 'rotation': -2, 'points_to': list(m['halls'])},
+            {'text': "rain trees, the city's umbrellas", 'x': 720, 'y': 466, 'rotation': -4, 'points_to': list(m['trees'])},
+            {'text': '15 degrees. monkey caps out', 'x': 36, 'y': 1488, 'rotation': -5, 'points_to': list(m['monkeycap'])},
         ],
         'figures': {k: list(v) for k, v in m.items()},
         'art_bbox': None,
