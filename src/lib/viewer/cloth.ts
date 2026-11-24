@@ -32,10 +32,12 @@ export const TEX_H = 16;        // up to 4096 particles (a 2XL tee is about 2000
 const SUB_DT = 1 / 100;         // longest sub-step; each frame is split into equal steps no longer than this
 const MAX_OFF = 0.08;           // m, a safety net the cloth never normally reaches
 const SOFT_OFF = 0.04;          // m, where the cloth starts to feel the form and stiffens (smoothly)
-const BREEZE = 0.9;             // m/s at the top of a gust: a slow night breeze
-const WIND_GAIN = 1.8;          // how much the cotton catches it
-const INERTIA = 0.3;            // share of a slow turn the cloth feels as inertia (less the faster it turns)
-const SLOPE_MAX = 0.6;          // the steepest a fold may tilt the shading
+const BREEZE = 0.32;            // m/s at the top of a gust: still night air, a draught you'd barely feel
+// air on cloth, as it really is: pressure 1/2 rho Cd |u| u, over the cloth's weight per area
+// (rho 1.2 kg/m3, Cd about 1 for a sheet face-on, 240 GSM jersey = 0.24 kg/m2) -> 2.5 per (m/s)^2
+const AIR = (0.5 * 1.2 * 1.0) / 0.24;
+const INERTIA = 0.2;            // share of a slow turn the cloth feels as inertia (less the faster it turns)
+const SLOPE_MAX = 0.35;         // the steepest a fold may tilt the shading
 
 type Mesh = { pos: Float32Array; idx: Uint32Array };
 
@@ -284,8 +286,8 @@ export class Cloth {
           const ux = W * wx - vx, uy = W * 0.04 - vy, uz = W * wz - vz;
           const lx = this.nrm[i], ly = this.nrm[i + 1], lz = this.nrm[i + 2];
           const nx = e[0] * lx + e[3] * ly + e[6] * lz, ny = e[1] * lx + e[4] * ly + e[7] * lz, nz = e[2] * lx + e[5] * ly + e[8] * lz;
-          const un = (ux * nx + uy * ny + uz * nz) * (0.2 + 0.8 * this.mob[c]) * WIND_GAIN;
-          ax = un * nx; ay = un * ny; az = un * nz;
+          const u = ux * nx + uy * ny + uz * nz, push = AIR * Math.abs(u) * u;
+          ax = push * nx; ay = push * ny; az = push * nz;
         }
         // the pull home stiffens smoothly as the cloth strays (it meets the form and its own seams): no wall
         const ox = x[i] - p[0], oy = x[i + 1] - p[1], oz = x[i + 2] - p[2];
