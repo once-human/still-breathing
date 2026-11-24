@@ -5,8 +5,8 @@ on:
   workflow_dispatch:
     inputs:
       places:
-        description: "places to render, comma separated (studio, window, show)"
-        default: "studio,window,show"
+        description: "places to render, comma separated (show; studio and window are photographs, pipeline/photo_place.py)"
+        default: "show"
       width:
         description: "panorama width in pixels (height is half)"
         default: "4096"

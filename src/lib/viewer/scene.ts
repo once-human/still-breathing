@@ -88,22 +88,23 @@ const SWEEP_WINDOW: Scene = {
 const CHEST: V3 = [0, FLOOR + 1.1, 0];
 
 /**
- * The places (pipeline/stage.py builds each one in Blender with these same lights at the same powers, and renders
- * it all round as the viewer's camera sees it walking round the person). The picture stands behind the person and,
- * in the studio and the room, lights them too: a white cyc or a sunny room is mostly light off its own walls.
+ * The places: the studio and the room are real rooms photographed all round (pipeline/photo_place.py lays the
+ * photo onto the room's own floor and walls and finds its lights); the show is built in Blender (pipeline/stage.py)
+ * with these same lights at the same powers. Each is pictured as the viewer's camera sees it walking round the
+ * person. The picture stands behind the person and lights them too: a white room is mostly light off its own walls.
  */
 export const STUDIO: Scene = {
   id: "studio", label: "studio",
-  // a white cyc studio: a big key softbox high on the left, a small fill, two strip lights behind for the edges,
-  // a top light over the back; seen from behind, the softboxes and stands stand beyond the person
+  // a real daylight photo studio (a 360 photograph, pipeline/photo_place.py): the tall window and an octabox ahead of
+  // the person, a second window beside it, a strip softbox on a C-stand behind; each is where the photo has it, as
+  // big and as bright as it is there; the white room lights the rest through the picture
   lights: [
-    { name: "key", pos: [-0.95, 2.35, 2.4], size: [1.2, 1.2], power: 90, tint: [1, 0.985, 0.96] },
-    { name: "fill", pos: [1.5, 1.7, 1.85], size: [0.9, 1.3], power: 25, tint: [0.97, 0.98, 1] },
-    { name: "rimL", pos: [-1.8, 2.2, -1.35], size: [0.35, 1.5], power: 50, tint: [1, 1, 1] },
-    { name: "rimR", pos: [1.85, 2.2, -1.45], size: [0.35, 1.5], power: 50, tint: [1, 1, 1] },
-    { name: "top", pos: [0.6, 3.25, -2.0], size: [1.0, 1.0], power: 55, tint: [1, 0.99, 0.97] },
+    { name: "window", pos: [0.93, 2.25, 2.1], size: [1.62, 2.31], power: 53.9, tint: [0.808, 0.902, 1] },
+    { name: "window2", pos: [-2.07, 2.28, 2.2], size: [0.82, 1.97], power: 19.3, tint: [0.944, 0.985, 1] },
+    { name: "octa", pos: [-1.27, 1.93, 2.09], size: [0.95, 0.91], power: 25.4, tint: [1, 0.745, 0.533] },
+    { name: "strip", pos: [-1.55, 2.61, -1.16], size: [0.73, 1.08], power: 14.1, tint: [1, 0.853, 0.813] },
   ],
-  paper: [0, 0, 0], world: [0.82, 0.815, 0.8], creamK: 0.6, open: true, venue: true, aim: CHEST,
+  paper: [0, 0, 0], world: [0.371, 0.347, 0.325], creamK: 0.6, open: true, venue: true, aim: CHEST,
   env: "/tee/stage/studio.webp", envLight: 1, fit: SWEEP_STUDIO,
 };
 
@@ -111,15 +112,15 @@ export const SCENES: Scene[] = [
   STUDIO,
   {
     id: "window", label: "window light",
-    // a living room in a flat on a late afternoon: a wide sliding window ahead of the person and to their right
-    // (sky, the sunlit balcony) and the low sun through it, warm across the front of the tee and in long stripes over
-    // the tiles toward the sofa behind; the room's own light reaches them through the picture. The sun is the
-    // Blender sun's 6.5 W/m2 (stage.py SUN_E) as a 12 cm disc 12 m off: P = E pi d^2.
+    // a real sunny flat (a 360 photograph, pipeline/photo_place.py): the sheer-curtained corner window ahead of the
+    // person, the big clear window to their left, the sun's patch on the floorboards beside them bouncing up;
+    // the sofa against a plaster wall behind them in the front view
     lights: [
-      { name: "sun", pos: [-8.35, 4.62, 8.02], size: [0.12, 0.12], power: 2940, tint: [1, 0.8, 0.6] },
-      { name: "window", pos: [-3.2, 1.875, 2.2], size: [3.4, 2.15], power: 46, tint: [1, 0.97, 0.93] },
+      { name: "curtain", pos: [-0.74, 1.49, 2.78], size: [2.3, 2.64], power: 59.5, tint: [0.93, 0.956, 1] },
+      { name: "window", pos: [2.13, 2.05, 1.35], size: [1.69, 1.67], power: 42.4, tint: [0.621, 0.782, 1] },
+      { name: "sunfloor", pos: [1.64, 0.35, 0.66], size: [1.61, 1.26], power: 29.3, tint: [1, 0.961, 0.945] },
     ],
-    paper: [0, 0, 0], world: [0.24, 0.21, 0.17], creamK: 0.6, open: true, venue: true, aim: CHEST,
+    paper: [0, 0, 0], world: [0.576, 0.551, 0.541], creamK: 0.6, open: true, venue: true, aim: CHEST,
     env: "/tee/stage/window.webp", envLight: 1, fit: SWEEP_WINDOW,
   },
   {

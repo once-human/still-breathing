@@ -2,6 +2,14 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.6.0 — 2026-11-25
+The studio and the living room are real places now.
+
+### Viewer
+- The studio is a real daylight photo studio, photographed all the way round: paper rolls on the wall, a tall window, an octabox and a strip softbox on their stands, folding screens.
+- The window light is a real sunny flat: a curtained corner window, the sun across the floorboards, a sofa against a plaster wall, plants and a small kitchen.
+- The floor stays under the person's feet as you walk round, and the windows and softboxes you see are the lights on the tee, from where they stand and as bright as they are.
+
 ## 0.5.0 — 2026-11-25
 A try-on that moves like a shirt on you, and three real places to see it in.
 
