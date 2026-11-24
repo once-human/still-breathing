@@ -2,6 +2,7 @@ import { Nav } from "@/components/Nav";
 import { Product } from "@/components/Product";
 import { BigWord } from "@/components/BigWord";
 import { Label } from "@/components/Label";
+import { Now } from "@/components/Now";
 import { SIZES, SIZE_ORDER, SHOWS, THE_TEE } from "@/content/tee";
 import pkg from "../../package.json";
 
@@ -13,6 +14,8 @@ export default function Home() {
       <Nav />
       <main id="top" className="pt-20">
         <Product />
+
+        <div className="mt-24"><Now /></div>
 
         <BigWord word="still breathing" marquee className="mt-28 text-[22vw] md:text-[16vw]" />
 

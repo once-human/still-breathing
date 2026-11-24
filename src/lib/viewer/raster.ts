@@ -1,14 +1,17 @@
 // Real-time view on three.js WebGPURenderer (falls back to WebGL2 by itself where WebGPU is missing).
 // It is the preview you drag; the path tracer takes over the moment you let go.
 import * as THREE from "three/webgpu";
-import { texture, uv, vec2, vec3, float, normalMap, normalize, uniform, mix } from "three/tsl";
+import { texture, uv, vec2, vec3, float, normalMap, normalize, uniform, mix, vertexColor } from "three/tsl";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RectAreaLightTexturesLib } from "three/addons/lights/RectAreaLightTexturesLib.js";
-import { CAMERA, VFOV, ASPECT, SWEEP, lightFrame, radiance, type Scene, type V3 } from "./scene";
+import { CAMERA, VFOV, ASPECT, SWEEP, FLOOR, KNIT_REPEAT, lightFrame, radiance, type Camera, type Scene, type V3 } from "./scene";
 import type { TeeGeometry } from "./pathtracer";
 
-export const ASSET = "/tee/fred/";
+export const ASSET = "/tee/fit/";
+export type Pose = "stand" | "up" | "sit";
+/** One simulated tee: `dir` is a body + size from the fit pipeline (e.g. m170-M) or the shop tee (form-M). */
+export type Variant = { dir: string; size: string; pose: Pose; body: boolean; seat?: number; skin?: V3 };
 export const FABRIC: Record<"black" | "cream", V3> = { black: srgbToLinear(0x151515), cream: srgbToLinear(0xfffae7) };
 
 function srgbToLinear(hex: number): V3 {
@@ -101,7 +104,7 @@ export class Raster {
   private async look(design: string, t: "black" | "cream") {
     const key = `${design}-${t}`;
     if (!this.colorTex[key]) {
-      const [c, o] = await Promise.all([this.tx(`color-${key}.jpg`, true), this.tx(`orm-${key}.png`, false)]);
+      const [c, o] = await Promise.all([this.tx(`tex/color-${key}.jpg`, true), this.tx(`tex/orm-${key}.png`, false)]);
       this.colorTex[key] = c; this.ormTex[key] = o;
     }
     return [this.colorTex[key], this.ormTex[key]] as const;
@@ -109,62 +112,102 @@ export class Raster {
 
   async setLook(design: string, t: "black" | "cream") {
     const [c, o] = await this.look(design, t);
-    if (this.outer) {
-      (this.outer as unknown as { _color: { value: THREE.Texture } })._color.value = c;
-      (this.outer as unknown as { _orm: { value: THREE.Texture } })._orm.value = o;
-    }
+    if (this.nodes) { this.nodes.color.value = c; this.nodes.orm.value = o; }
     this.inner.color.setRGB(...FABRIC[t], THREE.LinearSRGBColorSpace);
   }
 
-  /** Loads the tee once; hands back the triangle soup for the path tracer. */
-  async load(design: string, tee: "black" | "cream"): Promise<TeeGeometry> {
-    const tx = (n: string, s: boolean) => this.tx(n, s);
-    const draco = new DRACOLoader().setDecoderPath("/draco/");
-    const gl = new GLTFLoader().setDRACOLoader(draco);
-    const [gltf, normal, knitT, [c0, o0]] = await Promise.all([
-      gl.loadAsync(ASSET + "tee.glb"), tx("normal.png", false), tx("knit-normal.png", false), this.look(design, tee),
-    ]);
-    knitT.wrapS = knitT.wrapT = THREE.RepeatWrapping;
+  private nodes: { color: ReturnType<typeof texture>; orm: ReturnType<typeof texture>; normal: ReturnType<typeof texture> } | null = null;
+  private normals: Record<string, THREE.Texture> = {};
+  private gl: GLTFLoader | null = null;
+  private loaded: THREE.Object3D[] = [];
+  skinMat = new THREE.MeshPhysicalMaterial({ roughness: 0.48, metalness: 0, specularIntensity: 0.7, sheen: 0 });
+  stoolMat = new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0, color: new THREE.Color(0.05, 0.045, 0.04) });
 
-    const colorN = texture(c0), ormN = texture(o0);
-    const m = new THREE.MeshPhysicalNodeMaterial({ roughness: 1, metalness: 0, specularIntensity: 0.5 });
-    m.colorNode = colorN;
-    m.roughnessNode = ormN.g;
-    m.aoNode = mix(float(1), ormN.r, 0.85);
-    // cotton fuzz only off the ink: over the print it reads as a white haze
-    m.sheenNode = vec3(float(0.35 * 0.06).mul(float(1).sub(ormN.b)));   // same fitted strength as the path tracer
-    m.sheenRoughnessNode = float(0.3);
-    // construction relief (rib, stitches) + jersey loops, whiteout blend
-    const n1 = texture(normal).xyz.mul(2).sub(1);
-    const k = texture(knitT, uv().mul(vec2(175.43859649, 68.46846847))).xyz.mul(2).sub(1);
-    const blended = normalize(vec3(n1.xy.add(k.xy.mul(this.knit)), n1.z.mul(k.z)));
-    m.normalNode = normalMap(blended.mul(0.5).add(0.5));
-    Object.assign(m, { _color: colorN, _orm: ormN });
-    this.outer = m;
+  /**
+   * Loads one simulated tee (a body + size + pose from the fit pipeline, or the shop tee on its ghost form),
+   * and the body itself in fit mode; hands back the triangle soup for the path tracer.
+   */
+  async load(design: string, tee: "black" | "cream", v: Variant): Promise<TeeGeometry> {
+    this.gl ??= new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath("/draco/"));
+    const gl = this.gl;
+    const normalP = (this.normals[v.size] ??= await this.tx(`tex/normal-${v.size}.png`, false));
+    const [gltf, bodyGltf, [c0, o0]] = await Promise.all([
+      gl.loadAsync(`${ASSET}${v.dir}/${v.pose}.glb`),
+      v.body ? gl.loadAsync(`${ASSET}${v.dir}/body-${v.pose}.glb`) : Promise.resolve(null),
+      this.look(design, tee),
+    ]);
+    if (!this.nodes) {
+      const knitT = await this.tx("tex/knit-normal.png", false);
+      knitT.wrapS = knitT.wrapT = THREE.RepeatWrapping;
+      const colorN = texture(c0), ormN = texture(o0), normalN = texture(normalP);
+      const m = new THREE.MeshPhysicalNodeMaterial({ roughness: 1, metalness: 0, specularIntensity: 0.5 });
+      m.colorNode = colorN;
+      m.roughnessNode = ormN.g;
+      // ambient occlusion is baked into the mesh (it changes with every size and pose)
+      m.aoNode = mix(float(1), vertexColor().r, 0.85);
+      // cotton fuzz only off the ink: over the print it reads as a white haze
+      m.sheenNode = vec3(float(0.35 * 0.06).mul(float(1).sub(ormN.b)));   // same fitted strength as the path tracer
+      m.sheenRoughnessNode = float(0.3);
+      // construction relief (rib, stitches) + jersey loops, whiteout blend
+      const n1 = normalN.xyz.mul(2).sub(1);
+      const k = texture(knitT, uv().mul(vec2(KNIT_REPEAT[0], KNIT_REPEAT[1]))).xyz.mul(2).sub(1);
+      const blended = normalize(vec3(n1.xy.add(k.xy.mul(this.knit)), n1.z.mul(k.z)));
+      m.normalNode = normalMap(blended.mul(0.5).add(0.5));
+      this.outer = m;
+      this.nodes = { color: colorN, orm: ormN, normal: normalN };
+    } else {
+      this.nodes.color.value = c0; this.nodes.orm.value = o0; this.nodes.normal.value = normalP;
+    }
     this.inner.color.setRGB(...FABRIC[tee], THREE.LinearSRGBColorSpace);
+    if (v.skin) this.skinMat.color.setRGB(...v.skin, THREE.LinearSRGBColorSpace);
+
+    // swap out the previous tee/body
+    for (const o of this.loaded) {
+      this.pivot.remove(o);
+      o.traverse((x) => { const mm = x as THREE.Mesh; if (mm.isMesh) mm.geometry.dispose(); });
+    }
+    this.loaded = [];
+    const lift = v.body ? FLOOR : 0;
+    this.pivot.position.y = lift;
 
     const P: number[] = [], N: number[] = [], UV: number[] = [], I: number[] = [], M: number[] = [];
-    gltf.scene.updateMatrixWorld(true);
-    gltf.scene.traverse((o) => {
-      const mesh = o as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      const isInner = /inner/i.test((mesh.material as THREE.Material)?.name || "");
-      mesh.material = isInner ? this.inner : m;
-      const g = mesh.geometry, pa = g.attributes.position, na = g.attributes.normal, ua = g.attributes.uv;
-      const base = P.length / 3, mw = mesh.matrixWorld, nm = new THREE.Matrix3().getNormalMatrix(mw);
-      const v = new THREE.Vector3();
-      for (let i = 0; i < pa.count; i++) {
-        v.fromBufferAttribute(pa, i).applyMatrix4(mw); P.push(v.x, v.y, v.z);
-        v.fromBufferAttribute(na, i).applyMatrix3(nm).normalize(); N.push(v.x, v.y, v.z);
-        UV.push(ua.getX(i), ua.getY(i));
-      }
-      const ix = g.index ? Array.from(g.index.array) : Array.from({ length: pa.count }, (_, i) => i);
-      for (let i = 0; i < ix.length; i++) I.push(ix[i] + base);
-      for (let i = 0; i < ix.length / 3; i++) M.push(isInner ? 1 : 0);
-    });
-    this.pivot.add(gltf.scene);
+    const take = (root: THREE.Object3D, kind: "tee" | "body" | "stool") => {
+      root.updateMatrixWorld(true);
+      root.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        const isInner = kind === "tee" && /inner/i.test((mesh.material as THREE.Material)?.name || "");
+        mesh.material = kind === "body" ? this.skinMat : kind === "stool" ? this.stoolMat : isInner ? this.inner : this.outer!;
+        const g = mesh.geometry, pa = g.attributes.position, na = g.attributes.normal, ua = g.attributes.uv;
+        const base = P.length / 3, mw = mesh.matrixWorld, nm = new THREE.Matrix3().getNormalMatrix(mw);
+        const vv = new THREE.Vector3();
+        for (let i = 0; i < pa.count; i++) {
+          vv.fromBufferAttribute(pa, i).applyMatrix4(mw); P.push(vv.x, vv.y + lift, vv.z);
+          vv.fromBufferAttribute(na, i).applyMatrix3(nm).normalize(); N.push(vv.x, vv.y, vv.z);
+          UV.push(ua ? ua.getX(i) : 0, ua ? ua.getY(i) : 0);
+        }
+        const ix = g.index ? Array.from(g.index.array) : Array.from({ length: pa.count }, (_, i) => i);
+        for (let i = 0; i < ix.length; i++) I.push(ix[i] + base);
+        const id = kind === "body" ? 2 : kind === "stool" ? 3 : isInner ? 1 : 0;
+        for (let i = 0; i < ix.length / 3; i++) M.push(id);
+      });
+      this.pivot.add(root); this.loaded.push(root);
+    };
+    take(gltf.scene, "tee");
+    if (bodyGltf) take(bodyGltf.scene, "body");
+    if (v.body && v.pose === "sit" && v.seat) {
+      // a plain stool, its top where the simulation's seat was (Blender y forward -> three z back)
+      const box = new THREE.Mesh(new THREE.BoxGeometry(0.46, v.seat, 0.42));
+      box.position.set(0, v.seat / 2, -0.04);
+      const grp = new THREE.Group(); grp.add(box); take(grp, "stool");
+    }
     this.tris = I.length / 3;
     return { pos: new Float32Array(P), nrm: new Float32Array(N), uv: new Float32Array(UV), idx: new Uint32Array(I), mat: new Uint8Array(M) };
+  }
+
+  setCamera(c: Camera) {
+    this.camera.position.set(...c.pos);
+    this.camera.lookAt(...c.target);
   }
 
   setView(yaw: number, crop: [number, number, number], w: number, h: number) {

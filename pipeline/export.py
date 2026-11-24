@@ -53,7 +53,9 @@ for pose in POSES:
     hf, hb = front_hem(TV)
     p = {}
     if pose == "stand":
-        crotch = min(v.z for v in BV if abs(v.x) < 0.012 and 0.45 < v.z - lift < 1.0)
+        cz = [v.z for v in BV if abs(v.x) < 0.012 and 0.45 < v.z - lift < 1.0]
+        # on the ghost form the body's torso is gone: take the crotch from the hip joints instead
+        crotch = min(cz) if cz else (rig.matrix_world @ rig.pose.bones["upperleg01.L"].head).z - 0.08
         elbow = rig.matrix_world @ rig.pose.bones["lowerarm01.L"].head
         shoulder = rig.matrix_world @ rig.pose.bones["upperarm01.L"].head
         sleeve = [v for v in TV if v.x > 0.22]

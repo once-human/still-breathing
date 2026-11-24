@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Viewer } from "@/components/Viewer";
 import { Countdown } from "@/components/Countdown";
+import { Fit, SHOP } from "@/components/Fit";
+import type { Variant } from "@/lib/viewer/raster";
 import { COLOURS, DESIGNS, SIZES, SIZE_ORDER, SHOWS, THE_TEE, type Design, type Size } from "@/content/tee";
 
 const fmtDays = (days: string[]) => days.map((d) => d.slice(8, 10)).join("+") + "." + days[0].slice(5, 7);
@@ -12,11 +14,12 @@ export function Product() {
   const [design, setDesign] = useState<Design>("b");
   const tee = DESIGNS[design].colour;
   const [size, setSize] = useState<Size>("M");
+  const [variant, setVariant] = useState<Variant>(SHOP);
   const z = SIZES[size];
   return (
     <section id="studio" className="grid scroll-mt-14 grid-cols-1 gap-x-4 gap-y-8 px-4 md:grid-cols-12">
       <div className="md:col-span-7 lg:col-span-6 lg:col-start-2">
-        <Viewer design={design} tee={tee} />
+        <Viewer design={design} tee={tee} variant={variant} />
       </div>
       <div className="md:col-span-5 lg:col-span-4 lg:col-start-9">
         <div className="md:sticky md:top-16">
@@ -55,6 +58,8 @@ export function Product() {
             </dl>
             <p className="mt-2 text-[12px] text-quiet">measured on the garment, around the chest. it&apos;s cut big: most people take their usual size.</p>
           </div>
+
+          <Fit size={size} onVariant={setVariant} />
 
           <div className="mt-8 border-t border-line pt-1.5 text-[13px]">
             <p className="text-quiet">the shows</p>

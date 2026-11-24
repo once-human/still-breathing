@@ -2,7 +2,7 @@
 // sample per pixel per frame into a float buffer and shows the running average.
 import { TRACE_WGSL, SHOW_WGSL, DENOISE_WGSL } from "./pt.wgsl";
 import { buildBVHAsync } from "./bvh";
-import { CAMERA, VFOV, ASPECT, cameraBasis, lightFrame, radiance, type Scene, type V3 } from "./scene";
+import { CAMERA, VFOV, ASPECT, KNIT_REPEAT, cameraBasis, lightFrame, radiance, type Camera, type Scene, type V3 } from "./scene";
 
 export type TeeGeometry = { pos: Float32Array; nrm: Float32Array; uv: Float32Array; idx: Uint32Array; mat: Uint8Array };
 export type TeeImages = { color: ImageBitmap; orm: ImageBitmap; normal: ImageBitmap; knit: ImageBitmap };
@@ -72,12 +72,14 @@ export class PathTracer {
   private k = 1;
   private view: View = { yaw: 0, crop: [0, 0, 1], knit: true };
   lastMs = 0;
+  camera: Camera = CAMERA;
+  setCamera(c: Camera) { this.camera = c; this.reset(); }
   /** photo mode: a different frame shape from the same camera position (so perspective, and the tee, never change) */
   optics: { aspect: number; tanHalf: number } | null = null;
   /** skin for fit mode bodies (linear) */
   skin: V3 = [0.32, 0.17, 0.1];
   /** knit loop tile repeats across the atlas: atlas size in cm over an 11.4 x 11.1 mm tile */
-  knitRepeat: [number, number] = [200 / 1.14, 76 / 1.11];
+  knitRepeat: [number, number] = KNIT_REPEAT;
   /** fitted against the Cycles turntable frames (black and off white, three patches each) */
   sheenK = 0.06;
 
@@ -171,12 +173,13 @@ export class PathTracer {
 
   private writeUniforms() {
     const f = new Float32Array(U_SIZE / 4), u = new Uint32Array(f.buffer);
-    const { f: F, r: R, u: Up } = cameraBasis();
+    const cam = this.camera;
+    const { f: F, r: R, u: Up } = cameraBasis(cam);
     const set = (o: number, v: V3, w: number) => { f[o] = v[0]; f[o + 1] = v[1]; f[o + 2] = v[2]; f[o + 3] = w; };
-    set(0, CAMERA.pos, (CAMERA.lensMm / CAMERA.fstop / 2) / 1000);
+    set(0, cam.pos, (cam.lensMm / cam.fstop / 2) / 1000);
     set(4, R, this.optics?.tanHalf ?? Math.tan(VFOV / 2));
     set(8, Up, this.optics?.aspect ?? ASPECT);
-    set(12, F, CAMERA.focus);
+    set(12, F, cam.focus);
     const [cx, cy, z] = this.view.crop; f[16] = cx; f[17] = cy; f[18] = z; f[19] = this.sheenK;
     const yr = (this.view.yaw * Math.PI) / 180; f[20] = Math.cos(yr); f[21] = Math.sin(yr);
     const s = this.scene;

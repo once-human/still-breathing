@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { COLOURS, DESIGNS, type Colour, type Design } from "@/content/tee";
 import type { Format, Look, PhotoJob } from "@/lib/viewer/photo";
+import type { Variant } from "@/lib/viewer/raster";
 
 type Engine = {
   setLook: (d: Design, t: Colour) => void;
@@ -10,6 +11,7 @@ type Engine = {
   setMagnify: (on: boolean) => void;
   setScene: (id: string) => void;
   photo: (job: PhotoJob) => Promise<Blob>;
+  setVariant: (v: Variant) => Promise<void>;
   dispose: () => void;
 };
 
@@ -31,7 +33,7 @@ const LOOK_LIST: Look[] = ["clean", "film"];
  * The tee on a seamless sweep. Drag to turn it; let go and the browser path-traces the exact view
  * (same cotton, ink and softboxes as the offline renders), sharpening over a few seconds.
  */
-export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
+export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; variant: Variant }) {
   const stage = useRef<HTMLDivElement>(null);
   const rasterCv = useRef<HTMLCanvasElement>(null);
   const traceCv = useRef<HTMLCanvasElement>(null);
@@ -41,6 +43,7 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
   const [view, setView] = useState(0);
   const [magnify, setMagnify] = useState(false);
   const lookRef = useRef({ design, tee });
+  const variantRef = useRef(variant);
   const sceneRef = useRef("studio");
   const [sceneId, setSceneId] = useState("studio");
   const [canPhoto, setCanPhoto] = useState(false);
@@ -53,7 +56,7 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
   useEffect(() => {
     let dead = false;
     (async () => {
-      const [{ Raster, FABRIC }, { PathTracer }, { SCENES }] = await Promise.all([
+      const [{ Raster, FABRIC }, { PathTracer }, { SCENES, CAMERA, BODY_CAMERA }] = await Promise.all([
         import("@/lib/viewer/raster"), import("@/lib/viewer/pathtracer"), import("@/lib/viewer/scene"),
       ]);
       if (dead || !stage.current || !rasterCv.current || !traceCv.current) return;
@@ -67,23 +70,38 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
       if (PathTracer.supported()) {
         try { pt = new PathTracer(); await pt.init(tc); } catch (e) { console.warn("path tracer off", e); pt = null; }
       }
-      const s = { design: lookRef.current.design, tee: lookRef.current.tee, yaw: 0, goal: null as number | null, vel: 0, drag: false, crop: [0, 0, 1] as [number, number, number], magnify: false, moving: true, dirty: true, photo: false };
-
-      setStatus("loading the tee");
-      const geo = await raster.load(s.design, s.tee);
-      if (dead) return;
+      const s = { design: lookRef.current.design, tee: lookRef.current.tee, yaw: 0, goal: null as number | null, vel: 0, drag: false, crop: [0, 0, 1] as [number, number, number], magnify: false, moving: true, dirty: true, photo: false, loading: false, variant: variantRef.current };
 
       const bitmap = async (url: string) => createImageBitmap(await (await fetch(url)).blob(), { colorSpaceConversion: "none", premultiplyAlpha: "none" });
       const maps: Record<string, Promise<[ImageBitmap, ImageBitmap]>> = {};
-      const colourMaps = (d: Design, t: Colour) => (maps[`${d}-${t}`] ??= Promise.all([bitmap(`/tee/fred/color-${d}-${t}.jpg`), bitmap(`/tee/fred/orm-${d}-${t}.png`)]));
-      if (pt) {
-        setStatus("indexing 2,52,056 triangles");
-        const [[c, o], nrm, knit] = await Promise.all([colourMaps(s.design, s.tee), bitmap("/tee/fred/normal.png"), bitmap("/tee/fred/knit-normal.png")]);
-        pt.imgNormal = nrm; pt.imgKnit = knit;
-        await pt.setGeometry(geo);
-        pt.setImages({ color: c, orm: o, normal: nrm, knit });
-        pt.setScene(scene, FABRIC[s.tee], s.tee === "cream");
-      }
+      const colourMaps = (d: Design, t: Colour) => (maps[`${d}-${t}`] ??= Promise.all([bitmap(`/tee/fit/tex/color-${d}-${t}.jpg`), bitmap(`/tee/fit/tex/orm-${d}-${t}.png`)]));
+      const normals: Record<string, Promise<ImageBitmap>> = {};
+      let knitB: ImageBitmap | null = null;
+      /** a tee from the fit pipeline (and in fit mode its body); the path tracer re-indexes it */
+      const loadVariant = async (v: Variant) => {
+        s.loading = true;
+        while (busy) await new Promise((r) => setTimeout(r, 16));
+        try {
+          const geo = await raster.load(s.design, s.tee, v);
+          const cam = v.body ? BODY_CAMERA[v.pose] : CAMERA;
+          raster.setCamera(cam);
+          if (pt) {
+            const [[c, o], nrm] = await Promise.all([colourMaps(s.design, s.tee), (normals[v.size] ??= bitmap(`/tee/fit/tex/normal-${v.size}.png`))]);
+            knitB ??= await bitmap("/tee/fit/tex/knit-normal.png");
+            pt.imgNormal = nrm; pt.imgKnit = knitB;
+            await pt.setGeometry(geo);
+            pt.setImages({ color: c, orm: o, normal: nrm, knit: knitB });
+            if (v.skin) pt.skin = v.skin;
+            pt.setCamera(cam);
+            pt.setScene(scene, FABRIC[s.tee], s.tee === "cream");
+          }
+          s.variant = v;
+        } finally { s.loading = false; s.dirty = true; lastSig = ""; }
+      };
+      let busy = false, lastSig = "";
+      setStatus("loading the tee");
+      await loadVariant(s.variant);
+      setStatus("");
       if (dead) return;
 
       // ---------- sizing ----------
@@ -135,7 +153,7 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
       st.addEventListener("wheel", wheel, { passive: false }); st.addEventListener("click", click);
 
       // ---------- loop ----------
-      let raf = 0, busy = false, shown = -1, lastSig = "";
+      let raf = 0, shown = -1;
       const STILL = (t: Colour, a: number) => `/tee/fred-b-${t}/turntable/a${a}.png`;
       const loop = () => {
         raf = requestAnimationFrame(loop);
@@ -158,12 +176,12 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
         if (!pt) {
           // no WebGPU: show the offline path-traced frame whenever the view lands on one
           const y = ((s.yaw % 360) + 360) % 360, near = (Math.round(y / 30) * 30) % 360;
-          const ok = s.design === "b" && !moving && Math.abs(y - near) < 0.5 && s.crop[2] === 1;
+          const ok = s.design === "b" && !s.variant.body && !moving && Math.abs(y - near) < 0.5 && s.crop[2] === 1;
           img.style.opacity = ok ? "1" : "0";
           if (ok && !img.src.endsWith(STILL(s.tee, near))) img.src = STILL(s.tee, near);
           return;
         }
-        if (s.photo || moving || busy || pt.clean) return;
+        if (s.photo || s.loading || moving || busy || pt.clean) return;
         busy = true;
         // traced out of sight, a few samples per frame so the page stays responsive; the real-time view stays up
         // until the denoised frame is ready, then it fades across. No grain is ever on screen.
@@ -201,6 +219,7 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
             s.dirty = true; lastSig = "";
           }
         },
+        setVariant: (v) => loadVariant(v),
         setMagnify: (on) => { s.magnify = on; if (!on) s.crop = [0, 0, 1]; s.dirty = true; },
         dispose: () => {
           cancelAnimationFrame(raf); ro.disconnect();
@@ -211,6 +230,7 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
         },
       };
       setCanPhoto(!!pt);
+      if (JSON.stringify(variantRef.current) !== JSON.stringify(s.variant)) engine.current.setVariant(variantRef.current);
       const want = lookRef.current;
       if (want.tee !== s.tee || want.design !== s.design) engine.current.setLook(want.design, want.tee);
     })().catch((e) => { console.error(e); setStatus("the 3D view could not start"); });
@@ -218,6 +238,8 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
   }, []);
 
   useEffect(() => { lookRef.current = { design, tee }; engine.current?.setLook(design, tee); }, [design, tee]);
+  const vKey = JSON.stringify(variant);
+  useEffect(() => { variantRef.current = variant; engine.current?.setVariant(variant); }, [vKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (photo) URL.revokeObjectURL(photo.url); }, [photo]);
 
   const makePhoto = async () => {

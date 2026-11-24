@@ -5,13 +5,24 @@ export type V3 = [number, number, number];
 
 export const ASPECT = 880 / 1120;
 /** One fixed product camera: 85 mm on a 36 mm sensor (fit to the tall side), f/5.6, chest height. */
-export const CAMERA = {
-  pos: [0.18, 1.22, 2.55] as V3,
-  target: [0, 1.1, 0] as V3,
+export type Camera = { pos: V3; target: V3; lensMm: number; sensorMm: number; fstop: number; focus: number };
+export const CAMERA: Camera = {
+  pos: [0.18, 1.22, 2.55],
+  target: [0, 1.1, 0],
   lensMm: 85,
   sensorMm: 36,
   fstop: 5.6,
   focus: 2.45,
+};
+/** Fit mode stands the body on the studio floor (lifted by FLOOR so its feet touch the sweep). Same 85 mm lens,
+ * stepped back to take in the whole person: a different shot, never a different lens on the same shot. */
+export const FLOOR = 0.35;
+/** jersey loop tile repeats over the texture atlas: 2 x 110 cm by 86 cm, over an 11.4 x 11.1 mm tile */
+export const KNIT_REPEAT: [number, number] = [220 / 1.14, 86 / 1.11];
+export const BODY_CAMERA: Record<"stand" | "up" | "sit", Camera> = {
+  stand: { pos: [0.33, FLOOR + 1.02, 4.85], target: [0, FLOOR + 0.92, 0], lensMm: 85, sensorMm: 36, fstop: 8, focus: 4.8 },
+  up: { pos: [0.33, FLOOR + 1.12, 5.15], target: [0, FLOOR + 1.02, 0], lensMm: 85, sensorMm: 36, fstop: 8, focus: 5.1 },
+  sit: { pos: [0.33, FLOOR + 0.8, 4.4], target: [0, FLOOR + 0.66, 0], lensMm: 85, sensorMm: 36, fstop: 8, focus: 4.3 },
 };
 export const VFOV = 2 * Math.atan(CAMERA.sensorMm / 2 / CAMERA.lensMm); // radians
 
@@ -101,8 +112,8 @@ export function radiance(l: RectLight, k: number): V3 {
 }
 
 /** Camera basis: right, up, forward. */
-export function cameraBasis() {
-  const f = norm(sub(CAMERA.target, CAMERA.pos));
+export function cameraBasis(cam: Camera = CAMERA) {
+  const f = norm(sub(cam.target, cam.pos));
   const r = norm(cross(f, [0, 1, 0]));
   const u = cross(r, f);
   return { f, r, u };

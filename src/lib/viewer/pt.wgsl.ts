@@ -174,6 +174,8 @@ fn teeSurf(h: Hit, ro: vec3f, rd: vec3f) -> Surf {
     let g = mix(0.93, 1.06, vnoise(pObj * 900.0)) * u.grain + (1.0 - u.grain);
     S.base = textureSampleLevel(texColor, samp, uv, 0.0).rgb * g;
     S.rough = orm.g; S.sheen = 0.35 * (1.0 - orm.b); S.spec = 0.02;
+  } else if (iv.w == 3u) {
+    S.base = vec3f(0.05, 0.045, 0.04); S.rough = 0.7; S.sheen = 0.0; S.spec = 0.03;   // the stool
   } else if (iv.w == 2u) {
     // skin (fit mode): diffuse-dominant, a soft sheen of oil, no subsurface (too costly here, too small to read)
     S.base = u.skin; S.rough = 0.48; S.sheen = 0.0; S.spec = 0.028;
