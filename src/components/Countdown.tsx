@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { SHOWS } from "@/content/tee";
+import { useShowCity } from "@/lib/city";
 
 /** Minutes tick; the server renders nothing so the first paint never disagrees with the clock. */
 function subscribe(cb: () => void) { const id = setInterval(cb, 30_000); return () => clearInterval(id); }
@@ -18,11 +19,20 @@ export function nextShow(t: number) {
   return null;
 }
 
+/** the show the page is about: the shirt's city (or the nearest to the visitor), else simply the next one */
+export function showFor(city: string | null, t: number) {
+  const s = city ? SHOWS.find((x) => x.city === city) : null;
+  if (!s) return nextShow(t);
+  const done = t >= IST(s.days[s.days.length - 1]) + 6 * 3600_000;
+  return done ? null : { ...s, start: IST(s.days[0]) };
+}
+
 export function Countdown({ short = false }: { short?: boolean }) {
   const m = useSyncExternalStore(subscribe, now, server);
+  const city = useShowCity();
   if (!m) return <span>&nbsp;</span>;
-  const t = m * 60_000, s = nextShow(t);
-  if (!s) return <span>{short ? "tour done" : "the india shows are done. still breathing."}</span>;
+  const t = m * 60_000, s = showFor(city, t);
+  if (!s) return <span>{city ? (short ? `${city} done` : `${city} has been. still breathing.`) : short ? "tour done" : "the india shows are done. still breathing."}</span>;
   const left = s.start - t;
   if (left <= 0) return <span>● {s.city} {short ? "tonight" : "is on tonight"}</span>;
   const d = Math.floor(left / 86_400_000), h = Math.floor((left % 86_400_000) / 3_600_000);

@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { SHOWS } from "@/content/tee";
-import { nextShow } from "@/components/Countdown";
+import { showFor } from "@/components/Countdown";
+import { useShowCity } from "@/lib/city";
 import { Label } from "@/components/Label";
 
 /** Where each show is, for the sky over it. */
 const PLACES: Record<string, { lat: number; lon: number; name: string }> = {
   "delhi ncr": { lat: 28.46, lon: 77.03, name: "gurugram" },
   mumbai: { lat: 18.98, lon: 72.82, name: "mahalaxmi" },
-  bengaluru: { lat: 12.97, lon: 77.59, name: "bengaluru" },
+  bengaluru: { lat: 13.06, lon: 77.47, name: "madavara" },
 };
 
 const SKY: [number, string][] = [
@@ -33,7 +34,8 @@ export function Now() {
   const [t, setT] = useState(0);
   const [w, setW] = useState<Weather | null>(null);
   useEffect(() => { setT(Date.now()); const id = setInterval(() => setT(Date.now()), 60_000); return () => clearInterval(id); }, []);
-  const show = t ? nextShow(t) : null;
+  const city = useShowCity();
+  const show = t ? showFor(city, t) : null;
   const place = show ? PLACES[show.city] : null;
 
   useEffect(() => {
@@ -59,7 +61,7 @@ export function Now() {
   ].filter(Boolean).join(" ").replace(" ,", ",");
 
   const cells = [
-    { k: "next show", v: show.city, d: show.days.map((d) => d.slice(8, 10)).join(" + ") + " december" },
+    { k: city ? "this shirt's show" : "next show", v: show.city, d: show.days.map((d) => d.slice(8, 10)).join(" + ") + " december" },
     cur ? { k: `in ${place.name} now`, v: `${Math.round(cur.temperature_2m)}°, ${skyWord(cur.weather_code)}`, d: `${cur.relative_humidity_2m}% humid` } : null,
     { k: "show night", v: night ?? "too far out to forecast", d: night ? "forecast for the first night" : "the forecast reaches 16 days ahead" },
     sunset ? { k: "sunset there", v: sunset, d: "today" } : null,

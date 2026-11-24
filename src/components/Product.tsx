@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { setFocusCity } from "@/lib/city";
 import { Viewer } from "@/components/Viewer";
 import { Countdown } from "@/components/Countdown";
 import { Fit, SHOP } from "@/components/Fit";
@@ -16,6 +17,8 @@ export function Product() {
   const [size, setSize] = useState<Size>("M");
   const [variant, setVariant] = useState<Variant>(SHOP);
   const z = SIZES[size];
+  // the whole page follows this shirt's city; a lineup-wide shirt (no city) follows the visitor's nearest show
+  useEffect(() => { setFocusCity(DESIGNS[design].city ?? null); }, [design]);
   return (
     <section id="studio" className="grid scroll-mt-14 grid-cols-1 gap-x-4 gap-y-8 px-4 md:grid-cols-12">
       <div className="md:col-span-7 lg:col-span-6 lg:col-start-2">
