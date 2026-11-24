@@ -7,6 +7,7 @@ type Engine = {
   setLook: (d: Design, t: Colour) => void;
   turnTo: (deg: number) => void;
   setMagnify: (on: boolean) => void;
+  setScene: (id: string) => void;
   dispose: () => void;
 };
 
@@ -17,6 +18,11 @@ const VIEWS = [
   { label: "back", yaw: 180 },
 ];
 const MAX_SPP = 256;
+// labels only; the rigs live in lib/viewer/scene.ts (kept out of the page bundle until the viewer loads)
+const SCENE_LIST = [
+  { id: "studio", label: "studio" }, { id: "window", label: "window" }, { id: "overcast", label: "overcast" },
+  { id: "tube", label: "tube light" }, { id: "flash", label: "phone flash" }, { id: "concert", label: "the show" },
+];
 
 /**
  * The tee on a seamless sweep. Drag to turn it; let go and the browser path-traces the exact view
@@ -32,18 +38,21 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
   const [view, setView] = useState(0);
   const [magnify, setMagnify] = useState(false);
   const lookRef = useRef({ design, tee });
+  const sceneRef = useRef("studio");
+  const [sceneId, setSceneId] = useState("studio");
 
   useEffect(() => {
     let dead = false;
     (async () => {
-      const [{ Raster, FABRIC }, { PathTracer }, { STUDIO }] = await Promise.all([
+      const [{ Raster, FABRIC }, { PathTracer }, { SCENES }] = await Promise.all([
         import("@/lib/viewer/raster"), import("@/lib/viewer/pathtracer"), import("@/lib/viewer/scene"),
       ]);
       if (dead || !stage.current || !rasterCv.current || !traceCv.current) return;
       const st = stage.current, img = still.current!, tc = traceCv.current;
       const raster = new Raster(rasterCv.current);
       await raster.init();
-      raster.setScene(STUDIO, lookRef.current.tee === "cream");
+      let scene = SCENES.find((x) => x.id === sceneRef.current) ?? SCENES[0];
+      raster.setScene(scene, lookRef.current.tee === "cream");
 
       let pt: InstanceType<typeof PathTracer> | null = null;
       if (PathTracer.supported()) {
@@ -64,7 +73,7 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
         pt.imgNormal = nrm; pt.imgKnit = knit;
         await pt.setGeometry(geo);
         pt.setImages({ color: c, orm: o, normal: nrm, knit });
-        pt.setScene(STUDIO, FABRIC[s.tee], s.tee === "cream");
+        pt.setScene(scene, FABRIC[s.tee], s.tee === "cream");
       }
       if (dead) return;
 
@@ -121,7 +130,7 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
       const STILL = (t: Colour, a: number) => `/tee/fred-b-${t}/turntable/a${a}.png`;
       const loop = () => {
         raf = requestAnimationFrame(loop);
-      if (process.env.NODE_ENV !== "production") Object.assign(window, { __sb: { pt, raster, s, STUDIO } });
+      if (process.env.NODE_ENV !== "production") Object.assign(window, { __sb: { pt, raster, s, SCENES } });
         if (!s.drag && s.goal !== null) {
           const d = s.goal - s.yaw; s.yaw += d * 0.14;
           if (Math.abs(d) < 0.02) { s.yaw = s.goal; s.goal = null; }
@@ -163,11 +172,16 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
       engine.current = {
         setLook: async (d, t) => {
           const [c, o] = await Promise.all([pt ? colourMaps(d, t) : Promise.resolve(null), raster.setLook(d, t)]).then(([m]) => m ?? [null, null]);
-          s.design = d; s.tee = t; raster.setScene(STUDIO, t === "cream");
-          if (pt && c && o) { pt.setColourway(c, o); pt.setScene(STUDIO, FABRIC[t], t === "cream"); }
+          s.design = d; s.tee = t; raster.setScene(scene, t === "cream");
+          if (pt && c && o) { pt.setColourway(c, o); pt.setScene(scene, FABRIC[t], t === "cream"); }
           s.dirty = true; lastSig = "";
         },
         turnTo: (deg) => { const d = ((((deg - s.yaw) % 360) + 540) % 360) - 180; s.goal = s.yaw + d; s.crop = [0, 0, 1]; },
+        setScene: (id) => {
+          scene = SCENES.find((x) => x.id === id) ?? SCENES[0];
+          raster.setScene(scene, s.tee === "cream"); pt?.setScene(scene, FABRIC[s.tee], s.tee === "cream");
+          s.dirty = true; lastSig = "";
+        },
         setMagnify: (on) => { s.magnify = on; if (!on) s.crop = [0, 0, 1]; s.dirty = true; },
         dispose: () => {
           cancelAnimationFrame(raf); ro.disconnect();
@@ -209,6 +223,14 @@ export function Viewer({ design, tee }: { design: Design; tee: Colour }) {
         <button onClick={() => { const on = !magnify; setMagnify(on); engine.current?.setMagnify(on); }} className={`ml-auto ${magnify ? "font-semibold" : "text-quiet hover:text-ink"}`}>
           {magnify ? "close loupe" : "loupe"}
         </button>
+      </div>
+      <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-line pt-1.5 text-[13px]" role="group" aria-label="Light">
+        <span className="text-quiet">light</span>
+        {SCENE_LIST.map((x) => (
+          <button key={x.id} onClick={() => { sceneRef.current = x.id; setSceneId(x.id); engine.current?.setScene(x.id); }} className={x.id === sceneId ? "font-semibold" : "text-quiet hover:text-ink"}>
+            {x.label}
+          </button>
+        ))}
       </div>
       {magnify ? <p className="mt-1 text-[12px] text-quiet">click to look close, scroll to zoom up to 12×, drag to move. it re-renders the cloth at that size, nothing is stretched.</p> : null}
     </div>

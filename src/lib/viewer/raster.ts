@@ -81,6 +81,11 @@ export class Raster {
       return rl;
     });
     this.paperMat.color.setRGB(...s.paper, THREE.LinearSRGBColorSpace);
+    // uniform world light: irradiance pi * W, as the path tracer integrates it
+    const w = Math.max(...s.world, 1e-6);
+    this.hemi.color.setRGB(s.world[0] / w, s.world[1] / w, s.world[2] / w, THREE.LinearSRGBColorSpace);
+    this.hemi.groundColor.copy(this.hemi.color).multiplyScalar(0.6);
+    this.hemi.intensity = Math.PI * w;
   }
 
   private tl = new THREE.TextureLoader();
