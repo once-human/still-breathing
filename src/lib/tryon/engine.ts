@@ -11,7 +11,7 @@ import { texture, uv, vec2, vec3, float, normalMap, normalize, vertexColor, mix 
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import type { PoseLandmarker, NormalizedLandmark, Landmark } from "@mediapipe/tasks-vision";
-import { Cloth, offsetTexture, clothedPosition } from "@/lib/viewer/cloth";
+import { Cloth, buildNetAsync, offsetTexture, clothedPosition } from "@/lib/viewer/cloth";
 import { KNIT_REPEAT } from "@/lib/viewer/scene";
 
 const ASSET = "/tee/fit/";
@@ -128,8 +128,10 @@ export class TryOn {
     });
     // the geometry now carries its world placement: every node in the file sits at the origin
     gltf.scene.traverse((ob) => { ob.position.set(0, 0, 0); ob.quaternion.identity(); ob.scale.set(1, 1, 1); });
-    this.cloth = new Cloth(meshes.map((m) => ({ pos: m.pos, idx: m.idx })), this.offsets);
-    for (const m of meshes) { const sk = await this.cloth.skin(m.pos); m.mesh.geometry.setAttribute("sbI", sk.index); m.mesh.geometry.setAttribute("sbW", sk.weight); }
+    const net = await buildNetAsync(meshes.map((m) => ({ pos: m.pos, idx: Uint32Array.from(m.idx) })));
+    meshes.forEach((m, i) => { m.mesh.geometry.setAttribute("sbI", new THREE.BufferAttribute(net.skins[i].I, 4)); m.mesh.geometry.setAttribute("sbW", new THREE.BufferAttribute(net.skins[i].W, 4)); });
+    this.cloth = new Cloth(net, this.offsets);
+    this.cloth.wind = false;
     // the point that sits between the wearer's shoulder joints: about 5 cm under the top of the shoulder seam
     this.anchor.set(0, yTop - 0.055, 0);
     this.rig.add(gltf.scene);

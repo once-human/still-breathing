@@ -7,7 +7,7 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RectAreaLightTexturesLib } from "three/addons/lights/RectAreaLightTexturesLib.js";
 import { CAMERA, VFOV, ASPECT, SWEEP, FLOOR, KNIT_REPEAT, lightFrame, radiance, type Camera, type Scene, type V3 } from "./scene";
 import type { TeeGeometry } from "./pathtracer";
-import { Cloth, offsetTexture, clothedPosition } from "./cloth";
+import { Cloth, buildNetAsync, offsetTexture, squeezeTexture, clothNodes } from "./cloth";
 
 export const ASSET = "/tee/fit/";
 export type Pose = "stand" | "up" | "sit";
@@ -53,6 +53,9 @@ export class Raster {
   inner = new THREE.MeshStandardNodeMaterial({ roughness: 0.95, metalness: 0 });
   /** per-particle cloth offsets, read in the vertex shader */
   offsets = offsetTexture();
+  /** per-particle squeeze (where the cloth buckles into folds), read in the vertex shader */
+  squeeze = squeezeTexture();
+  private loadToken = 0;
   cloth: Cloth | null = null;
   maxAniso = 8;
   knit = uniform(0.55);
@@ -62,7 +65,8 @@ export class Raster {
   isWebGPU = false;
 
   constructor(canvas: HTMLCanvasElement) {
-    this.renderer = new THREE.WebGPURenderer({ canvas, antialias: true, alpha: false });
+    // on a 2x screen the pixels already supersample the edges; multisampling on top only costs frames
+    this.renderer = new THREE.WebGPURenderer({ canvas, antialias: (globalThis.devicePixelRatio || 1) < 1.5, alpha: false });
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.scene.add(this.pivot, this.hemi);
@@ -79,7 +83,7 @@ export class Raster {
     this.inner.positionNode = this.clothed();
   }
 
-  private clothed() { return clothedPosition(this.offsets); }
+  private clothed() { return clothNodes(this.offsets, this.squeeze).position; }
 
   setScene(s: Scene, cream: boolean) {
     for (const l of this.lights) this.scene.remove(l);
@@ -162,8 +166,9 @@ export class Raster {
       const n1 = normalN.xyz.mul(2).sub(1);
       const k = texture(knitT, uv().mul(vec2(KNIT_REPEAT[0], KNIT_REPEAT[1]))).xyz.mul(2).sub(1);
       const blended = normalize(vec3(n1.xy.add(k.xy.mul(this.knit)), n1.z.mul(k.z)));
-      m.normalNode = normalMap(blended.mul(0.5).add(0.5));
-      m.positionNode = this.clothed();
+      const cloth = clothNodes(this.offsets, this.squeeze);
+      m.normalNode = cloth.bend(normalMap(blended.mul(0.5).add(0.5)));
+      m.positionNode = cloth.position;
       this.outer = m;
       this.nodes = { color: colorN, orm: ormN, normal: normalN };
     } else {
@@ -213,17 +218,30 @@ export class Raster {
       this.pivot.add(root); this.loaded.push(root);
     };
     take(gltf.scene, "tee");
-    // the cloth: on the shop form and on a standing body (raised arms and sitting stay as simulated)
+    // the cloth: on the shop form and on a standing body (raised arms and sitting stay as simulated).
+    // The tee goes on screen at once, at rest; the net is built in a worker and takes over when it's ready.
     this.cloth = null;
-    const simulate = v.pose === "stand" && teeMeshes.every((t) => t.plain);
-    const cloth = simulate ? new Cloth(teeMeshes.map((t) => ({ pos: t.pos, idx: t.idx })), this.offsets) : null;
+    const token = ++this.loadToken;
+    const skins: THREE.BufferAttribute[][] = [];
     for (const t of teeMeshes) {
       const g = t.mesh.geometry, nv = t.pos.length / 3;
-      const sk = cloth ? await cloth.skin(t.pos) : { index: new THREE.BufferAttribute(new Float32Array(4 * nv), 4), weight: new THREE.BufferAttribute(new Float32Array(4 * nv), 4) };
-      g.setAttribute("sbI", sk.index); g.setAttribute("sbW", sk.weight);
+      const I = new THREE.BufferAttribute(new Float32Array(4 * nv), 4), W = new THREE.BufferAttribute(new Float32Array(4 * nv), 4);
+      g.setAttribute("sbI", I); g.setAttribute("sbW", W); skins.push([I, W]);
     }
     (this.offsets.image.data as Float32Array).fill(0); this.offsets.needsUpdate = true;
-    this.cloth = cloth;
+    (this.squeeze.image.data as Float32Array).fill(0); this.squeeze.needsUpdate = true;
+    if (v.pose === "stand" && teeMeshes.every((t) => t.plain)) {
+      buildNetAsync(teeMeshes.map((t) => ({ pos: t.pos, idx: Uint32Array.from(t.idx) }))).then((net) => {
+        if (token !== this.loadToken) return;
+        net.skins.forEach((sk, i) => {
+          const [I, W] = skins[i];
+          (I.array as Float32Array).set(sk.I); (W.array as Float32Array).set(sk.W); I.needsUpdate = true; W.needsUpdate = true;
+        });
+        const cloth = new Cloth(net, this.offsets, this.squeeze);
+        cloth.wind = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+        this.cloth = cloth;
+      }).catch((e) => console.info("cloth off", e));
+    }
     if (bodyGltf) take(bodyGltf.scene, "body");
     if (v.body && v.pose === "sit" && v.seat) {
       // a plain stool, its top where the simulation's seat was (Blender y forward -> three z back)
