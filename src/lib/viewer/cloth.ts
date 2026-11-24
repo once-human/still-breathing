@@ -32,7 +32,7 @@ export const TEX_H = 16;        // up to 4096 particles (a 2XL tee is about 2000
 const SUB_DT = 1 / 100;         // longest sub-step; each frame is split into equal steps no longer than this
 const MAX_OFF = 0.08;           // m, a safety net the cloth never normally reaches
 const SOFT_OFF = 0.04;          // m, where the cloth starts to feel the form and stiffens (smoothly)
-const BREEZE = 0.6;             // m/s at the top of a gust: light air (Beaufort 1), the draught in a room with a door open
+const BREEZE = 0.75;            // m/s at the top of a gust: light air (Beaufort 1), the draught in a room with a door open
 // air on cloth, as it really is: pressure 1/2 rho Cd |u| u, over the cloth's weight per area
 // (rho 1.2 kg/m3, Cd about 1 for a sheet face-on, 240 GSM jersey = 0.24 kg/m2) -> 2.5 per (m/s)^2
 const AIR = (0.5 * 1.2 * 1.0) / 0.24;
@@ -119,8 +119,8 @@ function buildNet(meshes: { pos: Float32Array; idx: Uint32Array }[], CELL: numbe
     const m = Math.max(0.25, down, 0.85 * out);
     mob[c] = m;
     // natural sway, Hz: where the form carries it, a short stiff swing; where it hangs, a pendulum of the cloth
-    // below (about 30 cm of it: sqrt(g/L)/2pi = 0.9 Hz)
-    const f = 2.0 * (1 - m) + 0.95 * m;
+    // below (about 20 cm of it acts: sqrt(g/L)/2pi = 1.1 Hz), quick enough that the tee reads light, not wet
+    const f = 2.2 * (1 - m) + 1.15 * m;
     // knit friction and air settle it in a swing or two: it moves, then rests, never bounces on
     const zeta = 0.85 * (1 - m) + 0.42 * m;
     const w = 2 * Math.PI * f;
