@@ -1,0 +1,7 @@
+# Blender autosaves and old sim snapshots
+*.blend1
+pipeline/tee-drape-v*.blend
+__pycache__/
+.claude/
+# local preview server leftovers
+*.log
