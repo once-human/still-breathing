@@ -13,7 +13,7 @@ export type City = "mumbai" | "bengaluru";
 export const DESIGNS: Record<Design, { no: string; name: string; city: City; colour: Colour; back: string }> = {
   b: { no: "01", name: "crowd", city: "mumbai", colour: "black", back: "the crowd at the barrier, drawn in lines, lit by the stage" },
   a: { no: "02", name: "map", city: "mumbai", colour: "cream", back: "the race course from above, the sea beside it, the sound rolling out from the stage" },
-  c: { no: "03", name: "breath", city: "bengaluru", colour: "black", back: "the crowd through a heat camera on a cold December night, hands up, every breath rising" },
+  c: { no: "03", name: "crowd", city: "bengaluru", colour: "black", back: "the crowd on the grounds at Madavara, where the green line ends: a cool December night, monkey caps and phone torches" },
   d: { no: "04", name: "end of the line", city: "bengaluru", colour: "cream", back: "the green line out to Madavara, its last station, where the show is: the last city, the end of the line" },
 };
 export const CITIES: City[] = ["mumbai", "bengaluru"];

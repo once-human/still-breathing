@@ -54,13 +54,16 @@ def save(arr, path):
 
 BACK = {("a", "cream"): ("art/art-a-map/art-cream-al3.png", "overlays/ov-back-cream.png"),
         ("b", "black"): ("art/art-b-lines/art-black-al3.png", "overlays/ov-back-black.png"),
-        ("c", "black"): ("art/art-c-breath/art-black.png", None),
+        ("c", "black"): ("art/art-c-crowd/art-black.png", "overlays/ov-back-C-black-hi.png"),
         ("d", "cream"): ("art/art-d-line/art-cream.png", None)}
 pairs = [tuple(p.split("-")) for p in sys.argv[2].split(",")] if len(sys.argv) > 2 else list(BACK)
 for d, tee in pairs:
     art, ov = BACK[(d, tee)]
     b = resize_rgba(Image.open(art), (BW, BH))
-    if ov: b = over(b, recut(Image.open(ov), (BW, BH)))
+    if ov:
+        o = Image.open(ov)
+        # lettering exported at print size or above is simply area-averaged; exported small, it's recut
+        b = over(b, resize_rgba(o, (BW, BH)) if o.width >= BW else recut(o, (BW, BH)))
     b8 = knockout((np.clip(b, 0, 1) * 255 + 0.5).astype(np.uint8), tee)
     save8(b8, f"{OUT}/print-back-{d}-{tee}{'-full' if FULL else ''}.webp")
 if FULL: sys.exit()
