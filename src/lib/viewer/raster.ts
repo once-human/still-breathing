@@ -7,6 +7,7 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RectAreaLightTexturesLib } from "three/addons/lights/RectAreaLightTexturesLib.js";
 import { CAMERA, VFOV, ASPECT, SWEEP, FLOOR, KNIT_REPEAT, lightFrame, radiance, type Camera, type Scene, type V3 } from "./scene";
 import type { TeeGeometry } from "./pathtracer";
+import { Cloth, offsetTexture, clothedPosition } from "./cloth";
 
 export const ASSET = "/tee/fit/";
 export type Pose = "stand" | "up" | "sit";
@@ -49,7 +50,11 @@ export class Raster {
   paperMat = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0 });
   sweep: THREE.Mesh;
   outer: THREE.MeshPhysicalNodeMaterial | null = null;
-  inner = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0 });
+  inner = new THREE.MeshStandardNodeMaterial({ roughness: 0.95, metalness: 0 });
+  /** per-particle cloth offsets, read in the vertex shader */
+  offsets = offsetTexture();
+  cloth: Cloth | null = null;
+  maxAniso = 8;
   knit = uniform(0.55);
   colorTex: Record<string, THREE.Texture> = {};
   ormTex: Record<string, THREE.Texture> = {};
@@ -70,7 +75,11 @@ export class Raster {
     await this.renderer.init();
     THREE.RectAreaLightNode.setLTC(RectAreaLightTexturesLib.init());
     this.isWebGPU = !!(this.renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend;
+    this.maxAniso = Math.max(1, this.renderer.getMaxAnisotropy?.() ?? 8);
+    this.inner.positionNode = this.clothed();
   }
+
+  private clothed() { return clothedPosition(this.offsets); }
 
   setScene(s: Scene, cream: boolean) {
     for (const l of this.lights) this.scene.remove(l);
@@ -98,7 +107,8 @@ export class Raster {
   private async tx(name: string, srgb: boolean) {
     const t = await this.tl.loadAsync(ASSET + name);
     t.flipY = false; t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
-    t.anisotropy = 8; return t;
+    // the print stays crisp across the cloth as it turns away: full anisotropic filtering
+    t.anisotropy = this.maxAniso; return t;
   }
   /** colour + roughness/ink maps for one design in one colourway, loaded once */
   private async look(design: string, t: "black" | "cream") {
@@ -153,6 +163,7 @@ export class Raster {
       const k = texture(knitT, uv().mul(vec2(KNIT_REPEAT[0], KNIT_REPEAT[1]))).xyz.mul(2).sub(1);
       const blended = normalize(vec3(n1.xy.add(k.xy.mul(this.knit)), n1.z.mul(k.z)));
       m.normalNode = normalMap(blended.mul(0.5).add(0.5));
+      m.positionNode = this.clothed();
       this.outer = m;
       this.nodes = { color: colorN, orm: ormN, normal: normalN };
     } else {
@@ -171,6 +182,7 @@ export class Raster {
     this.pivot.position.y = lift;
 
     const P: number[] = [], N: number[] = [], UV: number[] = [], I: number[] = [], M: number[] = [];
+    const teeMeshes: { mesh: THREE.Mesh; pos: Float32Array; idx: ArrayLike<number>; plain: boolean }[] = [];
     const take = (root: THREE.Object3D, kind: "tee" | "body" | "stool") => {
       root.updateMatrixWorld(true);
       root.traverse((o) => {
@@ -188,12 +200,30 @@ export class Raster {
         }
         const ix = g.index ? Array.from(g.index.array) : Array.from({ length: pa.count }, (_, i) => i);
         for (let i = 0; i < ix.length; i++) I.push(ix[i] + base);
+        if (kind === "tee") {
+          // the cloth works in the pivot's frame; it needs the mesh's own frame to be that frame turned by nothing
+          const e = mw.elements, plain = Math.abs(e[0] - 1) + Math.abs(e[5] - 1) + Math.abs(e[10] - 1) + Math.abs(e[1]) + Math.abs(e[2]) + Math.abs(e[4]) + Math.abs(e[6]) + Math.abs(e[8]) + Math.abs(e[9]) < 1e-4;
+          const pos = new Float32Array(pa.count * 3);
+          for (let i = 0; i < pa.count; i++) { pos[3 * i] = P[3 * (base + i)]; pos[3 * i + 1] = P[3 * (base + i) + 1] - lift; pos[3 * i + 2] = P[3 * (base + i) + 2]; }
+          teeMeshes.push({ mesh, pos, idx: ix, plain });
+        }
         const id = kind === "body" ? 2 : kind === "stool" ? 3 : isInner ? 1 : 0;
         for (let i = 0; i < ix.length / 3; i++) M.push(id);
       });
       this.pivot.add(root); this.loaded.push(root);
     };
     take(gltf.scene, "tee");
+    // the cloth: on the shop form and on a standing body (raised arms and sitting stay as simulated)
+    this.cloth = null;
+    const simulate = v.pose === "stand" && teeMeshes.every((t) => t.plain);
+    const cloth = simulate ? new Cloth(teeMeshes.map((t) => ({ pos: t.pos, idx: t.idx })), this.offsets) : null;
+    for (const t of teeMeshes) {
+      const g = t.mesh.geometry, nv = t.pos.length / 3;
+      const sk = cloth ? await cloth.skin(t.pos) : { index: new THREE.BufferAttribute(new Float32Array(4 * nv), 4), weight: new THREE.BufferAttribute(new Float32Array(4 * nv), 4) };
+      g.setAttribute("sbI", sk.index); g.setAttribute("sbW", sk.weight);
+    }
+    (this.offsets.image.data as Float32Array).fill(0); this.offsets.needsUpdate = true;
+    this.cloth = cloth;
     if (bodyGltf) take(bodyGltf.scene, "body");
     if (v.body && v.pose === "sit" && v.seat) {
       // a plain stool, its top where the simulation's seat was (Blender y forward -> three z back)
@@ -220,6 +250,16 @@ export class Raster {
       this.camera.setViewOffset(w, h, x, y, cw, ch);
     } else this.camera.clearViewOffset();
     this.camera.updateProjectionMatrix();
+  }
+
+  private m3 = new THREE.Matrix3(); private m4 = new THREE.Matrix4();
+  /** advance the cloth to the pivot's current turn; true while the cloth is still moving */
+  simulate(dt: number) {
+    if (!this.cloth) return false;
+    this.pivot.updateMatrixWorld();
+    this.m4.makeRotationFromQuaternion(this.pivot.quaternion);
+    this.cloth.setPose(this.m3.setFromMatrix4(this.m4), this.pivot.position);
+    return this.cloth.step(dt);
   }
 
   setKnit(on: boolean) { this.knit.value = on ? 0.55 : 0; }
