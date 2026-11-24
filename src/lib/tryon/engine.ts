@@ -106,7 +106,7 @@ export class TryOn {
   private tFilt = new Euro3(1.2, 4, 0.35, 1.2);   // where the body stands; distance smoothed hardest
   private armOn = [false, false];
   private fctx: CanvasRenderingContext2D;
-  private shown = false;
+  private shown = false; private qSpeed = 0;
   private lit = false; private lum = 0.5; private tint = new THREE.Color(1, 1, 1); private side = new THREE.Vector2();
   private P = new Map<number, THREE.Vector3>();   // filtered camera-space points (mirrored), metres
   private img: { x: number; y: number }[] = [];
@@ -359,7 +359,16 @@ export class TryOn {
     let up = new THREE.Vector3(0, 1, 0);
     if ((l![L_HIP].visibility ?? 0) > 0.6 && (l![R_HIP].visibility ?? 0) > 0.6) up = mid.clone().sub(this.P.get(L_HIP)!.clone().add(this.P.get(R_HIP)!).multiplyScalar(0.5)).normalize();
     const zA = new THREE.Vector3().crossVectors(xA, up).normalize(), yA = new THREE.Vector3().crossVectors(zA, xA).normalize();
-    this.rig.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xA, yA, zA));
+    // the torso's turn is the noisiest thing the pose model gives (depth from one camera), so it gets its own
+    // filter: it holds still when you hold still and follows with almost no lag when you turn
+    const qNew = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(xA, yA, zA));
+    if (!this.placed) { this.rig.quaternion.copy(qNew); this.qSpeed = 0; }
+    else {
+      const speed = this.rig.quaternion.angleTo(qNew) / Math.max(dt, 1e-3);
+      this.qSpeed += (speed - this.qSpeed) * (1 - Math.exp(-dt * 8));
+      const cut = 1.2 + 2.2 * this.qSpeed, rr = 2 * Math.PI * cut * dt;
+      this.rig.quaternion.slerp(qNew, rr / (rr + 1));
+    }
     this.rig.scale.copy(this.sizeScale);
     this.rig.position.copy(mid).sub(this.anchor.clone().multiply(this.sizeScale).applyQuaternion(this.rig.quaternion));
     this.rig.updateMatrixWorld();
