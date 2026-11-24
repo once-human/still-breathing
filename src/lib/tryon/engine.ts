@@ -267,8 +267,9 @@ export class TryOn {
         (I.array as Float32Array).set(net.skins[i].I); (W.array as Float32Array).set(net.skins[i].W); I.needsUpdate = W.needsUpdate = true;
       });
       this.cloth = new Cloth(net, this.offsets, this.slopes);
-      // worn cloth: no breeze, but it hangs free enough that the hem and sleeves swing and settle with you
-      this.cloth.wind = false; this.cloth.inertia = 0.7; this.cloth.inertiaV = 1.2;
+      // worn cloth: no breeze, and the same gentle inertia as the shop viewer. More than that and every bit of
+      // tracking noise reads as motion: the whole tee shivers and the sleeves tear
+      this.cloth.wind = false;
     }).catch(() => {});
   }
 
