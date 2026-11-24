@@ -1,141 +1,146 @@
 # 02 breath, part 2: the temperatures -> the print.
-#   python3 pipeline/art/breath/post.py <dir with temp.npy + scene.json> [out.png]
-# temp.npy holds degrees C per pixel (crowd.py). This adds each visible breath rising off the people and the heat
-# haze over the crowd, softens it the way a heat camera's optics do, maps it through an ironbow palette (cold black
-# -> indigo -> magenta -> orange -> white-hot) and lets the coldest tones fall away to the black of the shirt.
-# Then the camera's readout: the word in four scripts for the three cities, the nights, the scale bar with its real
-# end points, one spot reading taken off a real face in the picture.
+#   python3 pipeline/art/breath/post.py <dir with temp.npy + scene.json> [out.png] [width]
+# temp.npy holds degrees C per pixel (crowd.py). The print is drawn from it the way an illustrator would make a
+# heat-camera picture for a shirt, not the way the camera shows it:
+#   - the heat in flat bands, like a screen print: each band one colour of the ironbow, the edges clean curves, nothing
+#     smaller than a millimetre, no grain
+#   - each visible breath rising off the people as a soft warm wisp
+#   - depth: the far crowd goes soft and slides into a purple haze, which thins upward and dissolves into the shirt
+#   - no frame: the sides and the bottom dissolve into the black of the shirt too; the coldest band isn't printed
+# No words: the lettering is drawn in the Figma file and laid over it (pipeline/overlays).
 import sys, os, json
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image
 
 D = sys.argv[1]
-HERE = os.path.dirname(os.path.abspath(__file__)); F = os.path.join(HERE, "..", "..", "fonts")
+HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.join(HERE, "..", "art-e-breath", "art-black.png")
-FW, FH = 4500, 6000                       # the print: 15 x 20 in at 300 dpi
+FW = int(sys.argv[3]) if len(sys.argv) > 3 else 4500          # the print: 15 x 20 in at 300 dpi
+FH = FW * 4 // 3
 
-T = np.load(os.path.join(D, "temp.npy")).astype("f4")
-meta = json.load(open(os.path.join(D, "scene.json"))); h, w = T.shape
+T0 = np.load(os.path.join(D, "temp.npy")).astype("f4")
+meta = json.load(open(os.path.join(D, "scene.json")))
 rng = np.random.default_rng(1213)
-AIR = 16.0
+
+
+def resize(a, w, h, how=Image.BICUBIC):
+    return np.asarray(Image.fromarray(a.astype("f4")).resize((w, h), how), "f4")
+
+
+def blur(a, sigma):
+    """gaussian blur; big radii are done on a smaller copy (the same result, a fraction of the work)"""
+    if sigma <= 0.3: return a
+    if sigma > 8:
+        k = int(sigma / 4); h, w = a.shape
+        return resize(blur(resize(a, max(2, w // k), max(2, h // k)), sigma / k), w, h)
+    r = int(3 * sigma + 1); g = np.exp(-np.arange(-r, r + 1) ** 2 / (2 * sigma * sigma)).astype("f4"); g /= g.sum()
+    p = np.pad(a.astype("f4"), r, mode="edge")
+    p = sum(g[i] * p[:, i:i + a.shape[1]] for i in range(2 * r + 1))
+    return sum(g[i] * p[i:i + a.shape[0], :] for i in range(2 * r + 1))
 
 
 def smooth_noise(shape, cell, octaves=4, seed=0):
-    """soft value noise: no speck smaller than the cell, so nothing prints as grit"""
+    """soft value noise: no speck smaller than the cell"""
     r = np.random.default_rng(seed); out = np.zeros(shape, "f4"); amp = 1; tot = 0
     for o in range(octaves):
         c = max(4.0, cell / 2 ** o)
         s = max(2, int(shape[0] / c)), max(2, int(shape[1] / c))
-        g = Image.fromarray(r.random(s).astype("f4")).resize((shape[1], shape[0]), Image.BICUBIC)
-        out += amp * np.asarray(g, "f4"); tot += amp; amp *= 0.55
+        out += amp * resize(r.random(s), shape[1], shape[0]); tot += amp; amp *= 0.55
     return out / tot
 
 
-def blur(a, sigma):
-    if sigma <= 0.3: return a
-    r = int(3 * sigma + 1); k = np.exp(-np.arange(-r, r + 1) ** 2 / (2 * sigma * sigma)).astype("f4"); k /= k.sum()
-    a = np.pad(a.astype("f4"), r, mode="edge")
-    a = sum(k[i] * a[:, i:i + a.shape[1] - 2 * r] for i in range(2 * r + 1))       # rows
-    return sum(k[i] * a[i:i + a.shape[0] - 2 * r, :] for i in range(2 * r + 1))      # columns
+# work at the print's own size: the bands are cut there, so their edges are as clean as the file allows
+h, w = FH, FW
+T = resize(T0, w, h)
+S = w / 900                                             # sizes below are tuned at 900 px wide
 
-
-# ---------- breath: each visible mouth breathes out a few warm puffs that rise, swell, thin and cool ----------
+# ---------- breath: each visible mouth breathes out a few warm puffs that rise, swell and thin ----------
 breath = np.zeros((h, w), "f4")
-turb = smooth_noise((h, w), 0.02 * h, 4, 7)
+turb = smooth_noise((h, w), 0.03 * h, 4, 7)
 for m in meta["mouths"]:
-    u, v, s = m["u"] * w, m["v"] * h, m["px_per_m"]
-    if s < 0.035 * h: continue                     # too far to see a breath
+    u, v, s = m["u"] * w, m["v"] * h, m["px_per_m"] * w / meta["w"]
+    if s < 0.035 * h: continue                          # too far to see a breath
     iy, ix = int(min(h - 1, max(0, v))), int(min(w - 1, max(0, u)))
-    if T[iy, ix] < 28.0: continue                  # no warm face there: someone in front hides the mouth
-    lean = rng.uniform(-0.18, 0.18) * s
-    phase = rng.uniform(0, 0.34); rise = s * rng.uniform(0.55, 0.9)
+    if T[iy, ix] < 28.0: continue                       # someone in front hides the mouth
+    lean = rng.uniform(-0.2, 0.2) * s; phase = rng.uniform(0, 0.34); rise = s * rng.uniform(0.6, 1.0)
     for k in range(3):
-        tk = phase + k * 0.34                      # 0 = just out of the mouth, 1 = most of a metre up
+        tk = phase + k * 0.34
         cx = u + lean * tk + rng.uniform(-0.04, 0.04) * s; cy = v - rise * tk - 0.03 * s
-        rad = s * (0.045 + 0.11 * tk)
+        rad = s * (0.05 + 0.12 * tk)
         x0, x1 = int(max(0, cx - 3 * rad)), int(min(w, cx + 3 * rad)); y0, y1 = int(max(0, cy - 3 * rad)), int(min(h, cy + 3 * rad))
         if x1 <= x0 or y1 <= y0: continue
-        yy, xx = np.mgrid[y0:y1, x0:x1].astype("f4")
-        tt = turb[y0:y1, x0:x1]
-        r2 = ((xx - cx) ** 2 + ((yy - cy) * 0.75) ** 2) / rad ** 2      # taller than wide: it rises
-        puff = np.exp(-r2 * (0.8 + 1.2 * tt)) * np.clip((tt - 0.28) * 2.4, 0, 1.2)
-        breath[y0:y1, x0:x1] += puff * max(0.0, 1 - tk / 1.2) * rng.uniform(0.6, 1.0)
-breath = blur(np.clip(breath, 0, 1), 0.0012 * w)
-
-# ---------- the warmth of thousands of people rising into the cold air above them ----------
-alive = (T > 24).mean(1)
-crowd_top = int(np.argmax(alive > 0.15)) if (alive > 0.15).any() else h // 3
-yy = np.arange(h, dtype="f4")[:, None]
-band = np.clip((yy - (crowd_top - 0.10 * h)) / (0.10 * h), 0, 1) * np.clip(1 - (yy - crowd_top) / (0.25 * h), 0, 1)
-haze = smooth_noise((h, w), 0.12 * h, 3, 3) * band
-
-# thin warm gas in front of whatever is behind it: it pulls the reading toward its own temperature
+        yy, xx = np.mgrid[y0:y1, x0:x1].astype("f4"); tt = turb[y0:y1, x0:x1]
+        r2 = ((xx - cx) ** 2 + ((yy - cy) * 0.75) ** 2) / rad ** 2
+        puff = np.exp(-r2 * (0.8 + 1.2 * tt)) * np.clip((tt - 0.25) * 2.4, 0, 1.2)
+        breath[y0:y1, x0:x1] += puff * max(0.0, 1 - tk / 1.3) * rng.uniform(0.8, 1.2)
+breath = blur(np.clip(breath, 0, 1), 2.0 * S)
 a = np.clip(breath * 0.95, 0, 0.8)
-temp = np.maximum(T, T * (1 - a) + 31.5 * a) + haze * 0.10 * np.clip(AIR + 3 - T, 0, None)
-temp = blur(temp, 0.0007 * w)                     # the lens: a heat camera is never razor sharp
+temp = np.maximum(T, T * (1 - a) + 33.0 * a)
 
-# ---------- ironbow ----------
-STOPS = [(0.00, (0, 0, 0)), (0.14, (22, 8, 56)), (0.30, (80, 14, 116)), (0.46, (166, 30, 114)),
-         (0.60, (222, 66, 50)), (0.74, (246, 140, 30)), (0.88, (255, 208, 92)), (1.0, (255, 250, 228))]
-def ironbow(x):
-    x = np.clip(x, 0, 1); out = np.zeros(x.shape + (3,), "f4")
-    for (a, ca), (b, cb) in zip(STOPS, STOPS[1:]):
-        k = (x >= a) & (x <= b); f = ((x - a) / (b - a))[k][:, None]
-        out[k] = np.array(ca) * (1 - f) + np.array(cb) * f
-    return out
-
-# the scale: just under the night air at the bottom, the inner corner of an eye at the top
-LO = float(os.environ.get("LO", 14.6)); HI = float(np.percentile(temp[temp > 30], 99.9)) if (temp > 30).any() else 36.5
-HI = max(HI, 36.2)
+# ---------- the scale: the night air at the bottom, the warmest skin at the top ----------
+LO = 14.6
+HI = max(36.0, float(np.percentile(temp[temp > 30], 99.5))) if (temp > 30).any() else 36.0
 lin = np.clip((temp - LO) / (HI - LO), 0, 1)
-# like the camera's own gain control: part linear, part histogram-equalised over what is warmer than the air, so
-# the few degrees across a face (warm eye corners, cold nose, cooler cheeks) get as much of the palette as the
-# twenty degrees between a coat and the sky
-seen = np.sort(temp[(temp > LO + 2) & (temp < HI)].ravel()[::7])
+seen = np.sort(temp[(temp > LO + 2) & (temp < HI)].ravel()[::97])
 cdf = np.searchsorted(seen, np.clip(temp, LO, HI)).astype("f4") / max(1, len(seen))
-x = np.where(temp > LO, 0.45 * lin + 0.55 * cdf, lin)
-rgb = ironbow(x)
-alpha = np.clip((x - 0.04) / 0.12, 0, 1)        # the coldest tones are not printed: the black shirt is the cold
+x = np.where(temp > LO, 0.5 * lin + 0.5 * cdf, lin)
+
+# ---------- depth: the far crowd softens and slides into the haze ----------
+alive = (T > 24).mean(1)
+top = int(np.argmax(alive > 0.15)) if (alive > 0.15).any() else h // 4      # where the crowd begins
+yy = np.arange(h, dtype="f4")[:, None] / h
+t0 = top / h
+far = np.clip((0.5 - yy) / (0.5 - t0), 0, 1) ** 1.8                      # 0 near, 1 at the back row
+# blur grows with distance: a stack of a few blurs, picked per row
+levels = [0, 1.5 * S, 3.5 * S, 7 * S]
+stack = [blur(x, s) for s in levels]
+f = far * (len(levels) - 1); i0 = np.clip(np.floor(f).astype(int), 0, len(levels) - 2); fr = f - i0
+xs = np.zeros_like(x)
+for k in range(len(levels) - 1):
+    sel = (i0 == k).astype("f4")
+    xs += sel * (stack[k] * (1 - fr) + stack[k + 1] * fr)
+# the edges of the bands are cut on a slightly softened field, so they come out as clean curves
+xs = blur(xs, 0.9 * S)
+
+# ---------- flat bands ----------
+# the ironbow in eight inks; the first isn't printed (the black shirt is the cold)
+INKS = [(0, 0, 0), (38, 12, 84), (84, 18, 120), (148, 30, 122), (212, 58, 78), (242, 124, 36), (255, 192, 78), (255, 241, 205)]
+EDGES = [0.07, 0.2, 0.34, 0.48, 0.61, 0.74, 0.88]
+aa = 0.006                                                                  # edge softness in the heat scale: a pixel or so
+# near, the bands are cut clean; toward the back their edges melt, so the far crowd is a soft glow, not a shelf
+soft = aa + 0.07 * far ** 1.5
+rgb = np.zeros((h, w, 3), "f4"); rgb[:] = INKS[0]
+cover = np.zeros((h, w), "f4")
+for k, e in enumerate(EDGES):
+    step = np.clip((xs - e) / (2 * soft) + 0.5, 0, 1)                       # 0 below the edge, 1 above
+    rgb += step[..., None] * (np.array(INKS[k + 1], "f4") - np.array(INKS[k], "f4"))
+    if k == 0: cover = step
+
+# ---------- haze: warm air over the crowd, purple, thinning upward into the shirt ----------
+HAZE = np.array((70, 22, 118), "f4")
+haze_n = smooth_noise((h, w), 0.18 * h, 3, 3)
+ss = lambda v: (lambda c: c * c * (3 - 2 * c))(np.clip(v, 0, 1))
+band = ss((yy - (t0 - 0.24)) / 0.24) ** 1.6 * ss(1 - (yy - t0) / 0.2)
+hz = np.clip(band * (0.55 + 0.6 * haze_n), 0, 0.85) * (0.35 + 0.65 * far)
+# the back rows lose their colour to the haze before they lose their shape
+mix = np.clip(far * 0.85, 0, 0.85)[..., None] * cover[..., None]
+rgb = rgb * (1 - mix) + HAZE * mix * (0.55 + 0.45 * (rgb.mean(2, keepdims=True) / 255))
+rgb = rgb * (1 - hz[..., None]) + HAZE * hz[..., None]
+alpha = np.maximum(cover * 1.0, hz * 1.05)
+
+# ---------- no frame: the sides, the bottom and the top dissolve into the shirt ----------
+xx = np.arange(w, dtype="f4")[None, :] / w
+side = np.clip(np.minimum(xx, 1 - xx) / 0.07, 0, 1)
+bottom = np.clip((1 - yy) / 0.09, 0, 1)
+fade_top = ss((yy - (t0 - 0.3)) / 0.32)
+edge = (side * bottom * fade_top) ** 1.2
+# a little wander in the dissolve, so it reads as drawn, not masked
+edge = np.clip(edge + (smooth_noise((h, w), 0.05 * h, 2, 11) - 0.5) * 0.25 * (edge < 0.999), 0, 1)
+alpha = np.clip(alpha * edge, 0, 1)
+# DTG: nothing faint enough to print as a speckle
+alpha = np.where(alpha < 0.06, 0, alpha)
+
 art = np.dstack([rgb, alpha * 255]).clip(0, 255).astype("u1")
-im = Image.fromarray(art, "RGBA").resize((FW, int(round(FW * h / w))), Image.LANCZOS)
-
-# ---------- the camera's readout ----------
-canvas = Image.new("RGBA", (FW, FH), (0, 0, 0, 0)); canvas.alpha_composite(im, (0, FH - im.height))
-d = ImageDraw.Draw(canvas)
-INK = (255, 250, 231, 255); QUIET = (255, 250, 231, 160)
-def brico(px, wght):
-    f = ImageFont.truetype(f"{F}/BricolageGrotesque-Var.ttf", px, layout_engine=ImageFont.Layout.RAQM); f.set_variation_by_axes([wght]); return f
-def kan(px): return ImageFont.truetype(f"{F}/NotoSansKannada-Black.ttf", px, layout_engine=ImageFont.Layout.RAQM)
-def dev(px): return ImageFont.truetype(f"{F}/NotoSansDevanagari-Black.ttf", px, layout_engine=ImageFont.Layout.RAQM)
-
-M = 300
-d.text((M, M), "breath", font=brico(360, 760), fill=INK, anchor="lt")
-# the same word in the three cities' languages: Delhi, Mumbai, Bengaluru
-x0 = M + 6; yb = M + 600
-for word, font in (("साँस", dev(190)), ("श्वास", dev(190)), ("ಉಸಿರು", kan(190))):
-    d.text((x0, yb), word, font=font, fill=INK, anchor="ls")
-    x0 += d.textlength(word, font=font) + 110
-d.text((FW - M, M + 30), "india", font=brico(150, 700), fill=INK, anchor="rt")
-d.text((FW - M, M + 230), "05 — 13 . 12 . 2026", font=brico(104, 420), fill=QUIET, anchor="rt")
-d.text((FW - M, M + 370), "delhi ncr  /  mumbai  /  bengaluru", font=brico(80, 420), fill=QUIET, anchor="rt")
-
-# scale bar on the right edge, the real end points of the palette
-bx, by0, by1, bw = FW - M - 64, 960, 1980, 64
-bar = ironbow(np.linspace(1, 0, by1 - by0)[:, None].repeat(bw, 1))
-canvas.alpha_composite(Image.fromarray(np.dstack([bar, np.full(bar.shape[:2], 255)]).astype("u1"), "RGBA"), (bx, by0))
-d.text((bx - 36, by0), f"{HI:.1f}°", font=brico(92, 600), fill=INK, anchor="rt")
-d.text((bx - 36, by1), f"{LO:.1f}°", font=brico(92, 600), fill=INK, anchor="rb")
-
-# one spot reading: the warmest face in the upper middle of the crowd, its real temperature
-y_a, y_b = int(h * 0.42), int(h * 0.62); x_a, x_b = int(w * 0.25), int(w * 0.75)
-win = temp[y_a:y_b, x_a:x_b]
-iy, ix = np.unravel_index(np.argmax(win), win.shape)
-reading = float(win[iy, ix])
-sx, sy = (x_a + ix) * FW / w, FH - im.height + (y_a + iy) * im.height / h
-r = 64
-for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-    d.line((sx + dx * r * 0.5, sy + dy * r * 0.5, sx + dx * r * 1.6, sy + dy * r * 1.6), fill=INK, width=14)
-d.text((sx + r * 1.9, sy - 24), f"{reading:.1f}°", font=brico(96, 600), fill=INK, anchor="lb")
-
-os.makedirs(os.path.dirname(os.path.abspath(OUT)), exist_ok=True); canvas.save(OUT)
-print("ok", OUT, canvas.size, "scale", round(LO, 1), round(HI, 1), "spot", round(reading, 1), "mouths", len(meta["mouths"]))
+os.makedirs(os.path.dirname(os.path.abspath(OUT)), exist_ok=True)
+Image.fromarray(art, "RGBA").save(OUT)
+print("ok", OUT, (w, h), "scale", round(LO, 1), round(HI, 1), "crowd top", round(t0, 3))

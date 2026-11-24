@@ -1,5 +1,5 @@
 # 02 breath: renders the heat-camera crowd (pipeline/art/breath/crowd.py) at print size on a runner and keeps the
-# temperatures as an artifact. The print itself is made from them with pipeline/art/breath/post.py.
+# temperatures and the print made from them (pipeline/art/breath/post.py) as an artifact.
 name: breath
 on:
   workflow_dispatch:
@@ -67,10 +67,17 @@ jobs:
           SB_ASSETS=~/sb-assets SEED=${{ inputs.seed }} THREADS=$(nproc) \
             ~/blender/blender -b -P pipeline/art/breath/crowd.py -- "$PWD/out" ${{ inputs.size }} ${{ inputs.samples }} ${{ inputs.unique }} 2>&1 | grep -v Warning
           test -s out/temp.npy
+      - name: The print (illustrated from the temperatures, no words)
+        run: |
+          pip install -q numpy pillow
+          python3 pipeline/art/breath/post.py out out/art-black.png ${{ inputs.size }}
+          python3 -c "from PIL import Image; a=Image.open('out/art-black.png'); b=Image.new('RGBA',a.size,(21,21,21,255)); b.alpha_composite(a); b.convert('RGB').resize((900,1200)).save('out/preview-black.jpg',quality=88)"
       - uses: actions/upload-artifact@v4
         with:
           name: breath-${{ inputs.seed }}
           path: |
             out/temp.npy
             out/scene.json
+            out/art-black.png
+            out/preview-black.jpg
           retention-days: 30

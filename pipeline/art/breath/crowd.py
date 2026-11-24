@@ -545,11 +545,13 @@ def place():
 # the crowd
 # =====================================================================================================
 cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam")); sc.collection.objects.link(cam); sc.camera = cam
-cam.location = (0.55, -0.12, 3.0); cam.data.lens = 20; cam.data.sensor_fit = "VERTICAL"; cam.data.sensor_height = 24
-look_at = Vector((-0.6, 16.0, 3.0 - 16.45 * math.tan(math.radians(float(os.environ.get("PITCH", "15.5"))))))
+# from the stage, 4.2 m up, looking down into the crowd: a field of heads and hands, cut at the bottom of the frame,
+# the far crowd going soft into the night (the look the first breath had, with real people in it)
+cam.location = (0.4, -0.1, 4.2); cam.data.lens = 34; cam.data.sensor_fit = "VERTICAL"; cam.data.sensor_height = 24
+look_at = Vector((-0.3, 11.5, 1.0))
 q = (look_at - cam.location).to_track_quat("-Z", "Y")
 cam.rotation_euler = (q @ Quaternion((0, 0, 1), math.radians(1.6))).to_euler()   # a hand-held tilt
-cam.data.dof.use_dof = True; cam.data.dof.focus_distance = 5.5; cam.data.dof.aperture_fstop = 2.8
+cam.data.dof.use_dof = True; cam.data.dof.focus_distance = 8.0; cam.data.dof.aperture_fstop = 2.4
 sc.render.resolution_x, sc.render.resolution_y = W, H
 upd()
 
@@ -592,7 +594,7 @@ def pick_kind():
 
 place()
 people, lib, mouths = [], [], []
-near = [s for s in spots if s[1] < 9.5]
+near = [s for s in spots if 3.3 < s[1] < 13]          # the nearest people the camera sees whole enough to matter
 plan = []
 for i, (x, y) in enumerate(near[:UNIQUE]):
     plan.append(dict(x=x, y=y, sex="m" if rng.random() < 0.56 else "f", kind=pick_kind(), near=True))
