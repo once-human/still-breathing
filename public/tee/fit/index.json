@@ -1,0 +1,19 @@
+{
+ "form-M": {
+  "size": "M",
+  "body": {
+   "height_cm": 171,
+   "chest_cm": 88
+  },
+  "chest_ease_cm": 24,
+  "poses": {
+   "stand": {
+    "hem_below_crotch_cm": 6,
+    "sleeve_above_elbow_cm": 5,
+    "hem_vs_waistband_cm": -19,
+    "frame": 200,
+    "lift_m": 0.0
+   }
+  }
+ }
+}
