@@ -10,7 +10,7 @@ a lorry on Tumakuru Road.
 Pen + print physics lifted from the Mumbai "lines" generator: one primitive,
 a pressure-varying brush stroke along a jittered Catmull-Rom path, rendered
 as filled polygons; spot inks are separate loose screens printed off-register,
-with grain, minimum-feature clean-up and binary alpha.
+flat (no grain), minimum-feature clean-up and binary alpha.
 
 Pillow + numpy-free.  Re-runnable:  python3 gen.py   (SEED=... to vary)
 """
@@ -2534,8 +2534,7 @@ def separations(art):
     for i, k in enumerate(('Y', 'G', 'B')):
         m = shifted(art.L[k], *SHIFT[k])
         m = ImageChops.subtract(m, line)
-        if k in ('Y', 'G'):
-            m = grain(m, SEED + 31 * i)
+        # flat spot colour: no screen grain (no visible noise anywhere on the print)
         seps[k] = clean(m, 7)
     # later screens sit on top: trim what's underneath, drop slivers
     seps['Y'] = clean(ImageChops.subtract(ImageChops.subtract(seps['Y'], seps['G']), seps['B']), 7)
@@ -2582,7 +2581,7 @@ def main():
                     "arms up, a tall guy holding up his phone torch with his short friend behind him on her toes, both hands on his shoulders to see over, "
                     "a girl with mallige pinned in her braid, two friends under one shawl, a "
                     "guy with a steel tumbler of coffee steaming under his chin. brush lines with pressure and wobble; spot inks printed loose, "
-                    "off-register and grainy. the drawing trails off at the bottom like a sketchbook page."),
+                    "off-register, flat. the drawing trails off at the bottom like a sketchbook page."),
         'palette': {'tee': PAL['black']['tee'], 'line': PAL['black']['line'], 'ink_yellow': PAL['black']['Y'], 'ink_green': PAL['black']['G'],
                     'accent_blue': PAL['black']['B']},
         'units': '1200 x 1600 (multiply by 3 for px on the 3600 x 4800 art)',
