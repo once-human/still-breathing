@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { DESIGNS, type Colour, type Design } from "@/content/tee";
+import { DESIGNS, SIZE_ORDER, type Colour, type Design, type Size } from "@/content/tee";
 import type { TryOn as Engine, TryOnStatus } from "@/lib/tryon/engine";
 
 const SAY: Record<TryOnStatus, string> = {
@@ -24,6 +24,7 @@ export function TryOn({ design, tee, onClose }: { design: Design; tee: Colour; o
   const [status, setStatus] = useState<TryOnStatus>("model");
   const [err, setErr] = useState("");
   const [look, setLook] = useState<Design>(design);
+  const [size, setSize] = useState<Size>("M");
   const [shot, setShot] = useState<string | null>(null);
   // the frame takes the camera's own shape, so the tee lines up with the picture edge to edge
   const [ar, setAr] = useState(4 / 3);
@@ -36,7 +37,7 @@ export function TryOn({ design, tee, onClose }: { design: Design; tee: Colour; o
         if (dead || !video.current || !cv.current || !arms.current) return;
         const e = new TryOn(video.current, cv.current, arms.current, (s) => !dead && setStatus(s));
         eng.current = e;
-        await e.start(design, DESIGNS[design].colour ?? tee);
+        await e.start(design, DESIGNS[design].colour ?? tee, "M");
       } catch (x) {
         if (dead) return;
         const name = (x as { name?: string })?.name;
@@ -66,13 +67,15 @@ export function TryOn({ design, tee, onClose }: { design: Design; tee: Colour; o
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black text-white" role="dialog" aria-modal aria-label="Try it on">
       <div className="relative min-h-0 flex-1 overflow-hidden">
-        {/* the preview is a mirror, like any selfie camera; the saved photo is the right way round */}
-        <div className="absolute inset-0 flex items-center justify-center" style={{ transform: "scaleX(-1)" }}>
+        {/* the preview is a mirror, like any selfie camera: the video is flipped, the tee is placed in the
+            mirror but not flipped itself, so its print reads the right way round */}
+        <div className="absolute inset-0 flex items-center justify-center">
           <div className="relative" style={{ aspectRatio: ar, width: `min(100%, calc((100dvh - 64px) * ${ar}))` }}>
-            <video ref={video} playsInline muted className="absolute inset-0 h-full w-full"
+            <video ref={video} playsInline muted className="absolute inset-0 h-full w-full -scale-x-100"
               onLoadedMetadata={(e) => { const v = e.currentTarget; if (v.videoWidth && v.videoHeight) setAr(v.videoWidth / v.videoHeight); }} />
-            <canvas ref={cv} className="absolute inset-0 h-full w-full" />
-            <canvas ref={arms} className="absolute inset-0 h-full w-full" />
+            {/* a breath of softness so the tee sits in the webcam's own focus */}
+            <canvas ref={cv} className="absolute inset-0 h-full w-full" style={{ filter: "blur(0.35px)" }} />
+            <canvas ref={arms} className="absolute inset-0 h-full w-full -scale-x-100" />
           </div>
         </div>
         {err || SAY[status] ? (
@@ -85,7 +88,12 @@ export function TryOn({ design, tee, onClose }: { design: Design; tee: Colour; o
             {DESIGNS[d].no} {DESIGNS[d].name}
           </button>
         ))}
-        <span className="hidden text-white/50 sm:inline">on this device only, nothing is recorded or sent</span>
+        <span className="flex gap-3" role="group" aria-label="Size">
+          {SIZE_ORDER.map((z) => (
+            <button key={z} onClick={() => { setSize(z); eng.current?.setSize(z); }} className={`hit ${z === size ? "font-semibold" : "text-white/60 hover:text-white"}`}>{z}</button>
+          ))}
+        </span>
+        <span className="hidden text-white/50 lg:inline">on this device only, nothing is recorded or sent</span>
         <button onClick={snap} disabled={status !== "ready"} className="hit ml-auto font-semibold disabled:text-white/40">take a photo</button>
         <button onClick={onClose} className="hit text-white/70 hover:text-white">close</button>
       </div>
