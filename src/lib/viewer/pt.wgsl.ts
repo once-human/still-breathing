@@ -16,7 +16,7 @@ struct U {
   world: vec3f, knit: f32,
   paper: vec3f, showPaper: f32,
   fabric: vec3f, grain: f32,
-  skin: vec3f, _s: f32,
+  skin: vec3f, env: f32,
   knitRep: vec4f,
   size: vec4u,
   lights: array<Light, 4>,
@@ -35,6 +35,7 @@ struct U {
 @group(0) @binding(10) var texKnit: texture_2d<f32>;
 // first-hit guides for the denoiser, summed over samples: [normal.xyz, depth], [albedo.rgb, count]
 @group(0) @binding(11) var<storage, read_write> gbuf: array<vec4f>;
+@group(0) @binding(12) var texEnv: texture_2d<f32>;   // the place all round (equirect, sRGB), at a venue
 
 const PI = 3.14159265359;
 const INF = 1e30;
@@ -132,6 +133,14 @@ fn trace(ro: vec3f, rd: vec3f, tmax: f32, any: bool) -> Hit {
     if (ts < h.t) { h = Hit(ts, 2u, 0u, vec2f(0.0)); }
   }
   return h;
+}
+
+// the place around the person, fixed to it (it turns with the person, like the venue's lights): the same lookup
+// as the real-time view, u = 0.5 - atan2(x, z) / 2pi, v = 0 straight up
+fn envAt(d: vec3f) -> vec3f {
+  let o = rotY(d, u.yaw.x, -u.yaw.y);
+  let uv = vec2f(0.5 - atan2(o.x, o.z) / (2.0 * PI), 0.5 - asin(clamp(o.y, -1.0, 1.0)) / PI);
+  return textureSampleLevel(texEnv, samp, uv, 0.0).rgb;
 }
 
 // ---------- material ----------
@@ -287,11 +296,19 @@ fn main(@builtin(global_invocation_id) gid3: vec3u) {
   let lr = sqrt(rnd()) * u.aperture; let la = 2.0 * PI * rnd();
   var ro = u.camPos + u.camR * (lr * cos(la)) + u.camU * (lr * sin(la));
   var rd = normalize(fp - ro);
+  let pinhole = dir;
   var L = vec3f(0.0); var tp = vec3f(1.0);
   var gN = vec3f(0.0); var gZ = 100.0; var gA = vec3f(1.0);
   for (var bounce = 0; bounce < 6; bounce++) {
     let h = trace(ro, rd, INF, false);
-    if (h.kind == 0u) { L += tp * u.world; break; }
+    if (h.kind == 0u) {
+      // the place, seen straight through the lens: the picture already carries its own lens blur, so it is
+      // looked up along the pinhole ray (no second blur from the aperture), and it is its own denoiser albedo
+      // (light / albedo = 1), so the denoiser leaves it exactly as it is. Bounced light sees the dim room.
+      if (bounce == 0 && u.env > 0.5) { let e = envAt(pinhole); L += e; gA = max(e, vec3f(0.004)); }
+      else { L += tp * u.world; }
+      break;
+    }
     var S: Surf;
     if (h.kind == 1u) { S = teeSurf(h, ro, rd); } else { S = sweepSurf(h, ro, rd); }
     if (bounce == 0) { gN = S.n; gZ = h.t; gA = S.base; }

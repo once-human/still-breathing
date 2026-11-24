@@ -65,6 +65,8 @@ export class PathTracer {
   }
   private geo: { nodes: GPUBuffer; tris: GPUBuffer; triv: GPUBuffer; verts: GPUBuffer } | null = null;
   private tex: Record<string, GPUTexture> = {};
+  /** the venue's 360 degree picture (a 1 x 1 stand-in until it arrives, or where there is none) */
+  private envTex: GPUTexture | null = null;
   private sampler!: GPUSampler;
   private traceBG: GPUBindGroup | null = null;
   private showBG: GPUBindGroup | null = null;
@@ -156,6 +158,25 @@ export class PathTracer {
     this.traceBG = null; this.reset();
   }
 
+  /** the place all round (equirect, sRGB); null clears it */
+  setEnv(bmp: ImageBitmap | null) {
+    this.envTex?.destroy(); this.envTex = null;
+    if (bmp) {
+      const t = this.device.createTexture({ size: [bmp.width, bmp.height], format: "rgba8unorm-srgb", usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT });
+      this.device.queue.copyExternalImageToTexture({ source: bmp }, { texture: t }, [bmp.width, bmp.height]);
+      this.envTex = t;
+    }
+    this.traceBG = null; this.reset();
+  }
+  private envView() {
+    if (!this.envTex) {
+      const t = this.device.createTexture({ size: [1, 1], format: "rgba8unorm-srgb", usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+      this.device.queue.writeTexture({ texture: t }, new Uint8Array([0, 0, 0, 255]), {}, [1, 1]);
+      this.envTex = t;
+    }
+    return this.envTex.createView();
+  }
+
   /** only the colourway maps change between black and off white */
   setColourway(back: ImageBitmap, front: ImageBitmap) {
     this.setImages({ back, front, normal: this.imgNormal!, knit: this.imgKnit! });
@@ -195,7 +216,7 @@ export class PathTracer {
     set(24, s.world, this.view.knit ? 0.55 : 0);
     set(28, s.paper, s.open ? 0 : 1);
     set(32, this.fabric, 1);
-    set(36, this.skin, 0);
+    set(36, this.skin, s.env && this.envTex && this.envTex.width > 1 ? 1 : 0);
     f[40] = this.knitRepeat[0]; f[41] = this.knitRepeat[1];
     const L = s.lights.slice(0, 4);
     u[44] = this.w; u[45] = this.h; u[46] = this.frame; u[47] = L.length;
@@ -260,6 +281,7 @@ export class PathTracer {
           { binding: 9, resource: this.tex.normal.createView() },
           { binding: 10, resource: this.tex.knit.createView() },
           { binding: 11, resource: { buffer: this.gbuf! } },
+          { binding: 12, resource: this.envView() },
         ],
       });
     }

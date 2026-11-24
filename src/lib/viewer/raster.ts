@@ -1,7 +1,7 @@
 // Real-time view on three.js WebGPURenderer (falls back to WebGL2 by itself where WebGPU is missing).
 // It is the preview you drag; the path tracer takes over the moment you let go.
 import * as THREE from "three/webgpu";
-import { texture, uv, vec2, vec3, float, normalMap, normalize, uniform, mix, vertexColor, step, fwidth, clamp, length } from "three/tsl";
+import { texture, uv, vec2, vec3, float, normalMap, normalize, uniform, mix, vertexColor, step, fwidth, clamp, length, normalWorldGeometry, atan, asin, cos, sin } from "three/tsl";
 import { PRINT_BACK, PRINT_FRONT, type Rect } from "./print";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
@@ -50,6 +50,10 @@ export class Raster {
   /** the lights; at a venue they turn with the pivot, so the camera walks round a place that stays put */
   rig = new THREE.Group();
   private venue = false;
+  /** the place around the person (a 360 degree picture), drawn behind everything at a venue */
+  private env: ReturnType<typeof texture> | null = null;
+  private envYaw = uniform(0);
+  private envOn = false;
   lights: THREE.RectAreaLight[] = [];
   hemi = new THREE.HemisphereLight(0xf4f2ee, 0x6d6a64, 0.15);
   paperMat = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0 });
@@ -108,11 +112,37 @@ export class Raster {
     this.paperMat.color.setRGB(...s.paper, THREE.LinearSRGBColorSpace);
     this.sweep.visible = !s.open;
     this.scene.background = new THREE.Color().setRGB(...s.world, THREE.LinearSRGBColorSpace);
+    this.envOn = !!s.env; this.showEnv();
     // uniform world light: irradiance pi * W, as the path tracer integrates it
     const w = Math.max(...s.world, 1e-6);
     this.hemi.color.setRGB(s.world[0] / w, s.world[1] / w, s.world[2] / w, THREE.LinearSRGBColorSpace);
     this.hemi.groundColor.copy(this.hemi.color).multiplyScalar(0.6);
     this.hemi.intensity = Math.PI * w;
+  }
+
+  /**
+   * The 360 degree picture of the place (stage ahead of the person, the hall behind). Looked up by direction the
+   * same way the path tracer does: u = 0.5 - atan2(x, z) / 2pi (the stage, +z, in the middle), v = 0 straight up.
+   * It turns with the person, as the lights do (a game camera walking round a place that stays put).
+   */
+  setEnv(bmp: ImageBitmap | null) {
+    if (!bmp) { this.env = null; this.showEnv(); return; }
+    const t = new THREE.Texture(bmp);
+    t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.ClampToEdgeWrapping;
+    // no mips: the picture is only ever magnified, and mips would draw a seam where u wraps round
+    t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter; t.needsUpdate = true;
+    if (this.env) { this.env.value = t; this.showEnv(); return; }
+    const d = normalize(normalWorldGeometry);
+    const c = cos(this.envYaw), sn = sin(this.envYaw);
+    const x = c.mul(d.x).sub(sn.mul(d.z)), z = sn.mul(d.x).add(c.mul(d.z));
+    const u = float(0.5).sub(atan(x, z).div(2 * Math.PI));
+    const v = float(0.5).sub(asin(clamp(d.y, -1, 1)).div(Math.PI));
+    this.env = texture(t, vec2(u, v));
+    this.showEnv();
+  }
+  private showEnv() {
+    const on = !!(this.env && this.envOn);
+    this.scene.backgroundNode = on ? this.env : null;
   }
 
   private async tx(name: string, srgb: boolean) {
@@ -319,6 +349,7 @@ export class Raster {
   setView(yaw: number, crop: [number, number, number], w: number, h: number) {
     this.pivot.rotation.y = (yaw * Math.PI) / 180;
     this.rig.rotation.y = this.venue ? this.pivot.rotation.y : 0;
+    this.envYaw.value = this.rig.rotation.y;
     const [cx, cy, z] = crop;
     if (z > 1.0001) {
       // magnify = crop the same frame (no camera move, so the perspective never changes)

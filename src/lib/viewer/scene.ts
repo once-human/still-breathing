@@ -41,6 +41,8 @@ export type Scene = {
   open?: boolean;
   /** the lights belong to the place, not to the photographer: they stay put while the camera walks round */
   venue?: boolean;
+  /** the place itself, all round: a 360 degree picture (equirectangular, the stage at +z in the middle) */
+  env?: string;
 };
 
 export const LIGHT_AIM: V3 = [0, 1.12, 0];
@@ -75,15 +77,17 @@ export const SCENES: Scene[] = [
   },
   {
     id: "show", label: "the show",
-    // a dark room, the stage behind and above: a cool white LED wall and one warm spot from the side catch
-    // the edges of the cotton; the front gets the warm wash from the front-of-house truss
+    // in the crowd, facing the stage (+z, ahead of the person, so behind the camera in the front view): the
+    // stage's lamps, light bars and screen wash the front warm-white, a warm spot from stage left and the truss's
+    // cool beams catch the edges; behind the person the front-of-house spots light the back. The hall and its
+    // stage are one 360 degree picture rendered in Blender (pipeline/stage.py), loaded after the tee is up.
     lights: [
-      { name: "stage", pos: [0.3, 2.9, -2.6], size: [2.2, 0.7], power: 1100, tint: [0.86, 0.91, 1] },
-      { name: "spot", pos: [-2.3, 3.3, -1.6], size: [0.22, 0.22], power: 240, tint: [1, 0.86, 0.7] },
-      // front-of-house truss across the room, high and to one side, warm tungsten-ish wash
-      { name: "foh", pos: [1.6, 3.0, 3.2], size: [1.2, 0.5], power: 85, tint: [1, 0.88, 0.74] },
+      { name: "stage", pos: [0.6, 3.1, 3.6], size: [2.6, 0.8], power: 650, tint: [1, 0.9, 0.8] },
+      { name: "spot", pos: [-2.6, 3.8, 1.6], size: [0.25, 0.25], power: 260, tint: [1, 0.72, 0.45] },
+      { name: "beam", pos: [0.4, 4.2, 0.9], size: [1.4, 0.3], power: 160, tint: [0.86, 0.91, 1] },
+      { name: "foh", pos: [-1.4, 3.5, -3.6], size: [0.8, 0.8], power: 480, tint: [1, 0.86, 0.7] },
     ],
-    paper: [0, 0, 0], world: [0.0015, 0.0015, 0.002], creamK: 0.6, open: true, venue: true,
+    paper: [0, 0, 0], world: [0.0015, 0.0015, 0.002], creamK: 0.6, open: true, venue: true, env: "/tee/stage/show.webp",
   },
 ];
 

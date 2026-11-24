@@ -58,8 +58,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
   const [tryOn, setTryOn] = useState(false);
   const lookRef = useRef({ design, tee });
   const variantRef = useRef(variant);
-  const sceneRef = useRef("studio");
-  const [sceneId, setSceneId] = useState("studio");
+  const sceneRef = useRef("show");
+  const [sceneId, setSceneId] = useState("show");
   const [canPhoto, setCanPhoto] = useState(false);
   const [format, setFormat] = useState<Format>("story");
   const [look, setLook] = useState<Look>("film");
@@ -165,6 +165,17 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         } finally { s.loading = false; s.dirty = true; lastSig = ""; }
       };
       let busy = false, lastSig = "";
+      // the place around the person (one picture of the whole hall): fetched only once the tee is on screen
+      let envBmp: ImageBitmap | null = null, envUrl = "";
+      const loadEnv = async () => {
+        const url = scene.env;
+        if (!url || url === envUrl) return;
+        envUrl = url;
+        try { envBmp = await bitmap(url); } catch { envUrl = ""; return; }   // not there: the dark room
+        if (dead) return;
+        raster.setEnv(envBmp); pt?.setEnv(envBmp);
+        s.dirty = true; lastSig = "";
+      };
       await loadVariant(s.variant);
       if (dead) return;
       // every shader compiled before the first frame, off the main thread: the first turn is as smooth as the rest
@@ -272,7 +283,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         const PT = await import("@/lib/viewer/pathtracer");
         if (dead || !PT.PathTracer.supported()) return;
         const p = new PT.PathTracer();
-        try { await p.init(tc); size(); p.resize(tc.width, tc.height); await ptLoad(p, s.variant); } catch (e) { console.warn("path tracer off", e); return; }
+        try { await p.init(tc); size(); p.resize(tc.width, tc.height); await ptLoad(p, s.variant); if (envBmp) p.setEnv(envBmp); } catch (e) { console.warn("path tracer off", e); return; }
         if (dead) { p.device.destroy(); return; }
         pt = p; setCanPhoto(true); lastSig = "";
       };
@@ -322,7 +333,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
             firstFrame = false;
             // the photo steps aside only once the 3D has actually reached the screen, textures and all (two
             // frames on): never an empty or half-dressed tee in between
-            requestAnimationFrame(() => requestAnimationFrame(() => { if (!dead) { setMode("3d"); setStatus(""); void startTracer(); } }));
+            requestAnimationFrame(() => requestAnimationFrame(() => { if (!dead) { setMode("3d"); setStatus(""); void loadEnv(); void startTracer(); } }));
           }
         }
         const busyCloth = moving || swinging;
@@ -368,6 +379,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           scene = SCENES.find((x) => x.id === id) ?? SCENES[0];
           raster.setScene(scene, s.tee === "cream"); pt?.setScene(scene, FABRIC[s.tee], s.tee === "cream");
           s.dirty = true; lastSig = "";
+          if (!firstFrame) void loadEnv();
         },
         photo: async (job) => {
           if (!pt) throw new Error("photos need WebGPU");
