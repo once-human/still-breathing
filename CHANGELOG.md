@@ -2,6 +2,10 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.9.3 — 2026-11-25
+### Shirts
+- Breath is a tour shirt now, next to the crowd: 01 crowd, 02 breath, 03 the Mumbai map, 04 the Bengaluru map.
+
 ## 0.9.2 — 2026-11-25
 ### Shirts
 - End of the line is gone from the lineup, with its prints and frames.
