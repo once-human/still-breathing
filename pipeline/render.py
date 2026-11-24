@@ -92,9 +92,10 @@ ANG = {"front": 0, "back": 180, "q": 35, "side": 90}[view] if not view.startswit
 tee.rotation_euler[2] = math.radians(ANG)
 if bpy.data.objects.get("body"): bpy.data.objects["body"].rotation_euler[2] = math.radians(ANG)
 cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam")); sc.collection.objects.link(cam); sc.camera = cam
-cam.data.lens = 85; cam.location = (0.18, -2.55, 1.22)
-cam.rotation_euler = (Vector((0, 0, 1.10)) - cam.location).to_track_quat("-Z", "Y").to_euler()
-cam.data.dof.use_dof = True; cam.data.dof.focus_distance = 2.45; cam.data.dof.aperture_fstop = 5.6
+# same camera as CAMERA in src/lib/viewer/scene.ts (three y-up -> Blender z-up), so a frame lines up with the live view
+cam.data.lens = 85; cam.location = (0.2, -2.85, 1.21)
+cam.rotation_euler = (Vector((0, 0, 1.09)) - cam.location).to_track_quat("-Z", "Y").to_euler()
+cam.data.dof.use_dof = True; cam.data.dof.focus_distance = 2.75; cam.data.dof.aperture_fstop = 5.6
 # ---- render ----
 sc.render.engine = "CYCLES"; sc.cycles.device = "CPU"
 # DEVICE=OPTIX or CUDA renders on the GPU (Colab T4, Kaggle); default CPU (laptop, GitHub runners)

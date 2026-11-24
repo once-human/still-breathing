@@ -40,7 +40,7 @@ export function Product() {
 
           <p className="mt-6 flex items-center gap-2 text-[13px]">
             <span className="inline-block h-3 w-3 rounded-full border border-line" style={{ background: COLOURS[tee].hex }} />
-            {COLOURS[tee].name}<span className="text-quiet">, the only colour this one comes in</span>
+            <span>{COLOURS[tee].name}<span className="text-quiet">, the only colour this one comes in</span></span>
           </p>
 
           <div className="mt-10 border-t border-line pt-1.5">

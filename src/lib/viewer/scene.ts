@@ -7,12 +7,12 @@ export const ASPECT = 880 / 1120;
 /** One fixed product camera: 85 mm on a 36 mm sensor (fit to the tall side), f/5.6, chest height. */
 export type Camera = { pos: V3; target: V3; lensMm: number; sensorMm: number; fstop: number; focus: number };
 export const CAMERA: Camera = {
-  pos: [0.18, 1.22, 2.55],
-  target: [0, 1.1, 0],
+  pos: [0.2, 1.21, 2.85],
+  target: [0, 1.09, 0],
   lensMm: 85,
   sensorMm: 36,
   fstop: 5.6,
-  focus: 2.45,
+  focus: 2.75,
 };
 /** Fit mode stands the body on the studio floor (lifted by FLOOR so its feet touch the sweep). Same 85 mm lens,
  * stepped back to take in the whole person: a different shot, never a different lens on the same shot. */
