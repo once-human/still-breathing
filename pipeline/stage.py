@@ -827,9 +827,9 @@ SHOW_LIGHTS = [
 ]
 # daylight: the sun's direction (towards it) in three is (-0.696, 0.264, 0.668): front-left, 15 deg up
 SUN_DIR = three((-0.696, 0.264 + FLOOR, 0.668)).normalized()
-SUN_E = float(os.environ.get("SUNE", "5"))     # W/m2 on a surface facing it (Blender sun strength)
+SUN_E = float(os.environ.get("SUNE", "6.5"))   # W/m2 on a surface facing it (Blender sun strength)
 SUN_TINT = (1.0, 0.8, 0.6)
-SKY_K = float(os.environ.get("SKYK", "5.0"))   # the sky, exposed for a room lit by it
+SKY_K = float(os.environ.get("SKYK", "6.0"))   # the sky, exposed for a room lit by it
 ZC = 100.0
 
 {"studio": build_studio, "window": build_window, "show": build_show}[PLACE]()
