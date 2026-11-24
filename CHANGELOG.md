@@ -2,6 +2,13 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.7.1 — 2026-11-25
+### Viewer
+- The tee turns half as fast on its own: one slow turn in about 51 seconds.
+
+### Fixes
+- The "now" strip no longer breaks the home page when the forecast service turns the request away; it just leaves the weather out.
+
 ## 0.7.0 — 2026-11-25
 Your hands and hair in front of the tee, to the pixel.
 

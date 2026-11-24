@@ -41,7 +41,8 @@ export function Now() {
   useEffect(() => {
     if (!place) return;
     const u = `https://api.open-meteo.com/v1/forecast?latitude=${place.lat}&longitude=${place.lon}&current=temperature_2m,weather_code,relative_humidity_2m&hourly=temperature_2m,weather_code&daily=sunset&timezone=Asia%2FKolkata&forecast_days=16`;
-    fetch(u).then((r) => r.json()).then(setW).catch(() => setW(null));
+    // a refusal (rate limit, a bad day at the forecast) comes back as JSON without the forecast: show none then
+    fetch(u).then((r) => r.json()).then((j) => setW(j?.hourly?.time && j?.daily?.sunset && j?.current ? j : null)).catch(() => setW(null));
   }, [place]);
 
   if (!t) return <section className="min-h-[9rem] px-4" aria-hidden />;

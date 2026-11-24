@@ -31,8 +31,8 @@ const VIEWS = [
 ];
 // samples before the denoiser runs and the traced frame replaces the real-time one: enough for clean soft shadows
 const MAX_SPP = 32;
-// the turntable's own speed, degrees a second: one turn in about 26 s
-const SPIN = 14;
+// the turntable's own speed, degrees a second: one slow turn in about 51 s
+const SPIN = 7;
 // labels only; the rigs live in lib/viewer/scene.ts (kept out of the page bundle until the viewer loads)
 const SCENE_LIST = [{ id: "studio", label: "studio" }, { id: "window", label: "window" }, { id: "show", label: "the show" }];
 const PHOTO_SPP = 64;
