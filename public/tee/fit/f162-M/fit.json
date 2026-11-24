@@ -9,22 +9,23 @@
   "stand": {
    "hem_below_crotch_cm": 3,
    "sleeve_above_elbow_cm": 4,
-   "hem_vs_waistband_cm": 16,
+   "hem_vs_waistband_cm": -22,
    "frame": 200,
    "lift_m": 0.0
   },
   "up": {
    "hem_rise_cm": 7,
-   "hem_vs_waistband_cm": 23,
+   "hem_vs_waistband_cm": -15,
    "frame": 300,
    "lift_m": 0.0
   },
   "sit": {
-   "back_hem_vs_waistband_cm": 21,
-   "front_hem_vs_waistband_cm": 20,
+   "back_hem_vs_waistband_cm": -17,
+   "front_hem_vs_waistband_cm": -18,
    "seat_cm": 34,
    "frame": 430,
    "lift_m": -0.3806
   }
- }
+ },
+ "waist_fixed": true
 }

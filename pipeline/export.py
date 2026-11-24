@@ -35,6 +35,7 @@ mem("loaded")
 def go(frame): sc.frame_set(frame); bpy.context.view_layer.update()
 
 # ---------- the body, measured the way a tailor would: standing, arms out of the way ----------
+go(1)   # the file is saved on the sitting frame, where the rig is lowered onto the stool: measure from frame 1
 rig.data.pose_position = "REST"; bpy.context.view_layer.update(); BR = verts(body)
 rig.data.pose_position = "POSE"; bpy.context.view_layer.update()
 zs = [v.z for v in BR]; H = max(zs) - min(zs); zc = min(zs) + 0.73 * H
