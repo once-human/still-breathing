@@ -522,6 +522,9 @@ export class TryOn {
       this.armOn[k] = this.armOn[k] ? vis > 0.4 : vis > 0.6;
       aim(`upperarm01.${S}`, `lowerarm01.${S}`, sh, el, this.armOn[k]);
       aim(`lowerarm01.${S}`, `wrist.${S}`, el, wr, this.armOn[k] && (l![wr].visibility ?? 0) > 0.5);
+      // the shoulder helper turns half as far as the arm: the armhole hands over from torso to sleeve in two halves
+      const ua = this.bone(`upperarm01.${S}`)!, hb = this.bone(`armhole.${S}`);
+      if (hb) set(`armhole.${S}`, carried(`upperarm01.${S}`).slerp(ua.getWorldQuaternion(new THREE.Quaternion()).multiply(this.restQ.get(ua.name)!.clone().invert()), 0.5));
     }
     // the neck leans toward your head
     {
