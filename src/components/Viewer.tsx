@@ -88,13 +88,15 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         io.observe(stage.current!);
       });
       if (dead) return;
-      const [{ Raster, FABRIC }, { SCENES, CAMERA, BODY_CAMERA, WEAR_CAMERA }] = await code;
+      const [{ Raster, FABRIC }, { SCENES, CAMERA, BODY_CAMERA, WEAR_CAMERA, sceneFor }] = await code;
       const cameraFor = (v: Variant) => (v.body ? BODY_CAMERA[v.pose] : v.person ? WEAR_CAMERA : CAMERA);
       if (dead || !stage.current || !rasterCv.current || !traceCv.current) return;
       const st = stage.current, tc = traceCv.current;
       const raster = new Raster(rasterCv.current);
       await raster.init();
-      let scene = SCENES.find((x) => x.id === sceneRef.current) ?? SCENES[0];
+      // the place picked, and the scene the current shot uses there (fit mode keeps the paper sweep)
+      let place = SCENES.find((x) => x.id === sceneRef.current) ?? SCENES[0];
+      let scene = sceneFor(place, variantRef.current.body);
       raster.setScene(scene, lookRef.current.tee === "cream");
 
       type PathTracer = import("@/lib/viewer/pathtracer").PathTracer;
@@ -159,6 +161,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         s.loading = true;
         while (busy) await new Promise((r) => setTimeout(r, 16));
         try {
+          const sc = sceneFor(place, v.body);
+          if (sc !== scene) { scene = sc; raster.setScene(scene, s.tee === "cream"); if (!firstFrame) void loadEnv(); }
           geo = await raster.load(s.design, s.tee, v);
           raster.setCamera(cameraFor(v));
           if (pt) await ptLoad(pt, v);
@@ -171,6 +175,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       const loadEnv = async () => {
         const url = scene.env;
         if (!url || url === envUrl) return;
+        // another place: its own picture, never the last place's while this one loads
+        if (envBmp) { envBmp = null; raster.setEnv(null); pt?.setEnv(null); }
         envUrl = url;
         try { envBmp = await bitmap(url); } catch { envUrl = ""; return; }   // not there: the dark room
         if (dead) return;
@@ -377,7 +383,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         zoomBy: (k) => { if (k === 0) zoomAt(1, 0, 0); else zoomAt(zm.zt * k, 0, 0); },
         turnTo: (deg) => { const d = ((((deg - s.yaw) % 360) + 540) % 360) - 180; s.goal = s.yaw + d; holdUntil = performance.now() + 6000; },
         setScene: (id) => {
-          scene = SCENES.find((x) => x.id === id) ?? SCENES[0];
+          place = SCENES.find((x) => x.id === id) ?? SCENES[0];
+          scene = sceneFor(place, s.variant.body);
           raster.setScene(scene, s.tee === "cream"); pt?.setScene(scene, FABRIC[s.tee], s.tee === "cream");
           s.dirty = true; lastSig = "";
           if (!firstFrame) void loadEnv();

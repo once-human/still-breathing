@@ -109,12 +109,13 @@ if SHOW:
     # sweep, the dim hall as the world light. The lamps light the person but are not seen: the picture shows them
     k = 0.6 if tee_col == "cream" else 1.0
     for name, (x, y, z), size, power, tint in [
-        ("stage", (0.6, 3.1, 3.6), (2.6, 0.8), 650, (1, 0.9, 0.8)),
-        ("spot", (-2.6, 3.8, 1.6), (0.25, 0.25), 260, (1, 0.72, 0.45)),
-        ("beam", (0.4, 4.2, 0.9), (1.4, 0.3), 160, (0.86, 0.91, 1)),
+        ("stage", (1.5, 10.35, 12.6), (0.4, 0.4), 6000, (1, 0.8, 0.6)),
+        ("beam", (-2.5, 10.35, 12.6), (0.2, 0.2), 2700, (0.86, 0.91, 1)),
+        ("spot", (-9.0, 7.0, 4.0), (0.3, 0.3), 1000, (1, 0.72, 0.45)),
         ("foh", (-1.4, 3.5, -3.6), (0.8, 0.8), 480, (1, 0.86, 0.7)),
     ]:
-        area(name, (x, -z, y), size, power * k, tint).visible_camera = False
+        # scene.ts aims the places' lights at the chest, 1.1 m over the floor (the floor here is FLOOR up)
+        area(name, (x, -z, y), size, power * k, tint, aim=(0, 0, FLOOR + 1.1)).visible_camera = False
     w.node_tree.nodes["Background"].inputs[0].default_value = (0.0015, 0.0015, 0.002, 1)
     w.node_tree.nodes["Background"].inputs[1].default_value = 1.0
 else:

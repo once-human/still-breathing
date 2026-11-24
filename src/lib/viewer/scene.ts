@@ -46,11 +46,18 @@ export type Scene = {
   venue?: boolean;
   /** the place itself, all round: a 360 degree picture (equirectangular, the stage at +z in the middle) */
   env?: string;
+  /** how much the picture lights the person as well as standing behind them (1: it is in the lights' own units) */
+  envLight?: number;
+  /** where the lights point (default LIGHT_AIM) */
+  aim?: V3;
+  /** fit mode (a whole body, a camera further back) keeps the paper sweep: the place's picture is made for the shop shot */
+  fit?: Scene;
 };
 
 export const LIGHT_AIM: V3 = [0, 1.12, 0];
 
-export const STUDIO: Scene = {
+/** the old paper-sweep studio and window, kept for fit mode */
+const SWEEP_STUDIO: Scene = {
   id: "studio",
   label: "studio",
   lights: [
@@ -67,32 +74,73 @@ export const STUDIO: Scene = {
  * Real places, not slider positions. Powers are Blender watts (radiance = P / (pi A)); the exposure is fixed,
  * so each place is lit to read well at the same camera settings, the way a photographer would set it.
  */
+const SWEEP_WINDOW: Scene = {
+  id: "window", label: "window light",
+  lights: [
+    // a big north window to the left, a white wall bouncing back on the right
+    { name: "window", pos: [-2.6, 1.7, 0.9], size: [2.0, 2.4], power: 420, tint: [1, 0.99, 0.97] },
+    { name: "wall", pos: [2.4, 1.4, 1.2], size: [2.2, 2.4], power: 60, tint: [1, 0.97, 0.92] },
+  ],
+  paper: [0.62, 0.6, 0.56], world: [0.09, 0.1, 0.12], creamK: 0.45,
+};
+
+/** the places light the chest, 1.1 m up (pipeline/stage.py AIM) */
+const CHEST: V3 = [0, FLOOR + 1.1, 0];
+
+/**
+ * The places (pipeline/stage.py builds each one in Blender with these same lights at the same powers, and renders
+ * it all round as the viewer's camera sees it walking round the person). The picture stands behind the person and,
+ * in the studio and the room, lights them too: a white cyc or a sunny room is mostly light off its own walls.
+ */
+export const STUDIO: Scene = {
+  id: "studio", label: "studio",
+  // a white cyc studio: a big key softbox high on the left, a small fill, two strip lights behind for the edges,
+  // a top light over the back; seen from behind, the softboxes and stands stand beyond the person
+  lights: [
+    { name: "key", pos: [-0.95, 2.35, 2.4], size: [1.2, 1.2], power: 90, tint: [1, 0.985, 0.96] },
+    { name: "fill", pos: [1.5, 1.7, 1.85], size: [0.9, 1.3], power: 25, tint: [0.97, 0.98, 1] },
+    { name: "rimL", pos: [-1.8, 2.2, -1.35], size: [0.35, 1.5], power: 50, tint: [1, 1, 1] },
+    { name: "rimR", pos: [1.85, 2.2, -1.45], size: [0.35, 1.5], power: 50, tint: [1, 1, 1] },
+    { name: "top", pos: [0.6, 3.25, -2.0], size: [1.0, 1.0], power: 55, tint: [1, 0.99, 0.97] },
+  ],
+  paper: [0, 0, 0], world: [0.82, 0.815, 0.8], creamK: 0.6, open: true, venue: true, aim: CHEST,
+  env: "/tee/stage/studio.webp", envLight: 1, fit: SWEEP_STUDIO,
+};
+
 export const SCENES: Scene[] = [
   STUDIO,
   {
     id: "window", label: "window light",
+    // a living room in a flat on a late afternoon: a wide sliding window ahead of the person and to their right
+    // (sky, the sunlit balcony) and the low sun through it, warm across the front of the tee and in long stripes over
+    // the tiles toward the sofa behind; the room's own light reaches them through the picture. The sun is the
+    // Blender sun's 6.5 W/m2 (stage.py SUN_E) as a 12 cm disc 12 m off: P = E pi d^2.
     lights: [
-      // a big north window to the left, a white wall bouncing back on the right
-      { name: "window", pos: [-2.6, 1.7, 0.9], size: [2.0, 2.4], power: 420, tint: [1, 0.99, 0.97] },
-      { name: "wall", pos: [2.4, 1.4, 1.2], size: [2.2, 2.4], power: 60, tint: [1, 0.97, 0.92] },
+      { name: "sun", pos: [-8.35, 4.62, 8.02], size: [0.12, 0.12], power: 2940, tint: [1, 0.8, 0.6] },
+      { name: "window", pos: [-3.2, 1.875, 2.2], size: [3.4, 2.15], power: 46, tint: [1, 0.97, 0.93] },
     ],
-    paper: [0.62, 0.6, 0.56], world: [0.09, 0.1, 0.12], creamK: 0.45,
+    paper: [0, 0, 0], world: [0.24, 0.21, 0.17], creamK: 0.6, open: true, venue: true, aim: CHEST,
+    env: "/tee/stage/window.webp", envLight: 1, fit: SWEEP_WINDOW,
   },
   {
     id: "show", label: "the show",
-    // in the crowd, facing the stage (+z, ahead of the person, so behind the camera in the front view): the
-    // stage's lamps, light bars and screen wash the front warm-white, a warm spot from stage left and the truss's
-    // cool beams catch the edges; behind the person the front-of-house spots light the back. The hall and its
-    // stage are one 360 degree picture rendered in Blender (pipeline/stage.py), loaded after the tee is up.
+    // in the crowd, facing the stage (+z, ahead of the person, so behind the camera in the front view). Front
+    // light at a show is hard and comes from far off and high: a warm par and a cool head on the front truss over
+    // the stage (12.6 m out, 10 m up), a warm follow spot on a side tower; behind the person the front-of-house
+    // spots light the back. Each hangs in the hall's picture (pipeline/stage.py) where it lights the person from.
     lights: [
-      { name: "stage", pos: [0.6, 3.1, 3.6], size: [2.6, 0.8], power: 650, tint: [1, 0.9, 0.8] },
-      { name: "spot", pos: [-2.6, 3.8, 1.6], size: [0.25, 0.25], power: 260, tint: [1, 0.72, 0.45] },
-      { name: "beam", pos: [0.4, 4.2, 0.9], size: [1.4, 0.3], power: 160, tint: [0.86, 0.91, 1] },
+      { name: "stage", pos: [1.5, 10.35, 12.6], size: [0.4, 0.4], power: 6000, tint: [1, 0.8, 0.6] },
+      { name: "beam", pos: [-2.5, 10.35, 12.6], size: [0.2, 0.2], power: 2700, tint: [0.86, 0.91, 1] },
+      { name: "spot", pos: [-9.0, 7.0, 4.0], size: [0.3, 0.3], power: 1000, tint: [1, 0.72, 0.45] },
       { name: "foh", pos: [-1.4, 3.5, -3.6], size: [0.8, 0.8], power: 480, tint: [1, 0.86, 0.7] },
     ],
-    paper: [0, 0, 0], world: [0.0015, 0.0015, 0.002], creamK: 0.6, open: true, venue: true, env: "/tee/stage/show.webp",
+    paper: [0, 0, 0], world: [0.0015, 0.0015, 0.002], creamK: 0.6, open: true, venue: true, aim: CHEST,
+    env: "/tee/stage/show.webp", envLight: 1,
   },
 ];
+
+/** the scene as a given shot uses it: fit mode keeps a place's paper-sweep version */
+export const sceneFor = (s: Scene, body: boolean): Scene => (body && s.fit ? s.fit : s);
 
 /** Seamless sweep from render.py: floor at y 0.35, a 0.6 m cove, wall 1.5 m behind the tee. */
 export const SWEEP = { floorY: 0.35, coveR: 0.6, coveY: 0.95, coveZ: -0.9, wallZ: -1.5, top: 4.35, front: 5.4, halfW: 6 };
@@ -106,8 +154,8 @@ export const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[
 export const norm = (a: V3): V3 => mul(a, 1 / Math.hypot(...a));
 
 /** Light frame like Blender's track-to (-Z at the aim, Y up): ex along width, ey along height, n toward the aim. */
-export function lightFrame(l: RectLight) {
-  const n = norm(sub(LIGHT_AIM, l.pos));
+export function lightFrame(l: RectLight, aim: V3 = LIGHT_AIM) {
+  const n = norm(sub(aim, l.pos));
   const ex = norm(cross([0, 1, 0], mul(n, -1)));
   const ey = cross(mul(n, -1), ex);
   const area = l.size[0] * l.size[1];

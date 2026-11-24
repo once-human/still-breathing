@@ -909,7 +909,7 @@ shader camera(output point position = 0.0, output vector direction = 0.0, output
   // only what lies beyond the person: start just short of them, never under the floor or over the ceiling
   float t0 = {0.88 * RING};
   if (d2[2] < -1e-4) t0 = min(t0, (o2[2] - 0.02) / -d2[2]);
-  if (d2[2] > 1e-4) t0 = min(t0, ({ZC} - o2[2] - 0.02) / d2[2]);
+  if (d2[2] > 1e-4) t0 = min(t0, ({ZC} - o2[2] - 0.06) / d2[2]);   // under anything flush with the ceiling
   point s = o2 + d2 * max(t0, 0.0);
   direction = vector(d2[0], d2[1], -d2[2]);
   position = point(s[0], s[1], -s[2]);

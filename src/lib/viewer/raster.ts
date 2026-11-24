@@ -26,6 +26,21 @@ function srgbToLinear(hex: number): V3 {
   return [c.r, c.g, c.b];
 }
 
+/** the probe's view of the place: 64 x 32 texels, linear radiance (the canvas averages in sRGB; close enough for light) */
+const ENV_W = 64;
+function envTexels(bmp: ImageBitmap) {
+  const W = ENV_W, H = ENV_W / 2;
+  const cv = new OffscreenCanvas(W, H), cx = cv.getContext("2d")!;
+  cx.imageSmoothingQuality = "high"; cx.drawImage(bmp, 0, 0, W, H);
+  const px = cx.getImageData(0, 0, W, H).data, out = new Float32Array(W * H * 3);
+  for (let i = 0; i < W * H; i++)
+    for (let c = 0; c < 3; c++) {
+      const v = px[i * 4 + c] / 255;
+      out[i * 3 + c] = v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    }
+  return out;
+}
+
 /** Seamless sweep mesh, the same shape the path tracer intersects analytically. */
 function sweepGeometry() {
   const S = SWEEP, prof: [number, number][] = [];
@@ -60,6 +75,13 @@ export class Raster {
   private envOn = false;
   lights: THREE.RectAreaLight[] = [];
   hemi = new THREE.HemisphereLight(0xf4f2ee, 0x6d6a64, 0.15);
+  /** the place's picture as light on the person (its spherical harmonics, turned with the place) */
+  probe = new THREE.LightProbe(undefined, 0);
+  /** the picture, small and linear, for the probe: radiance per texel, rows from straight up */
+  private envPix: Float32Array | null = null;
+  private envLight = 0;
+  private world: V3 = [0, 0, 0];
+  private probeYaw = NaN;
   paperMat = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0 });
   sweep: THREE.Mesh;
   outer: THREE.MeshPhysicalNodeMaterial | null = null;
@@ -84,7 +106,7 @@ export class Raster {
     this.renderer = new THREE.WebGPURenderer({ canvas, antialias: (globalThis.devicePixelRatio || 1) < 1.5, alpha: false });
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.scene.add(this.pivot, this.rig, this.hemi);
+    this.scene.add(this.pivot, this.rig, this.hemi, this.probe);
     this.sweep = new THREE.Mesh(sweepGeometry(), this.paperMat); this.scene.add(this.sweep);
     this.camera.position.set(...CAMERA.pos);
     this.camera.lookAt(...CAMERA.target);
@@ -105,7 +127,7 @@ export class Raster {
     this.venue = !!s.venue; this.rig.rotation.y = this.venue ? this.pivot.rotation.y : 0;
     const k = cream ? s.creamK : 1;
     this.lights = s.lights.map((l) => {
-      const fr = lightFrame(l), L = radiance(l, k);
+      const fr = lightFrame(l, s.aim), L = radiance(l, k);
       const peak = Math.max(...L);
       const rl = new THREE.RectAreaLight(new THREE.Color(L[0] / peak, L[1] / peak, L[2] / peak), peak, l.size[0], l.size[1]);
       rl.position.set(...l.pos);
@@ -116,12 +138,46 @@ export class Raster {
     this.paperMat.color.setRGB(...s.paper, THREE.LinearSRGBColorSpace);
     this.sweep.visible = !s.open;
     this.scene.background = new THREE.Color().setRGB(...s.world, THREE.LinearSRGBColorSpace);
-    this.envOn = !!s.env; this.showEnv();
-    // uniform world light: irradiance pi * W, as the path tracer integrates it
-    const w = Math.max(...s.world, 1e-6);
-    this.hemi.color.setRGB(s.world[0] / w, s.world[1] / w, s.world[2] / w, THREE.LinearSRGBColorSpace);
-    this.hemi.groundColor.copy(this.hemi.color).multiplyScalar(0.6);
-    this.hemi.intensity = Math.PI * w;
+    this.envOn = !!s.env; this.envLight = s.envLight ?? 0; this.world = s.world; this.showEnv();
+  }
+
+  /**
+   * Light from all round: the place's picture where it lights the person (projected on spherical harmonics, which
+   * three.js turns into the irradiance a surface facing each way receives), otherwise the uniform world light.
+   */
+  private ambient() {
+    const pix = this.envPix, lit = !!(pix && this.envOn && this.envLight > 0);
+    if (!lit) {
+      this.probe.intensity = 0; this.probeYaw = NaN;
+      // uniform world light: irradiance pi * W, as the path tracer integrates it
+      const w = Math.max(...this.world, 1e-6);
+      this.hemi.color.setRGB(this.world[0] / w, this.world[1] / w, this.world[2] / w, THREE.LinearSRGBColorSpace);
+      this.hemi.groundColor.copy(this.hemi.color).multiplyScalar(0.6);
+      this.hemi.intensity = Math.PI * w;
+      return;
+    }
+    this.hemi.intensity = 0;
+    const yaw = this.rig.rotation.y;
+    if (yaw === this.probeYaw) return;
+    this.probeYaw = yaw;
+    const sh = this.probe.sh; sh.zero();
+    const c = Math.cos(yaw), sn = Math.sin(yaw), W = ENV_W, H = ENV_W / 2, basis = new Array<number>(9).fill(0);
+    const d = new THREE.Vector3(), dw = (2 * Math.PI / W) * (Math.PI / H);
+    for (let j = 0; j < H; j++) {
+      const lat = Math.PI / 2 - ((j + 0.5) / H) * Math.PI, cl = Math.cos(lat), y = Math.sin(lat), dO = dw * cl;
+      for (let i = 0; i < W; i++) {
+        // the texel's direction in the place (u = 0.5 - atan2(x, z) / 2pi), then turned into the world with the place
+        const a = (0.5 - (i + 0.5) / W) * 2 * Math.PI, px = Math.sin(a) * cl, pz = Math.cos(a) * cl;
+        d.set(c * px + sn * pz, y, -sn * px + c * pz);
+        THREE.SphericalHarmonics3.getBasisAt(d, basis);
+        const o = (j * W + i) * 3;
+        for (let k = 0; k < 9; k++) {
+          const b = basis[k] * dO;
+          sh.coefficients[k].x += pix![o] * b; sh.coefficients[k].y += pix![o + 1] * b; sh.coefficients[k].z += pix![o + 2] * b;
+        }
+      }
+    }
+    this.probe.intensity = this.envLight;
   }
 
   /**
@@ -130,6 +186,7 @@ export class Raster {
    * It turns with the person, as the lights do (a game camera walking round a place that stays put).
    */
   setEnv(bmp: ImageBitmap | null) {
+    this.envPix = bmp ? envTexels(bmp) : null; this.probeYaw = NaN;
     if (!bmp) { this.env = null; this.showEnv(); return; }
     const t = new THREE.Texture(bmp);
     t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.ClampToEdgeWrapping;
@@ -147,6 +204,7 @@ export class Raster {
   private showEnv() {
     const on = !!(this.env && this.envOn);
     this.scene.backgroundNode = on ? this.env : null;
+    this.ambient();
   }
 
   private async tx(name: string, srgb: boolean) {
@@ -370,6 +428,7 @@ export class Raster {
     this.pivot.rotation.y = (yaw * Math.PI) / 180;
     this.rig.rotation.y = this.venue ? this.pivot.rotation.y : 0;
     this.envYaw.value = this.rig.rotation.y;
+    if (this.probe.intensity > 0) this.ambient();
     const [cx, cy, z] = crop;
     if (z > 1.0001) {
       // magnify = crop the same frame (no camera move, so the perspective never changes)

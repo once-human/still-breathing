@@ -12,14 +12,14 @@ struct U {
   camU: vec3f, aspect: f32,
   camF: vec3f, focus: f32,
   crop: vec4f,
-  yaw: vec4f,
+  yaw: vec4f,          // cos, sin, strip row, how much the place's picture lights the person
   world: vec3f, knit: f32,
   paper: vec3f, showPaper: f32,
   fabric: vec3f, grain: f32,
   skin: vec3f, env: f32,
   knitRep: vec4f,
   size: vec4u,
-  lights: array<Light, 4>,
+  lights: array<Light, 6>,
 };
 
 @group(0) @binding(0) var<uniform> u: U;
@@ -311,8 +311,10 @@ fn main(@builtin(global_invocation_id) gid3: vec3u) {
     if (h.kind == 0u) {
       // the place, seen straight through the lens: the picture already carries its own lens blur, so it is
       // looked up along the pinhole ray (no second blur from the aperture), and it is its own denoiser albedo
-      // (light / albedo = 1), so the denoiser leaves it exactly as it is. Bounced light sees the dim room.
+      // (light / albedo = 1), so the denoiser leaves it exactly as it is. Bounced light sees the place too: the
+      // cyc's white walls, the sunny room (the lamps' own faces are in it only clipped, so they are not counted twice)
       if (bounce == 0 && u.env > 0.5) { let e = envAt(pinhole); L += e; gA = max(e, vec3f(0.004)); }
+      else if (u.env > 0.5 && u.yaw.w > 0.0) { L += tp * envAt(rd) * u.yaw.w; }
       else { L += tp * u.world; }
       break;
     }

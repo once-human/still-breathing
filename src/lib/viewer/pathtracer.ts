@@ -10,7 +10,7 @@ export type TeeGeometry = { pos: Float32Array; nrm: Float32Array; uv: Float32Arr
 export type TeeImages = { back: ImageBitmap; front: ImageBitmap; normal: ImageBitmap; knit: ImageBitmap };
 export type View = { yaw: number; crop: [number, number, number]; knit: boolean };
 
-const U_SIZE = 256 + 4 * 80;
+const U_SIZE = 256 + 6 * 80;
 
 export class PathTracer {
   device!: GPUDevice;
@@ -214,13 +214,14 @@ export class PathTracer {
     set(12, F, cam.focus);
     const [cx, cy, z] = this.view.crop; f[16] = cx; f[17] = cy; f[18] = z; f[19] = this.sheenK;
     const yr = (this.view.yaw * Math.PI) / 180; f[20] = Math.cos(yr); f[21] = Math.sin(yr); f[22] = this.row;
+    f[23] = this.scene.envLight ?? 0;
     const s = this.scene;
     set(24, s.world, this.view.knit ? 0.55 : 0);
     set(28, s.paper, s.open ? 0 : 1);
     set(32, this.fabric, 1);
     set(36, this.skin, s.env && this.envTex && this.envTex.width > 1 ? 1 : 0);
     f[40] = this.knitRepeat[0]; f[41] = this.knitRepeat[1];
-    const L = s.lights.slice(0, 4);
+    const L = s.lights.slice(0, 6);
     u[44] = this.w; u[45] = this.h; u[46] = this.frame; u[47] = L.length;
     // light selection by emitted power, so the key gets most of the shadow rays
     const pw = L.map((l) => l.power * (l.tint[0] + l.tint[1] + l.tint[2])), tot = pw.reduce((a, b) => a + b, 0) || 1;
@@ -228,7 +229,7 @@ export class PathTracer {
     // at a venue the lights stay with the place while the camera walks round: turned with the person
     const t = (v: V3) => (s.venue ? turnY(v, this.view.yaw) : v);
     L.forEach((l, i) => {
-      const o = 48 + i * 20, fr = lightFrame(l), rad = radiance(l, this.k), p = pw[i] / tot; cdf += p;
+      const o = 48 + i * 20, fr = lightFrame(l, s.aim), rad = radiance(l, this.k), p = pw[i] / tot; cdf += p;
       set(o, t(l.pos), i === L.length - 1 ? 1 : cdf);
       set(o + 4, t(fr.ex), fr.area);
       set(o + 8, t(fr.ey), p);
