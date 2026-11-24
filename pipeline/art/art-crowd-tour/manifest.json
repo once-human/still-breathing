@@ -1,0 +1,157 @@
+{
+  "concept": "the tour shirt: one crowd, two cities behind it. bengaluru on the left (the green line stopping at madavara, rain trees), mumbai on the right (the skyline behind the race course, the twin crowns, a plane coming in). people from both nights.",
+  "palette": {
+    "tee": "#151515",
+    "line": "#F1E7D0",
+    "ink_yellow": "#F6B330",
+    "ink_green": "#56B27C",
+    "accent_blue": "#4C66F5"
+  },
+  "units": "1200 x 1600 (multiply by 3 for px on the 3600 x 4800 art)",
+  "type_zones": [
+    {
+      "name": "city",
+      "x": 80,
+      "y": 150,
+      "w": 1040,
+      "h": 230
+    },
+    {
+      "name": "dates",
+      "x": 300,
+      "y": 392,
+      "w": 600,
+      "h": 56
+    }
+  ],
+  "annotations": [
+    {
+      "text": "the green line ends here",
+      "points_to": [
+        384.0,
+        555.7
+      ]
+    },
+    {
+      "text": "the twins, tardeo",
+      "points_to": [
+        942,
+        585
+      ]
+    },
+    {
+      "text": "a plane lining up for bom",
+      "points_to": [
+        262,
+        474
+      ]
+    },
+    {
+      "text": "on her friend's shoulders",
+      "points_to": [
+        902,
+        820.8
+      ]
+    },
+    {
+      "text": "monkey caps out",
+      "points_to": [
+        318,
+        1089.8
+      ]
+    }
+  ],
+  "figures": {
+    "moon": [
+      1052,
+      498
+    ],
+    "plane": [
+      262,
+      474
+    ],
+    "birds": [
+      1110,
+      550
+    ],
+    "twins": [
+      942,
+      585
+    ],
+    "rails": [
+      1100,
+      775
+    ],
+    "end": [
+      474,
+      621.5
+    ],
+    "viaduct": [
+      180,
+      601.2
+    ],
+    "train": [
+      150,
+      538.8
+    ],
+    "station": [
+      384.0,
+      555.7
+    ],
+    "lorry": [
+      136,
+      703
+    ],
+    "auto": [
+      268,
+      725
+    ],
+    "trees": [
+      408,
+      662
+    ],
+    "stage": [
+      622,
+      735
+    ],
+    "foh": [
+      472,
+      812
+    ],
+    "shoulders": [
+      902,
+      820.8
+    ],
+    "torch": [
+      667.8,
+      765.3
+    ],
+    "tiptoe": [
+      640,
+      1138.9
+    ],
+    "mallige": [
+      879.6,
+      1210.4
+    ],
+    "monkeycap": [
+      318,
+      1089.8
+    ],
+    "huggers": [
+      1052,
+      1296
+    ],
+    "coffee": [
+      641.6,
+      1489.7
+    ]
+  },
+  "art_bbox": {
+    "x": 20,
+    "y": 460,
+    "w": 1166,
+    "h": 1112
+  },
+  "seed": 121326
+}
