@@ -5,6 +5,7 @@ import { COLOURS, DESIGNS, type Colour, type Design } from "@/content/tee";
 import type { Format, Look, PhotoJob } from "@/lib/viewer/photo";
 import type { Variant } from "@/lib/viewer/raster";
 import { pickTier } from "@/lib/viewer/tier";
+import { prefetchTee, bitmap } from "@/lib/viewer/grab";
 import dynamic from "next/dynamic";
 
 // the camera try-on, and the pose model behind it, only download when someone asks for it
@@ -75,13 +76,16 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       const tier = await pickTier();
       if (dead) return;
       if (tier === "photos") { setMode("flat"); return; }   // the 3D code is never downloaded
-      // nothing 3D is fetched until the viewer is about to be seen
+      // the tee, its textures and the decoder start downloading now, alongside the 3D code, not after it
+      prefetchTee(variantRef.current, lookRef.current.design, lookRef.current.tee);
+      const code = Promise.all([import("@/lib/viewer/raster"), import("@/lib/viewer/scene")]);
+      // nothing is drawn until the viewer is about to be seen
       await new Promise<void>((res) => {
         const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { io.disconnect(); res(); } }, { rootMargin: "300px" });
         io.observe(stage.current!);
       });
       if (dead) return;
-      const [{ Raster, FABRIC }, { SCENES, CAMERA, BODY_CAMERA }] = await Promise.all([import("@/lib/viewer/raster"), import("@/lib/viewer/scene")]);
+      const [{ Raster, FABRIC }, { SCENES, CAMERA, BODY_CAMERA }] = await code;
       if (dead || !stage.current || !rasterCv.current || !traceCv.current) return;
       const st = stage.current, tc = traceCv.current;
       const raster = new Raster(rasterCv.current);
@@ -93,7 +97,6 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       let pt: PathTracer | null = null;
       const s = { design: lookRef.current.design, tee: lookRef.current.tee, yaw: angRef.current, goal: null as number | null, vel: 0, drag: false, dirty: true, photo: false, loading: false, variant: variantRef.current };
 
-      const bitmap = async (url: string) => createImageBitmap(await (await fetch(url)).blob(), { colorSpaceConversion: "none", premultiplyAlpha: "none" });
       const maps: Record<string, Promise<[ImageBitmap, ImageBitmap]>> = {};
       const colourMaps = (d: Design, t: Colour) => (maps[`${d}-${t}`] ??= Promise.all([bitmap(`/tee/fit/tex/color-${d}-${t}.jpg`), bitmap(`/tee/fit/tex/orm-${d}-${t}.png`)]));
       const normals: Record<string, Promise<ImageBitmap>> = {};
@@ -224,7 +227,12 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         if (s.dirty || swinging) {
           raster.render();
           s.dirty = false;
-          if (firstFrame) { firstFrame = false; setMode("3d"); setStatus(""); void startTracer(); }
+          if (firstFrame) {
+            firstFrame = false;
+            // the photo steps aside only once the 3D has actually reached the screen, textures and all (two
+            // frames on): never an empty or half-dressed tee in between
+            requestAnimationFrame(() => requestAnimationFrame(() => { if (!dead) { setMode("3d"); setStatus(""); void startTracer(); } }));
+          }
         }
         const busyCloth = moving || swinging;
         if (busyCloth) restSince = now;
@@ -329,7 +337,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={STILL(design, ang)} alt="" draggable={false} fetchPriority="high"
-          className={`absolute inset-0 h-full w-full transition-opacity duration-300 ${mode === "3d" ? "pointer-events-none opacity-0" : ""}`}
+          className={`absolute inset-0 h-full w-full transition-opacity duration-500 ${mode === "3d" ? "pointer-events-none opacity-0" : ""}`}
           onPointerDown={(e) => { if (mode === "3d") return; e.currentTarget.setPointerCapture(e.pointerId); flatDrag.current = { x: e.clientX, a: ang }; }}
           onPointerMove={(e) => {
             const d = flatDrag.current; if (!d) return;

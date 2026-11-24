@@ -19,6 +19,8 @@ export async function pickTier(): Promise<Tier> {
   }
   const a = adapter as unknown as { isFallbackAdapter?: boolean; info?: { isFallbackAdapter?: boolean; description?: string } } | null;
   const softGPU = !a || !!a.isFallbackAdapter || !!a.info?.isFallbackAdapter || SOFTWARE.test(a.info?.description ?? "");
+  // a real GPU answered: nothing more to ask (opening a WebGL context just to read its name costs a beat)
+  if (!softGPU) return "live";
   let renderer = "", webgl = false;
   try {
     const gl = document.createElement("canvas").getContext("webgl2");

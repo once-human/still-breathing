@@ -7,6 +7,7 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RectAreaLightTexturesLib } from "three/addons/lights/RectAreaLightTexturesLib.js";
 import { CAMERA, VFOV, ASPECT, SWEEP, FLOOR, KNIT_REPEAT, lightFrame, radiance, type Camera, type Scene, type V3 } from "./scene";
 import type { TeeGeometry } from "./pathtracer";
+import { grab, bitmap } from "./grab";
 import { Cloth, buildNetAsync, offsetTexture, slopeTextures, clothNodes } from "./cloth";
 
 export const ASSET = "/tee/fit/";
@@ -107,12 +108,11 @@ export class Raster {
     this.hemi.intensity = Math.PI * w;
   }
 
-  private tl = new THREE.TextureLoader();
   private async tx(name: string, srgb: boolean) {
-    const t = await this.tl.loadAsync(ASSET + name);
+    const t = new THREE.Texture(await bitmap(ASSET + name));
     t.flipY = false; t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
     // the print stays crisp across the cloth as it turns away: full anisotropic filtering
-    t.anisotropy = this.maxAniso; return t;
+    t.anisotropy = this.maxAniso; t.needsUpdate = true; return t;
   }
   /** colour + roughness/ink maps for one design in one colourway, loaded once */
   private async look(design: string, t: "black" | "cream") {
@@ -144,14 +144,17 @@ export class Raster {
   async load(design: string, tee: "black" | "cream", v: Variant): Promise<TeeGeometry> {
     this.gl ??= new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath("/draco/"));
     const gl = this.gl;
-    const normalP = (this.normals[v.size] ??= await this.tx(`tex/normal-${v.size}.png`, false));
-    const [gltf, bodyGltf, [c0, o0]] = await Promise.all([
-      gl.loadAsync(`${ASSET}${v.dir}/${v.pose}.glb`),
-      v.body ? gl.loadAsync(`${ASSET}${v.dir}/body-${v.pose}.glb`) : Promise.resolve(null),
+    const glb = async (f: string) => gl.parseAsync(await (await grab(ASSET + f)).arrayBuffer(), ASSET + v.dir + "/");
+    // everything at once (most of it is already downloading: the viewer started it before this code arrived)
+    const [gltf, bodyGltf, [c0, o0], normalP, knitT] = await Promise.all([
+      glb(`${v.dir}/${v.pose}.glb`),
+      v.body ? glb(`${v.dir}/body-${v.pose}.glb`) : Promise.resolve(null),
       this.look(design, tee),
+      this.normals[v.size] ? Promise.resolve(this.normals[v.size]) : this.tx(`tex/normal-${v.size}.png`, false),
+      this.nodes ? Promise.resolve(null) : this.tx("tex/knit-normal.png", false),
     ]);
-    if (!this.nodes) {
-      const knitT = await this.tx("tex/knit-normal.png", false);
+    this.normals[v.size] = normalP;
+    if (!this.nodes && knitT) {
       knitT.wrapS = knitT.wrapT = THREE.RepeatWrapping;
       const colorN = texture(c0), ormN = texture(o0), normalN = texture(normalP);
       const m = new THREE.MeshPhysicalNodeMaterial({ roughness: 1, metalness: 0, specularIntensity: 0.5 });
@@ -171,7 +174,7 @@ export class Raster {
       m.positionNode = cloth.position;
       this.outer = m;
       this.nodes = { color: colorN, orm: ormN, normal: normalN };
-    } else {
+    } else if (this.nodes) {
       this.nodes.color.value = c0; this.nodes.orm.value = o0; this.nodes.normal.value = normalP;
     }
     this.inner.color.setRGB(...FABRIC[tee], THREE.LinearSRGBColorSpace);
