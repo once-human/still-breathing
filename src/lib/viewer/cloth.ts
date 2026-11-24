@@ -14,28 +14,28 @@
 // push is aerodynamic: it acts along each patch's normal and against the patch's own velocity, so a panel
 // facing the breeze bellies, one edge-on barely moves, and fast swings are damped by the air.
 //
-// Jersey resists stretching but gives easily under compression, so the edge constraints are firm one way and
-// soft the other. Wherever the net is squeezed (a twist as the hem lags a turn, the windward side wrapping
-// in) it records how much and along which axis, and the vertex shader raises folds across that axis: rounded
-// ridges a few millimetres high, about 5 cm apart for this cotton, with the shading normal tilted to match.
+// Folds and creases are not painted on: the net's own shape is the cloth's shape. Each frame the slope of the
+// displacement around every particle (how the cloth around it is tilted, bunched or pulled) is measured, and
+// the shading follows it, so a ripple the breeze runs across the back catches the light exactly as the moving
+// cloth would, and on still cloth there is nothing at all.
 //
 // The net and each vertex's skin (its 4 nearest particles) are built in a Worker, so the tee is on screen and
-// turning while that runs. Offsets and squeeze reach the vertex shader through two small float textures, so
+// turning while that runs. Offsets and slopes reach the vertex shader through small float textures, so
 // the CPU only ever touches the net. Once everything is still, both snap to exactly zero: the path tracer's
 // geometry is the rest pose, so the two always agree.
 import * as THREE from "three/webgpu";
-import { attribute, textureLoad, ivec2, int, floor, positionLocal, normalLocal, length, max, min, sin, cos, dot, float, vec3, vec4, smoothstep, modelViewMatrix, normalMap } from "three/tsl";
+import { attribute, textureLoad, ivec2, int, floor, positionLocal, normalLocal, length, max, float, vec4, modelViewMatrix, normalMap, varying } from "three/tsl";
 
 export const TEX_W = 256;
-export const TEX_H = 64;        // up to 16384 particles
+export const TEX_H = 16;        // up to 4096 particles (a 2XL tee is about 2000)
 
-const SUB_DT = 1 / 120;         // fixed sub-step
-const MAX_OFF = 0.07;           // m, a hard limit however hard it is turned
-const SQUEEZE_FULL = 0.045;     // 4.5 % compression = fully formed folds
-const FOLD_LEN = 0.05;          // m between fold crests (heavy cotton makes few, soft folds)
-const FOLD_H = 0.0022;          // m, crest height at full squeeze
-const BREEZE = 0.8;             // m/s at the top of a gust: a slow night breeze, not a storm
-const INERTIA = 0.35;           // share of the turn the cloth feels as inertia
+const SUB_DT = 1 / 100;         // longest sub-step; each frame is split into equal steps no longer than this
+const MAX_OFF = 0.08;           // m, a safety net the cloth never normally reaches
+const SOFT_OFF = 0.04;          // m, where the cloth starts to feel the form and stiffens (smoothly)
+const BREEZE = 0.9;             // m/s at the top of a gust: a slow night breeze
+const WIND_GAIN = 1.8;          // how much the cotton catches it
+const INERTIA = 0.3;            // share of a slow turn the cloth feels as inertia (less the faster it turns)
+const SLOPE_MAX = 0.6;          // the steepest a fold may tilt the shading
 
 type Mesh = { pos: Float32Array; idx: Uint32Array };
 
@@ -108,15 +108,18 @@ function buildNet(meshes: { pos: Float32Array; idx: Uint32Array }[], CELL: numbe
   const ss = (a: number, b: number, v: number) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
   for (let c = 0; c < n; c++) {
     const x = rest[3 * c], y = rest[3 * c + 1];
-    const down = ss(0.24 * len, 0.8 * len, yTop - y);           // free from below the chest, freest at the hem
-    const out = ss(0.24, 0.38, Math.abs(x));                    // and toward the sleeve ends
-    const m = Math.max(down, 0.8 * out);
+    // only the collar and the tops of the shoulders sit on the form; everything else hangs from them, the
+    // yoke barely, the hem and sleeve ends most
+    if (yTop - y < 0.06 * len && Math.abs(x) < 0.2) { pin[c] = 1; mob[c] = 0; inv[c] = 0; continue; }
+    const down = ss(0.04 * len, 0.85 * len, yTop - y);
+    const out = ss(0.2, 0.38, Math.abs(x));
+    const m = Math.max(0.12, down, 0.8 * out);
     mob[c] = m;
-    if (m < 0.06) { pin[c] = 1; inv[c] = 0; continue; }        // carried by the form: no bounce at all
-    const f = 3.2 * (1 - m) + 1.5 * m;                          // natural sway, Hz: heavy cotton, short swing
-    const w = 2 * Math.PI * f, zeta = 0.85 * (1 - m) + 0.62 * m; // well damped: trails and eases back, one soft return at most
+    const f = 2.6 * (1 - m) + 1.3 * m;                          // natural sway, Hz: heavy cotton, short swing
+    const zeta = 0.95 * (1 - m) + 0.72 * m;                     // well damped: it trails and eases back, no bounce
+    const w = 2 * Math.PI * f;
     w2[c] = w * w;
-    damp[c] = Math.exp(-SUB * 2 * zeta * w);
+    damp[c] = 2 * zeta * w;                                     // decay rate, 1/s (the step works out each frame's share)
     inv[c] = 0.15 + m;
   }
 
@@ -177,59 +180,65 @@ export class Cloth {
   x: Float32Array; xp: Float32Array;
   w2: Float32Array; damp: Float32Array; inv: Float32Array; mob: Float32Array; pin: Uint8Array;
   ea: Uint32Array; eb: Uint32Array; el: Float32Array;
-  sq: Float32Array; sqN: Float32Array;
   settled = true;
   /** the breeze; off for people who asked their system for less motion */
   wind = true;
   private time = 0;
-  private acc = 0;
+  private hPrev = SUB_DT;
   private R = new THREE.Matrix3(); private t = new THREE.Vector3(); private s = 1;
+  private pR = new THREE.Matrix3(); private pT = new THREE.Vector3(); private pS = 1;
   private started = false;
+  private off: Float32Array; private shift: Float32Array;
+  private G: Float32Array; private S: Float32Array;
 
-  constructor(net: Net, public tex: THREE.DataTexture, public wtex: THREE.DataTexture | null = null) {
+  constructor(net: Net, public tex: THREE.DataTexture, public slopes: THREE.DataTexture[] | null = null) {
     this.n = net.n; this.rest = net.rest; this.nrm = net.nrm;
     this.ea = net.ea; this.eb = net.eb; this.el = net.el;
     this.w2 = net.w2; this.damp = net.damp; this.inv = net.inv; this.mob = net.mob; this.pin = net.pin;
     this.x = new Float32Array(this.rest); this.xp = new Float32Array(this.rest);
-    this.sq = new Float32Array(3 * this.n); this.sqN = new Float32Array(this.n);
+    this.off = new Float32Array(3 * this.n); this.shift = new Float32Array(3 * this.n);
+    this.G = new Float32Array(9 * this.n); this.S = new Float32Array(this.n);
   }
 
-  /** where the garment is held: rotation (3x3), translation, uniform scale (pivot -> world) */
-  setPose(R: THREE.Matrix3, t: THREE.Vector3, s = 1) {
+  /**
+   * Where the garment is held this frame: rotation (3x3), translation, uniform scale (pivot -> world), and the
+   * frame's length. Most of the move is handed straight to the cloth; the rest is left for inertia to act on,
+   * and the faster it's moved the smaller that share (air and the form's grip take the rest), so a slow turn
+   * trails softly and a hard flick doesn't whip.
+   */
+  setPose(R: THREE.Matrix3, t: THREE.Vector3, s = 1, dt = 1 / 60) {
     if (this.started) { this.pR.copy(this.R); this.pT.copy(this.t); this.pS = this.s; }
     this.R.copy(R); this.t.copy(t); this.s = s;
-    if (!this.started) { this.snap(); this.started = true; this.pR.copy(R); this.pT.copy(t); this.pS = s; }
-    // most of the turn is handed straight to the cloth; only part of it is left for inertia to act on. Real
-    // jersey on a form trails a turn a little; letting it feel the whole spin of a fast drag makes it whip.
-    const a = [0, 0, 0], b = [0, 0, 0], k = 1 - INERTIA;
+    if (!this.started) { this.snap(); this.started = true; this.pR.copy(R); this.pT.copy(t); this.pS = s; return; }
+    const a = [0, 0, 0], b = [0, 0, 0], d = this.shift;
+    let vmax = 0;
+    for (let c = 0; c < this.n; c++) {
+      this.targetWith(this.pR, this.pT, this.pS, c, a); this.targetWith(this.R, this.t, this.s, c, b);
+      const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
+      d[3 * c] = dx; d[3 * c + 1] = dy; d[3 * c + 2] = dz;
+      vmax = Math.max(vmax, Math.hypot(dx, dy, dz));
+    }
+    const v = vmax / Math.max(dt, 1e-3), felt = INERTIA / (1 + (v / 0.6) ** 2), k = 1 - felt;
     for (let c = 0; c < this.n; c++) {
       if (this.pin[c]) continue;
-      this.targetWith(this.pR, this.pT, this.pS, c, a); this.target(c, b);
-      for (let j = 0; j < 3; j++) { const d = (b[j] - a[j]) * k; this.x[3 * c + j] += d; this.xp[3 * c + j] += d; }
+      for (let j = 0; j < 3; j++) { const m = d[3 * c + j] * k; this.x[3 * c + j] += m; this.xp[3 * c + j] += m; }
     }
   }
-  private pR = new THREE.Matrix3(); private pT = new THREE.Vector3(); private pS = 1;
   private targetWith(R: THREE.Matrix3, t: THREE.Vector3, s: number, c: number, out: number[]) {
     const e = R.elements, rx = this.rest[3 * c] * s, ry = this.rest[3 * c + 1] * s, rz = this.rest[3 * c + 2] * s;
     out[0] = e[0] * rx + e[3] * ry + e[6] * rz + t.x;
     out[1] = e[1] * rx + e[4] * ry + e[7] * rz + t.y;
     out[2] = e[2] * rx + e[5] * ry + e[8] * rz + t.z;
   }
-
-  private target(c: number, out: number[]) {
-    const e = this.R.elements, rx = this.rest[3 * c] * this.s, ry = this.rest[3 * c + 1] * this.s, rz = this.rest[3 * c + 2] * this.s;
-    out[0] = e[0] * rx + e[3] * ry + e[6] * rz + this.t.x;
-    out[1] = e[1] * rx + e[4] * ry + e[7] * rz + this.t.y;
-    out[2] = e[2] * rx + e[5] * ry + e[8] * rz + this.t.z;
-  }
+  private target(c: number, out: number[]) { this.targetWith(this.R, this.t, this.s, c, out); }
 
   /** everything exactly at rest (and the offsets cleared) */
   snap() {
     const p = [0, 0, 0];
     for (let c = 0; c < this.n; c++) { this.target(c, p); for (let k = 0; k < 3; k++) this.x[3 * c + k] = this.xp[3 * c + k] = p[k]; }
     (this.tex.image.data as Float32Array).fill(0); this.tex.needsUpdate = true;
-    if (this.wtex) { (this.wtex.image.data as Float32Array).fill(0); this.wtex.needsUpdate = true; }
-    this.settled = true; this.acc = 0;
+    for (const t of this.slopes ?? []) { (t.image.data as Float32Array).fill(0); t.needsUpdate = true; }
+    this.settled = true;
   }
 
   /** how hard the air is moving right now, 0 (a lull) to 1 (the top of a gust) */
@@ -241,104 +250,119 @@ export class Cloth {
     return u * u * (3 - 2 * u);
   }
 
-  /** advance by dt seconds of real time; returns true while anything is still moving */
+  /**
+   * Advance by this frame's dt. The frame is split into equal steps (one at 120 Hz, two at 60), so the cloth
+   * moves exactly once per drawn frame: no frame shows a stale cloth, none jumps two steps. Returns true while
+   * anything is still moving.
+   */
   step(dt: number) {
-    this.acc = Math.min(this.acc + dt, 4 * SUB_DT);    // after a stall, catch up a little, never spiral
+    dt = Math.min(dt, 0.05);
+    if (dt <= 0) return !this.settled;
+    const steps = Math.ceil(dt / SUB_DT - 1e-6), h = dt / steps, h2 = h * h;
     const p = [0, 0, 0], x = this.x, xp = this.xp;
-    let moved = false;
     const e = this.R.elements, TAU = 2 * Math.PI;
     let blowing = false;
-    while (this.acc >= SUB_DT) {
-      this.acc -= SUB_DT;
-      this.time += SUB_DT;
-      const h2 = SUB_DT * SUB_DT, t = this.time;
+    for (let st = 0; st < steps; st++) {
+      this.time += h;
+      const t = this.time;
       // the breeze: its line drifts slowly, mostly across the view (that's where a hem shows it best)
       const G = this.gust(t), th = 0.3 + 0.45 * Math.sin(TAU * t / 47) + 0.18 * Math.sin(TAU * t / 13.7);
       const dx = Math.cos(th), dz = Math.sin(th) * 0.6, dl = Math.hypot(dx, dz), wx = dx / dl, wz = dz / dl;
       blowing = blowing || G > 0;
       for (let c = 0; c < this.n; c++) {
         this.target(c, p);
-        const i = 3 * c, d = this.damp[c], w2 = this.w2[c];
+        const i = 3 * c;
         if (this.pin[c]) { for (let k = 0; k < 3; k++) { xp[i + k] = x[i + k]; x[i + k] = p[k]; } continue; }
+        const vx = (x[i] - xp[i]) / this.hPrev, vy = (x[i + 1] - xp[i + 1]) / this.hPrev, vz = (x[i + 2] - xp[i + 2]) / this.hPrev;
         let ax = 0, ay = 0, az = 0;
         if (G > 0) {
-          // gusts arrive as waves crossing the garment, a long one and a short one at an angle
+          // gusts arrive as slow waves crossing the garment, a long one and a shorter one at an angle
           const along = x[i] * wx + x[i + 2] * wz, across = x[i + 1] * 0.8 + (x[i + 2] * wx - x[i] * wz) * 0.6;
-          const f = 1 + 0.55 * Math.sin(TAU * (along / 0.3 - 1.25 * t)) + 0.3 * Math.sin(TAU * (across / 0.22 - 1.9 * t) + 1.7);
+          const f = 1 + 0.5 * Math.sin(TAU * (along / 0.45 - 0.7 * t)) + 0.25 * Math.sin(TAU * (across / 0.3 - 1.1 * t) + 1.7);
           const W = BREEZE * G * f;
-          // relative air velocity, along the patch's world normal
-          const ux = W * wx - (x[i] - xp[i]) / SUB_DT, uy = W * 0.04 - (x[i + 1] - xp[i + 1]) / SUB_DT, uz = W * wz - (x[i + 2] - xp[i + 2]) / SUB_DT;
+          // the air pushes along the patch's normal, by how fast it moves past the patch (so it also damps)
+          const ux = W * wx - vx, uy = W * 0.04 - vy, uz = W * wz - vz;
           const lx = this.nrm[i], ly = this.nrm[i + 1], lz = this.nrm[i + 2];
-          const nx = (e[0] * lx + e[3] * ly + e[6] * lz), ny = (e[1] * lx + e[4] * ly + e[7] * lz), nz = (e[2] * lx + e[5] * ly + e[8] * lz);
-          const un = (ux * nx + uy * ny + uz * nz) * (0.25 + 0.75 * this.mob[c]) * 0.75;
+          const nx = e[0] * lx + e[3] * ly + e[6] * lz, ny = e[1] * lx + e[4] * ly + e[7] * lz, nz = e[2] * lx + e[5] * ly + e[8] * lz;
+          const un = (ux * nx + uy * ny + uz * nz) * (0.2 + 0.8 * this.mob[c]) * WIND_GAIN;
           ax = un * nx; ay = un * ny; az = un * nz;
         }
-        const a = [ax, ay, az];
-        for (let k = 0; k < 3; k++) {
-          const v = (x[i + k] - xp[i + k]) * d;
-          xp[i + k] = x[i + k];
-          x[i + k] += v + (p[k] - x[i + k]) * w2 * h2 + a[k] * h2;
-        }
+        // the pull home stiffens smoothly as the cloth strays (it meets the form and its own seams): no wall
+        const ox = x[i] - p[0], oy = x[i + 1] - p[1], oz = x[i + 2] - p[2];
+        const r2 = (ox * ox + oy * oy + oz * oz) / (SOFT_OFF * SOFT_OFF);
+        const kk = this.w2[c] * (1 + r2), keep = Math.exp(-this.damp[c] * h);
+        xp[i] = x[i]; xp[i + 1] = x[i + 1]; xp[i + 2] = x[i + 2];
+        x[i] += vx * h * keep + (ax - kk * ox) * h2;
+        x[i + 1] += vy * h * keep + (ay - kk * oy) * h2;
+        x[i + 2] += vz * h * keep + (az - kk * oz) * h2;
       }
       // keep the jersey from stretching: two passes over the net
       for (let it = 0; it < 2; it++) {
-        for (let e = 0; e < this.ea.length; e++) {
-          const a = 3 * this.ea[e], b = 3 * this.eb[e], wa = this.inv[this.ea[e]], wb = this.inv[this.eb[e]];
-          const dx = x[b] - x[a], dy = x[b + 1] - x[a + 1], dz = x[b + 2] - x[a + 2];
-          const L = Math.hypot(dx, dy, dz) || 1e-9, rest = this.el[e] * this.s;
-          // jersey: firm against stretch, soft against squeeze (it buckles instead)
+        for (let j = 0; j < this.ea.length; j++) {
+          const A = this.ea[j], B = this.eb[j], wa = this.inv[A], wb = this.inv[B];
           if (wa + wb === 0) continue;
+          const a = 3 * A, b = 3 * B;
+          const ddx = x[b] - x[a], ddy = x[b + 1] - x[a + 1], ddz = x[b + 2] - x[a + 2];
+          const L = Math.hypot(ddx, ddy, ddz) || 1e-9, rest = this.el[j] * this.s;
+          // jersey: firm against stretch, soft against squeeze (it buckles instead)
           const k = ((L - rest) / L) * (L < rest ? 0.08 : 0.5) / (wa + wb);
-          x[a] += dx * k * wa; x[a + 1] += dy * k * wa; x[a + 2] += dz * k * wa;
-          x[b] -= dx * k * wb; x[b + 1] -= dy * k * wb; x[b + 2] -= dz * k * wb;
+          x[a] += ddx * k * wa; x[a + 1] += ddy * k * wa; x[a + 2] += ddz * k * wa;
+          x[b] -= ddx * k * wb; x[b + 1] -= ddy * k * wb; x[b + 2] -= ddz * k * wb;
         }
       }
-      moved = true;
+      this.hPrev = h;
     }
-    if (!moved) return !this.settled;
-    // the squeeze: per particle, how much its edges are compressed and along which axis (garment frame)
-    if (this.wtex) {
-      this.sq.fill(0); this.sqN.fill(0);
-      for (let j = 0; j < this.ea.length; j++) {
-        const A = this.ea[j], B = this.eb[j], a = 3 * A, b = 3 * B;
-        const dx = x[b] - x[a], dy = x[b + 1] - x[a + 1], dz = x[b + 2] - x[a + 2];
-        const L = Math.hypot(dx, dy, dz) || 1e-9, c = Math.max(0, 1 - L / (this.el[j] * this.s));
-        this.sqN[A]++; this.sqN[B]++;
-        if (c <= 0) continue;
-        let lx = (e[0] * dx + e[1] * dy + e[2] * dz) / L, ly = (e[3] * dx + e[4] * dy + e[5] * dz) / L, lz = (e[6] * dx + e[7] * dy + e[8] * dz) / L;
-        // an axis has no direction: one sign for all of them, so neighbours add up instead of cancelling
-        if (ly < 0 || (ly === 0 && lx < 0)) { lx = -lx; ly = -ly; lz = -lz; }
-        for (const q of [a, b]) { this.sq[q] += c * lx; this.sq[q + 1] += c * ly; this.sq[q + 2] += c * lz; }
-      }
-      const W = this.wtex.image.data as Float32Array;
-      for (let c = 0; c < this.n; c++) {
-        const k = 1 / (Math.max(1, this.sqN[c]) * SQUEEZE_FULL) * 2;
-        let sx = this.sq[3 * c] * k, sy = this.sq[3 * c + 1] * k, sz = this.sq[3 * c + 2] * k;
-        const m = Math.hypot(sx, sy, sz); if (m > 1) { sx /= m; sy /= m; sz /= m; }
-        // folds grow and fade over a few frames, the way cloth takes a moment to buckle and relax
-        W[4 * c] += (sx - W[4 * c]) * 0.35; W[4 * c + 1] += (sy - W[4 * c + 1]) * 0.35; W[4 * c + 2] += (sz - W[4 * c + 2]) * 0.35;
-      }
-      this.wtex.needsUpdate = true;
-    }
-    // offsets back into the garment's own frame, for the vertex shader
-    const out = this.tex.image.data as Float32Array, is = 1 / this.s;
+
+    // offsets back into the garment's own frame
+    const off = this.off, is = 1 / this.s;
     let maxOff = 0, maxV = 0;
     for (let c = 0; c < this.n; c++) {
       this.target(c, p);
       const i = 3 * c;
       let ox = x[i] - p[0], oy = x[i + 1] - p[1], oz = x[i + 2] - p[2];
       const L = Math.hypot(ox, oy, oz);
-      if (L > MAX_OFF) { const k = MAX_OFF / L; ox *= k; oy *= k; oz *= k; x[i] = p[0] + ox; x[i + 1] = p[1] + oy; x[i + 2] = p[2] + oz; }
+      if (L > MAX_OFF) { const k = MAX_OFF / L; ox *= k; oy *= k; oz *= k; x[i] = p[0] + ox; x[i + 1] = p[1] + oy; x[i + 2] = p[2] + oz; xp[i] = x[i]; xp[i + 1] = x[i + 1]; xp[i + 2] = x[i + 2]; }
       maxOff = Math.max(maxOff, L);
       maxV = Math.max(maxV, Math.abs(x[i] - xp[i]) + Math.abs(x[i + 1] - xp[i + 1]) + Math.abs(x[i + 2] - xp[i + 2]));
       // R is a rotation: its inverse is its transpose
-      out[4 * c] = (e[0] * ox + e[1] * oy + e[2] * oz) * is;
-      out[4 * c + 1] = (e[3] * ox + e[4] * oy + e[5] * oz) * is;
-      out[4 * c + 2] = (e[6] * ox + e[7] * oy + e[8] * oz) * is;
+      off[i] = (e[0] * ox + e[1] * oy + e[2] * oz) * is;
+      off[i + 1] = (e[3] * ox + e[4] * oy + e[5] * oz) * is;
+      off[i + 2] = (e[6] * ox + e[7] * oy + e[8] * oz) * is;
     }
     if (!blowing && maxOff < 2e-4 && maxV < 2e-5) { this.snap(); return false; }
     this.settled = false;
+    const out = this.tex.image.data as Float32Array;
+    for (let c = 0; c < this.n; c++) { out[4 * c] = off[3 * c]; out[4 * c + 1] = off[3 * c + 1]; out[4 * c + 2] = off[3 * c + 2]; }
     this.tex.needsUpdate = true;
+
+    // the slope of the displacement around each particle (a 3x3 per particle, least squares over its edges):
+    // the shader turns any normal by it, so the light follows the cloth's real shape this frame
+    if (this.slopes) {
+      const G = this.G, S = this.S, r = this.rest;
+      G.fill(0); S.fill(0);
+      for (let j = 0; j < this.ea.length; j++) {
+        const A = this.ea[j], B = this.eb[j], a = 3 * A, b = 3 * B;
+        const ex = r[b] - r[a], ey = r[b + 1] - r[a + 1], ez = r[b + 2] - r[a + 2];
+        const dox = off[b] - off[a], doy = off[b + 1] - off[a + 1], doz = off[b + 2] - off[a + 2];
+        const l2 = ex * ex + ey * ey + ez * ez;
+        for (const q of [A, B]) {
+          const g = 9 * q;
+          G[g] += dox * ex; G[g + 1] += dox * ey; G[g + 2] += dox * ez;
+          G[g + 3] += doy * ex; G[g + 4] += doy * ey; G[g + 5] += doy * ez;
+          G[g + 6] += doz * ex; G[g + 7] += doz * ey; G[g + 8] += doz * ez;
+          S[q] += l2;
+        }
+      }
+      const T = this.slopes.map((t) => t.image.data as Float32Array);
+      for (let c = 0; c < this.n; c++) {
+        // a surface's edges span two directions: the isotropic least-squares estimate is 2/sum|e|^2 * sum(do e^T)
+        const k = S[c] > 0 ? 2 / S[c] : 0, g = 9 * c;
+        for (let row = 0; row < 3; row++) {
+          T[row][4 * c] = G[g + 3 * row] * k; T[row][4 * c + 1] = G[g + 3 * row + 1] * k; T[row][4 * c + 2] = G[g + 3 * row + 2] * k;
+        }
+      }
+      for (const t of this.slopes) t.needsUpdate = true;
+    }
     return true;
   }
 }
@@ -350,41 +374,34 @@ export function offsetTexture() {
   return t;
 }
 
+/** the three rows of each particle's displacement slope (same layout as the offsets) */
+export function slopeTextures() { return [offsetTexture(), offsetTexture(), offsetTexture()]; }
+
 /** vertex shader node: rest position + the cloth offset, blended from the 4 particles this vertex follows */
 export function clothedPosition(offsets: THREE.DataTexture) {
   return clothNodes(offsets, null).position;
 }
 
 /**
- * The full cloth for a material: `position` (offset + folds) for positionNode, and `bend(n)` to tilt a
- * view-space shading normal by the folds' slope.
+ * The full cloth for a material: `position` for positionNode, and `bend(n)` to turn a view-space shading
+ * normal by the cloth's slope at that point. Everything is read in the vertex shader (the particle indices
+ * can't be interpolated) and handed to the fragment as one smooth vector.
  */
-export function clothNodes(offsets: THREE.DataTexture, squeeze: THREE.DataTexture | null, center: [number, number, number] = [0, 1.1, 0]) {
+export function clothNodes(offsets: THREE.DataTexture, slopes: THREE.DataTexture[] | null) {
   const I = attribute("sbI", "vec4"), Wt = attribute("sbW", "vec4");
   const at = (tex: THREE.DataTexture, f: typeof I.x) => {
     const row = floor(f.div(TEX_W));
     return textureLoad(tex, ivec2(int(f.sub(row.mul(TEX_W))), int(row))).xyz;
   };
   const blend = (tex: THREE.DataTexture) => at(tex, I.x).mul(Wt.x).add(at(tex, I.y).mul(Wt.y)).add(at(tex, I.z).mul(Wt.z)).add(at(tex, I.w).mul(Wt.w));
-  const moved = positionLocal.add(blend(offsets));
-  if (!squeeze) return { position: moved, bend: <T,>(n: T) => n };
-  const sv = blend(squeeze), amt = smoothstep(float(0.2), float(1), min(length(sv), float(1))), dir = sv.div(max(length(sv), float(1e-4)));
-  // ridges across the squeeze axis; a gentle warp so they wander like real folds instead of ruling straight
-  const k = (2 * Math.PI) / FOLD_LEN;
-  const ph = dot(positionLocal, dir).mul(k).add(sin(positionLocal.y.mul(31).add(positionLocal.x.mul(17))).mul(0.9));
-  const h = amt.mul(FOLD_H);
-  // both shells (outside and lining side) must rise the same way, or the inner one pokes through the outer:
-  // every face's normal is turned to point away from the garment's middle before it's used
-  const away = dot(normalLocal, positionLocal.sub(vec3(...center))).greaterThanEqual(0).select(float(1), float(-1));
-  const nOut = normalLocal.mul(away);
-  const position = moved.add(nOut.mul(sin(ph).mul(h)));
-  const slope = dir.mul(cos(ph).mul(h).mul(k)).mul(away);
-  const tangential = slope.sub(normalLocal.mul(dot(normalLocal, slope)));
-  // the slope is a plain vector (zero where there are no folds): carried into view space as a direction,
-  // never normalised, so flat cloth keeps exactly its own normal
-  const bendView = modelViewMatrix.mul(vec4(tangential, 0)).xyz;
-  return { position, bend: (n: ReturnType<typeof normalMap>) => n.sub(bendView).normalize() };
+  const position = positionLocal.add(blend(offsets));
+  if (!slopes) return { position, bend: <T,>(n: T) => n };
+  // a surface whose points move by o(x) turns its normal n by -(do/dx)^T n. Built from the vertex's own normal,
+  // it's right for both shells whichever way each faces; zero (exactly) wherever the cloth is at rest.
+  const n = normalLocal, r0 = blend(slopes[0]), r1 = blend(slopes[1]), r2 = blend(slopes[2]);
+  const raw = r0.mul(n.x).add(r1.mul(n.y)).add(r2.mul(n.z)).negate();
+  const tang = raw.sub(n.mul(n.dot(raw)));
+  const tilt = tang.mul(float(SLOPE_MAX).div(max(length(tang), float(SLOPE_MAX))));
+  const tiltView = varying(modelViewMatrix.mul(vec4(tilt, 0)).xyz, "vClothTilt");
+  return { position, bend: (nv: ReturnType<typeof normalMap>) => nv.add(tiltView).normalize() };
 }
-
-/** the squeeze texture (same layout as the offsets) */
-export function squeezeTexture() { return offsetTexture(); }

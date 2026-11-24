@@ -7,7 +7,7 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RectAreaLightTexturesLib } from "three/addons/lights/RectAreaLightTexturesLib.js";
 import { CAMERA, VFOV, ASPECT, SWEEP, FLOOR, KNIT_REPEAT, lightFrame, radiance, type Camera, type Scene, type V3 } from "./scene";
 import type { TeeGeometry } from "./pathtracer";
-import { Cloth, buildNetAsync, offsetTexture, squeezeTexture, clothNodes } from "./cloth";
+import { Cloth, buildNetAsync, offsetTexture, slopeTextures, clothNodes } from "./cloth";
 
 export const ASSET = "/tee/fit/";
 export type Pose = "stand" | "up" | "sit";
@@ -53,8 +53,8 @@ export class Raster {
   inner = new THREE.MeshStandardNodeMaterial({ roughness: 0.95, metalness: 0 });
   /** per-particle cloth offsets, read in the vertex shader */
   offsets = offsetTexture();
-  /** per-particle squeeze (where the cloth buckles into folds), read in the vertex shader */
-  squeeze = squeezeTexture();
+  /** per-particle slope of the cloth (how it tilts the light), read in the vertex shader */
+  slopes = slopeTextures();
   private loadToken = 0;
   cloth: Cloth | null = null;
   maxAniso = 8;
@@ -83,7 +83,7 @@ export class Raster {
     this.inner.positionNode = this.clothed();
   }
 
-  private clothed() { return clothNodes(this.offsets, this.squeeze).position; }
+  private clothed() { return clothNodes(this.offsets, this.slopes).position; }
 
   setScene(s: Scene, cream: boolean) {
     for (const l of this.lights) this.scene.remove(l);
@@ -166,7 +166,7 @@ export class Raster {
       const n1 = normalN.xyz.mul(2).sub(1);
       const k = texture(knitT, uv().mul(vec2(KNIT_REPEAT[0], KNIT_REPEAT[1]))).xyz.mul(2).sub(1);
       const blended = normalize(vec3(n1.xy.add(k.xy.mul(this.knit)), n1.z.mul(k.z)));
-      const cloth = clothNodes(this.offsets, this.squeeze);
+      const cloth = clothNodes(this.offsets, this.slopes);
       m.normalNode = cloth.bend(normalMap(blended.mul(0.5).add(0.5)));
       m.positionNode = cloth.position;
       this.outer = m;
@@ -229,7 +229,7 @@ export class Raster {
       g.setAttribute("sbI", I); g.setAttribute("sbW", W); skins.push([I, W]);
     }
     (this.offsets.image.data as Float32Array).fill(0); this.offsets.needsUpdate = true;
-    (this.squeeze.image.data as Float32Array).fill(0); this.squeeze.needsUpdate = true;
+    for (const t of this.slopes) { (t.image.data as Float32Array).fill(0); t.needsUpdate = true; }
     if (v.pose === "stand" && teeMeshes.every((t) => t.plain)) {
       buildNetAsync(teeMeshes.map((t) => ({ pos: t.pos, idx: Uint32Array.from(t.idx) }))).then((net) => {
         if (token !== this.loadToken) return;
@@ -237,7 +237,7 @@ export class Raster {
           const [I, W] = skins[i];
           (I.array as Float32Array).set(sk.I); (W.array as Float32Array).set(sk.W); I.needsUpdate = true; W.needsUpdate = true;
         });
-        const cloth = new Cloth(net, this.offsets, this.squeeze);
+        const cloth = new Cloth(net, this.offsets, this.slopes);
         cloth.wind = !matchMedia("(prefers-reduced-motion: reduce)").matches;
         this.cloth = cloth;
       }).catch((e) => console.info("cloth off", e));
@@ -276,7 +276,7 @@ export class Raster {
     if (!this.cloth) return false;
     this.pivot.updateMatrixWorld();
     this.m4.makeRotationFromQuaternion(this.pivot.quaternion);
-    this.cloth.setPose(this.m3.setFromMatrix4(this.m4), this.pivot.position);
+    this.cloth.setPose(this.m3.setFromMatrix4(this.m4), this.pivot.position, 1, dt);
     return this.cloth.step(dt);
   }
 

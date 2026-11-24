@@ -52,7 +52,7 @@ const PARTS: Part[] = [
     no: "06", title: "the viewer", note: "in your browser",
     body: [
       "the tee you turn is drawn live with webgpu, the newest graphics layer in browsers, at your screen's full sharpness and refresh rate. it turns by itself; put your pointer on it and it eases to a stop and is yours.",
-      "the cloth moves for real. a coarse net of about two thousand points rides on the shirt: the shoulders and chest are carried by the form, the hem and sleeves hang free and trail a turn, and a slow breeze with gusts and lulls moves through it. where the jersey gets squeezed it folds.",
+      "the cloth moves for real. a net of about fourteen hundred points rides on the shirt: only the collar and the tops of the shoulders sit on the form, the yoke gives a little, the hem and sleeves hang free and trail a turn, and a slow breeze with gusts and lulls moves through it. nothing is painted on: the light follows the shape the cloth actually has that frame, so a ripple catches it the way moving cotton would.",
       "when it comes to rest, your browser path-traces the exact view in the background: real light from real-sized softboxes, bouncing between the folds, through the same cotton and ink as the offline renders. it works in thin strips so it never takes a frame from you, and it only fades in once it's clean.",
     ],
     facts: [["live view", "webgpu, falls back to webgl2"], ["path tracer", "written for this site, denoised"], ["photos", "the same tracer, story or post size"]],

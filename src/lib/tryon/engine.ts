@@ -28,7 +28,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import type { PoseLandmarker, NormalizedLandmark, Landmark } from "@mediapipe/tasks-vision";
-import { Cloth, buildNetAsync, offsetTexture, squeezeTexture, clothNodes } from "@/lib/viewer/cloth";
+import { Cloth, buildNetAsync, offsetTexture, slopeTextures, clothNodes } from "@/lib/viewer/cloth";
 import { KNIT_REPEAT } from "@/lib/viewer/scene";
 import { SIZES, type Size } from "@/content/tee";
 
@@ -82,7 +82,7 @@ export class TryOn {
   private pose: PoseLandmarker | null = null;
   private cloth: Cloth | null = null;
   private offsets = offsetTexture();
-  private squeeze = squeezeTexture();
+  private slopes = slopeTextures();
   private key = new THREE.DirectionalLight(0xffffff, 1);
   private fill = new THREE.HemisphereLight(0xffffff, 0x444444, 0.3);
   private occluders = new THREE.Group();
@@ -170,7 +170,7 @@ export class TryOn {
     k.wrapS = k.wrapT = THREE.RepeatWrapping;
     const colorN = texture(c), ormN = texture(o);
     this.colorN = colorN; this.ormN = ormN;
-    const cloth = clothNodes(this.offsets, this.squeeze);
+    const cloth = clothNodes(this.offsets, this.slopes);
     const outer = new THREE.MeshPhysicalNodeMaterial({ roughness: 1, metalness: 0, specularIntensity: 0.5 });
     outer.colorNode = colorN;
     outer.roughnessNode = ormN.g;
@@ -243,7 +243,7 @@ export class TryOn {
         const I = p.geo.attributes.sbI as THREE.BufferAttribute, W = p.geo.attributes.sbW as THREE.BufferAttribute;
         (I.array as Float32Array).set(net.skins[i].I); (W.array as Float32Array).set(net.skins[i].W); I.needsUpdate = W.needsUpdate = true;
       });
-      this.cloth = new Cloth(net, this.offsets, this.squeeze);
+      this.cloth = new Cloth(net, this.offsets, this.slopes);
       this.cloth.wind = false;
     }).catch(() => {});
   }
@@ -276,7 +276,7 @@ export class TryOn {
     if (this.frameN++ % 10 === 0) this.light();
     if (this.cloth && this.rig.visible) {
       const m3 = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(this.rig.quaternion));
-      this.cloth.setPose(m3, this.rig.position, this.sizeScale.x);
+      this.cloth.setPose(m3, this.rig.position, this.sizeScale.x, dt);
       this.cloth.step(dt);
     }
     this.renderer.render(this.scene, this.camera);
