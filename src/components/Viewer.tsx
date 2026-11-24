@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { COLOURS, DESIGNS, type Colour, type Design } from "@/content/tee";
 import type { Format, Look, PhotoJob } from "@/lib/viewer/photo";
 import type { Variant } from "@/lib/viewer/raster";
+import { pickTier } from "@/lib/viewer/tier";
 
 type Engine = {
   setLook: (d: Design, t: Colour) => void;
@@ -26,6 +27,9 @@ const MAX_SPP = 40;
 // labels only; the rigs live in lib/viewer/scene.ts (kept out of the page bundle until the viewer loads)
 const SCENE_LIST = [{ id: "studio", label: "studio" }, { id: "window", label: "window" }, { id: "show", label: "the show" }];
 const PHOTO_SPP = 64;
+// the tracer checks itself: past this many ms per sample it first traces fewer pixels, then hands over to the frames
+const SLOW_MS = 80;
+const STILL = (d: string, a: number) => `/tee/still/${d}/a${a}.webp`;
 const FORMAT_LIST: { id: Format; label: string }[] = [{ id: "story", label: "story 9:16" }, { id: "post", label: "post 4:5" }];
 const LOOK_LIST: Look[] = ["clean", "film"];
 
@@ -39,7 +43,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
   const traceCv = useRef<HTMLCanvasElement>(null);
   const still = useRef<HTMLImageElement>(null);
   const engine = useRef<Engine | null>(null);
-  const [status, setStatus] = useState("loading the tee");
+  const [status, setStatus] = useState("");
   const [view, setView] = useState(0);
   const [magnify, setMagnify] = useState(false);
   const lookRef = useRef({ design, tee });
@@ -52,15 +56,27 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
   const [developing, setDeveloping] = useState<number | null>(null);
   const [photo, setPhoto] = useState<{ url: string; blob: Blob; name: string } | null>(null);
   const stopPhoto = useRef<AbortController | null>(null);
-  // no 3D at all (no WebGPU, no WebGL): show the path-traced frames instead, 12 angles, drag to turn
-  const [flat, setFlat] = useState<number | null>(null);
+  // the offline path-traced frames, 12 angles, drag to turn: shown at once while the 3D loads ("poster"),
+  // and for good on devices that should not run 3D at all ("flat")
+  const [mode, setMode] = useState<"poster" | "3d" | "flat">("poster");
+  const [ang, setAng] = useState(0);
+  const angRef = useRef(0);
   const flatDrag = useRef<{ x: number; a: number } | null>(null);
 
   useEffect(() => {
     let dead = false;
     (async () => {
-      const [{ Raster, FABRIC }, { PathTracer }, { SCENES, CAMERA, BODY_CAMERA }] = await Promise.all([
-        import("@/lib/viewer/raster"), import("@/lib/viewer/pathtracer"), import("@/lib/viewer/scene"),
+      const tier = await pickTier();
+      if (dead) return;
+      if (tier === "photos") { setMode("flat"); return; }   // the 3D code is never downloaded
+      // nothing 3D is fetched until the viewer is about to be seen
+      await new Promise<void>((res) => {
+        const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { io.disconnect(); res(); } }, { rootMargin: "300px" });
+        io.observe(stage.current!);
+      });
+      if (dead) return;
+      const [{ Raster, FABRIC }, { SCENES, CAMERA, BODY_CAMERA }, PT] = await Promise.all([
+        import("@/lib/viewer/raster"), import("@/lib/viewer/scene"), tier === "trace" ? import("@/lib/viewer/pathtracer") : Promise.resolve(null),
       ]);
       if (dead || !stage.current || !rasterCv.current || !traceCv.current) return;
       const st = stage.current, img = still.current!, tc = traceCv.current;
@@ -69,11 +85,12 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       let scene = SCENES.find((x) => x.id === sceneRef.current) ?? SCENES[0];
       raster.setScene(scene, lookRef.current.tee === "cream");
 
-      let pt: InstanceType<typeof PathTracer> | null = null;
-      if (PathTracer.supported()) {
-        try { pt = new PathTracer(); await pt.init(tc); } catch (e) { console.warn("path tracer off", e); pt = null; }
+      type PathTracer = InstanceType<NonNullable<typeof PT>["PathTracer"]>;
+      let pt: PathTracer | null = null;
+      if (PT && PT.PathTracer.supported()) {
+        try { pt = new PT.PathTracer(); await pt.init(tc); } catch (e) { console.warn("path tracer off", e); pt = null; }
       }
-      const s = { design: lookRef.current.design, tee: lookRef.current.tee, yaw: 0, goal: null as number | null, vel: 0, drag: false, crop: [0, 0, 1] as [number, number, number], magnify: false, moving: true, dirty: true, photo: false, loading: false, variant: variantRef.current };
+      const s = { design: lookRef.current.design, tee: lookRef.current.tee, yaw: angRef.current, goal: null as number | null, vel: 0, drag: false, crop: [0, 0, 1] as [number, number, number], magnify: false, moving: true, dirty: true, photo: false, loading: false, variant: variantRef.current };
 
       const bitmap = async (url: string) => createImageBitmap(await (await fetch(url)).blob(), { colorSpaceConversion: "none", premultiplyAlpha: "none" });
       const maps: Record<string, Promise<[ImageBitmap, ImageBitmap]>> = {};
@@ -102,21 +119,27 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         } finally { s.loading = false; s.dirty = true; lastSig = ""; }
       };
       let busy = false, lastSig = "";
-      setStatus("loading the tee");
       await loadVariant(s.variant);
-      setStatus("");
       if (dead) return;
 
       // ---------- sizing ----------
+      // rasterK: drops while dragging if frames run slow, back to 1 the moment the view comes to rest
+      // traceK : the tracer's resolution, lowered once if this GPU turns out slow
+      let rasterK = 1, dragK = 1, traceK = Math.min(devicePixelRatio, 1.5);
+      const fullDpr = () => Math.min(devicePixelRatio, 2) * (tier === "trace" ? 1 : 0.75);
       const size = () => {
         const w = st.clientWidth, h = st.clientHeight;
-        raster.resize(w, h, Math.min(devicePixelRatio, 2));
-        const k = Math.min(devicePixelRatio, 1.5);
-        tc.width = Math.round(w * k); tc.height = Math.round(h * k);
+        raster.resize(w, h, fullDpr() * rasterK);
+        tc.width = Math.round(w * traceK); tc.height = Math.round(h * traceK);
         pt?.resize(tc.width, tc.height);
         s.dirty = true;
       };
+      const setRasterK = (k: number) => { if (k === rasterK) return; rasterK = k; raster.resize(st.clientWidth, st.clientHeight, fullDpr() * k); s.dirty = true; };
       const ro = new ResizeObserver(size); ro.observe(st); size();
+      // off screen, nothing runs
+      let onScreen = true;
+      const vis = new IntersectionObserver((es) => { onScreen = es[0].isIntersecting; if (onScreen) s.dirty = true; });
+      vis.observe(st);
 
       // ---------- interaction ----------
       let lx = 0, ly = 0, lt = 0;
@@ -156,11 +179,12 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       st.addEventListener("wheel", wheel, { passive: false }); st.addEventListener("click", click);
 
       // ---------- loop ----------
-      let raf = 0, shown = -1;
-      const STILL = (d: string, a: number) => `/tee/still/${d}/a${a}.png`;
+      let raf = 0, shown = -1, firstFrame = true, lastT = 0, ema = 16.7;
       const loop = () => {
         raf = requestAnimationFrame(loop);
-      if (process.env.NODE_ENV !== "production") Object.assign(window, { __sb: { pt, raster, s, SCENES } });
+        if (process.env.NODE_ENV !== "production") Object.assign(window, { __sb: { pt, raster, s, SCENES, tier, k: () => ({ rasterK, dragK, traceK }) } });
+        if (!onScreen) { lastT = 0; return; }
+        if (firstFrame) s.yaw = angRef.current;   // pick up wherever the photos were turned to while this loaded
         if (!s.drag && s.goal !== null) {
           const d = s.goal - s.yaw; s.yaw += d * 0.14;
           if (Math.abs(d) < 0.02) { s.yaw = s.goal; s.goal = null; }
@@ -168,9 +192,18 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         }
         const sig = `${s.design}|${s.tee}|${s.yaw.toFixed(3)}|${s.crop.join(",")}`;
         const moving = s.drag || s.goal !== null;
+        // frame-time governor: a weak GPU drags at fewer pixels instead of stuttering; full sharpness at rest
+        const now = performance.now();
+        if (moving) {
+          if (lastT && now - lastT < 250) ema = ema * 0.85 + (now - lastT) * 0.15;
+          if (ema > 28 && dragK > 0.5) { dragK = Math.max(0.5, dragK * 0.8); ema = 20; }
+          setRasterK(dragK);
+        } else setRasterK(1);
+        lastT = moving ? now : 0;
         if (s.dirty || sig !== lastSig) {
           raster.setView(s.yaw, s.crop, st.clientWidth, st.clientHeight);
           raster.render();
+          if (firstFrame) { firstFrame = false; setMode("3d"); }
           if (sig !== lastSig) pt?.setView({ yaw: s.yaw, crop: [...s.crop], knit: true });
           lastSig = sig; s.dirty = false;
           tc.style.opacity = "0"; shown = -1;
@@ -190,9 +223,16 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         // until the denoised frame is ready, then it fades across. No grain is ever on screen.
         const n = pt.lastMs > 0 ? clamp(Math.floor(24 / pt.lastMs), 1, 8) : 1;
         const go = pt.frame + n >= MAX_SPP ? pt.step(Math.max(1, MAX_SPP - pt.frame), false).then(() => pt!.denoise(true)) : pt.step(n, false);
+        const p = pt;
         go.then(() => {
           busy = false;
-          if (pt!.clean && shown !== pt!.frame) { shown = pt!.frame; tc.style.opacity = "1"; }
+          if (p !== pt) return;
+          if (p.clean && shown !== p.frame) { shown = p.frame; tc.style.opacity = "1"; }
+          // too slow here: trace fewer pixels once, then leave it to the offline frames
+          if (!p.clean && p.frame >= 4 && p.lastMs > SLOW_MS) {
+            if (traceK > 0.75) { traceK = 0.75; size(); p.setView({ yaw: s.yaw, crop: [...s.crop], knit: true }); lastSig = ""; }
+            else { console.info("path tracer too slow on this GPU, using the rendered frames"); pt = null; p.device.destroy(); tc.style.opacity = "0"; setCanPhoto(false); s.dirty = true; }
+          }
         });
       };
       raf = requestAnimationFrame(loop);
@@ -225,7 +265,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         setVariant: (v) => loadVariant(v),
         setMagnify: (on) => { s.magnify = on; if (!on) s.crop = [0, 0, 1]; s.dirty = true; },
         dispose: () => {
-          cancelAnimationFrame(raf); ro.disconnect();
+          cancelAnimationFrame(raf); ro.disconnect(); vis.disconnect();
           st.removeEventListener("pointerdown", down); st.removeEventListener("pointermove", move);
           st.removeEventListener("pointerup", up); st.removeEventListener("pointercancel", up);
           st.removeEventListener("wheel", wheel); st.removeEventListener("click", click);
@@ -236,7 +276,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       if (JSON.stringify(variantRef.current) !== JSON.stringify(s.variant)) engine.current.setVariant(variantRef.current);
       const want = lookRef.current;
       if (want.tee !== s.tee || want.design !== s.design) engine.current.setLook(want.design, want.tee);
-    })().catch((e) => { console.warn("3D view off, showing the rendered frames", e); setStatus(""); setFlat(0); });
+    })().catch((e) => { console.warn("3D view off, showing the rendered frames", e); setStatus(""); setMode("flat"); });
     return () => { dead = true; engine.current?.dispose(); engine.current = null; };
   }, []);
 
@@ -280,25 +320,23 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         <canvas ref={traceCv} className="absolute inset-0 h-full w-full opacity-0 transition-opacity duration-500" />
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img ref={still} alt="" className="pointer-events-none absolute inset-0 h-full w-full opacity-0" />
-        {flat !== null ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={`/tee/still/${design}/a${flat}.png`} alt="" draggable={false}
-            className="absolute inset-0 h-full w-full"
-            onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); flatDrag.current = { x: e.clientX, a: flat }; }}
-            onPointerMove={(e) => {
-              const d = flatDrag.current; if (!d) return;
-              const steps = Math.round((e.clientX - d.x) / 45);
-              setFlat((((d.a + steps * 30) % 360) + 360) % 360);
-            }}
-            onPointerUp={() => { flatDrag.current = null; }}
-          />
-        ) : null}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={STILL(design, ang)} alt="" draggable={false} fetchPriority="high"
+          className={`absolute inset-0 h-full w-full transition-opacity duration-300 ${mode === "3d" ? "pointer-events-none opacity-0" : ""}`}
+          onPointerDown={(e) => { if (mode === "3d") return; e.currentTarget.setPointerCapture(e.pointerId); flatDrag.current = { x: e.clientX, a: ang }; }}
+          onPointerMove={(e) => {
+            const d = flatDrag.current; if (!d) return;
+            const steps = Math.round((e.clientX - d.x) / 45);
+            const a = (((d.a + steps * 30) % 360) + 360) % 360; angRef.current = a; setAng(a);
+          }}
+          onPointerUp={() => { flatDrag.current = null; }}
+        />
         <p className="pointer-events-none absolute bottom-3 left-3 text-[12px] text-black/60 tnum">{status}</p>
       </div>
       <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1 text-[13px]">
         {VIEWS.map((v, i) => (
-          <button key={v.label} onClick={() => { setView(i); engine.current?.turnTo(v.yaw); if (flat !== null) setFlat(((Math.round(v.yaw / 30) * 30) % 360 + 360) % 360); }} className={`hit ${i === view && !magnify ? "font-semibold" : "text-quiet hover:text-ink"}`}>
+          <button key={v.label} onClick={() => { setView(i); engine.current?.turnTo(v.yaw); if (mode !== "3d") { const a = ((Math.round(v.yaw / 30) * 30) % 360 + 360) % 360; angRef.current = a; setAng(a); } }} className={`hit ${i === view && !magnify ? "font-semibold" : "text-quiet hover:text-ink"}`}>
             {v.label}
           </button>
         ))}

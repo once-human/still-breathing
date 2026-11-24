@@ -86,10 +86,13 @@ jobs:
           merge-multiple: true
       - name: Place frames and commit
         run: |
+          python3 -m pip install -q pillow 2>/dev/null || pip install -q pillow
           n=0
           for f in frames/*.png; do
             b=$(basename "$f" .png); design=${b%%-*}; view=${b##*-}
-            if [ "${{ inputs.kind }}" = "turntable" ]; then d=public/tee/still/$(echo $design | tr A-Z a-z); mkdir -p $d; cp "$f" $d/$view.png
+            if [ "${{ inputs.kind }}" = "turntable" ]; then d=public/tee/still/$(echo $design | tr A-Z a-z); mkdir -p $d
+              # the web gets WebP: ~20 KB a frame instead of ~600 KB, alpha kept
+              python3 -c "import sys; from PIL import Image; Image.open(sys.argv[1]).save(sys.argv[2], 'WEBP', quality=90, method=6)" "$f" $d/$view.webp
             else d=previews; mkdir -p $d; cp "$f" $d/3d-$b.png; fi
             n=$((n+1))
           done

@@ -2,6 +2,16 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.3.1 — 2026-11-24
+Runs on any laptop. The viewer decides per device how much to do, and the shirt is on screen at once.
+
+- Photo first: the path-traced frame shows the moment the page opens and can be turned; the 3D takes over when it is ready, at the same angle, and only loads once the viewer is near the screen.
+- Three levels, picked per device before any 3D code downloads: path tracing on a real GPU, the live view alone on a modest one (resting on the traced frames at each 30°), and the traced frames only where there is no real GPU, 2 GB of memory or Data Saver is on.
+- The tracer times itself: too slow, and it first traces fewer pixels, then hands over to the frames.
+- Dragging drops resolution when frames run slow and goes back to full sharpness at rest. Nothing runs while the viewer is off screen.
+- Turntable frames are WebP: 29 MB down to 1.5 MB for all four shirts (about 20 KB a frame). render.yml now writes WebP.
+- Mahalakshmi's two dots get room on 04.
+
 ## 0.3.0 — 2026-11-24
 Bengaluru gets its two shirts. Everything is for sale, one colour per shirt, a cleaner print, and the tee on bodies like the people buying it.
 
