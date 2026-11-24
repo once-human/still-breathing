@@ -101,7 +101,7 @@ export class TryOn {
   private mid = new THREE.Vector3();
   private hem: { name: string; b: THREE.Bone; dir: THREE.Vector3; out: THREE.Vector3 | null; len: number; K: number; cone: number; p: THREE.Vector3; v: THREE.Vector3; live: boolean }[] = [];
   private filt = new Map<number, Euro3>();
-  private tFilt = new Euro3(1.0, 2, 0.35, 0.8);   // where the body stands; distance smoothed hardest
+  private tFilt = new Euro3(1.0, 4, 0.35, 1.6);   // where the body stands; distance smoothed hardest
   private armOn = [false, false];
   private fctx: CanvasRenderingContext2D;
   private mask = document.createElement("canvas");
@@ -456,7 +456,7 @@ export class TryOn {
     this.camera.aspect = W / H; this.camera.updateProjectionMatrix();
     for (const i of TRACK) {
       // the body's own shape (metres around the hips) and where it stands are smoothed apart
-      let f = this.filt.get(i); if (!f) this.filt.set(i, (f = new Euro3(0.9, 2.5, 0.45, 1.2)));
+      let f = this.filt.get(i); if (!f) this.filt.set(i, (f = new Euro3(1.0, 5, 0.5, 2.5)));
       const b = f.f(new THREE.Vector3(X(i), Y(i), Z(i)), t);
       this.P.set(i, new THREE.Vector3(b.x + T[0], b.y + T[1], -(b.z + T[2])));
     }
@@ -493,7 +493,7 @@ export class TryOn {
     else {
       const speed = this.torsoQ.angleTo(qNew) / Math.max(dt, 1e-3);
       this.qSpeed += (speed - this.qSpeed) * (1 - Math.exp(-dt * 8));
-      const cut = 1.2 + 2.2 * this.qSpeed, rr = 2 * Math.PI * cut * dt;
+      const cut = 1.2 + 3.5 * this.qSpeed, rr = 2 * Math.PI * cut * dt;
       this.torsoQ.slerp(qNew, rr / (rr + 1));
     }
     // the pelvis is its own frame: its line is your hips', and it stands on your legs (hip to knee, or plain upright
@@ -506,7 +506,7 @@ export class TryOn {
       // torso), or it would tip back with them
       const thigh = (leg.angleTo(up) * 180) / Math.PI, lw = 0.55 * Math.min(1, Math.max(0, (45 - thigh) / 20));
       const pelvisUp = leg.multiplyScalar(lw).add(up.clone().multiplyScalar(1 - lw)).normalize();
-      this.hipQ.slerp(frame(this.P.get(R_HIP)!.clone().sub(this.P.get(L_HIP)!), pelvisUp), 1 - Math.exp(-dt * 10));
+      this.hipQ.slerp(frame(this.P.get(R_HIP)!.clone().sub(this.P.get(L_HIP)!), pelvisUp), 1 - Math.exp(-dt * 18));
     } else this.hipQ.slerp(this.torsoQ, 1 - Math.exp(-dt * 4));
 
     // ---- the skeleton, posed like a game character's ----
@@ -519,7 +519,7 @@ export class TryOn {
     spine.forEach((nm, i) => set(nm, dH.clone().slerp(dC, (i + 1) / (spine.length + 1))));
     set("spine01", dC);
     // each arm bone turns from where its parent carried it toward your elbow, then your wrist
-    const ease = 1 - Math.exp(-dt * 18), relax = 1 - Math.exp(-dt * 5);
+    const ease = 1 - Math.exp(-dt * 32), relax = 1 - Math.exp(-dt * 5);
     const aim = (bone: string, child: string, from: number, to: number, on: boolean) => {
       const D = carried(bone);
       if (!on) { set(bone, D, relax); return; }
