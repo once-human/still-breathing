@@ -39,6 +39,8 @@ export type Scene = {
   creamK: number;
   /** no backdrop: the tee hangs in open space (a show has no paper sweep, just the dark) */
   open?: boolean;
+  /** the lights belong to the place, not to the photographer: they stay put while the camera walks round */
+  venue?: boolean;
 };
 
 export const LIGHT_AIM: V3 = [0, 1.12, 0];
@@ -81,7 +83,7 @@ export const SCENES: Scene[] = [
       // front-of-house truss across the room, high and to one side, warm tungsten-ish wash
       { name: "foh", pos: [1.6, 3.0, 3.2], size: [1.2, 0.5], power: 85, tint: [1, 0.88, 0.74] },
     ],
-    paper: [0, 0, 0], world: [0.0015, 0.0015, 0.002], creamK: 0.6, open: true,
+    paper: [0, 0, 0], world: [0.0015, 0.0015, 0.002], creamK: 0.6, open: true, venue: true,
   },
 ];
 
@@ -109,6 +111,12 @@ export function lightFrame(l: RectLight) {
 export function radiance(l: RectLight, k: number): V3 {
   const L = (l.power * k) / (Math.PI * l.size[0] * l.size[1]);
   return mul(l.tint, L);
+}
+
+/** turn about the vertical by `deg` (the viewer's turn: x' = x cos + z sin, z' = -x sin + z cos) */
+export function turnY(v: V3, deg: number): V3 {
+  const a = (deg * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a);
+  return [c * v[0] + s * v[2], v[1], -s * v[0] + c * v[2]];
 }
 
 /** Camera basis: right, up, forward. */

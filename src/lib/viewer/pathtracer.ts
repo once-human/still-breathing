@@ -2,7 +2,7 @@
 // sample per pixel per frame into a float buffer and shows the running average.
 import { TRACE_WGSL, SHOW_WGSL, DENOISE_WGSL } from "./pt.wgsl";
 import { buildBVHAsync } from "./bvh";
-import { CAMERA, VFOV, ASPECT, KNIT_REPEAT, cameraBasis, lightFrame, radiance, type Camera, type Scene, type V3 } from "./scene";
+import { CAMERA, VFOV, ASPECT, KNIT_REPEAT, cameraBasis, lightFrame, radiance, turnY, type Camera, type Scene, type V3 } from "./scene";
 
 export type TeeGeometry = { pos: Float32Array; nrm: Float32Array; uv: Float32Array; idx: Uint32Array; mat: Uint8Array };
 /** back: the back print, front: the chest print (both premultiplied, at print resolution) */
@@ -202,13 +202,15 @@ export class PathTracer {
     // light selection by emitted power, so the key gets most of the shadow rays
     const pw = L.map((l) => l.power * (l.tint[0] + l.tint[1] + l.tint[2])), tot = pw.reduce((a, b) => a + b, 0) || 1;
     let cdf = 0;
+    // at a venue the lights stay with the place while the camera walks round: turned with the person
+    const t = (v: V3) => (s.venue ? turnY(v, this.view.yaw) : v);
     L.forEach((l, i) => {
       const o = 48 + i * 20, fr = lightFrame(l), rad = radiance(l, this.k), p = pw[i] / tot; cdf += p;
-      set(o, l.pos, i === L.length - 1 ? 1 : cdf);
-      set(o + 4, fr.ex, fr.area);
-      set(o + 8, fr.ey, p);
+      set(o, t(l.pos), i === L.length - 1 ? 1 : cdf);
+      set(o + 4, t(fr.ex), fr.area);
+      set(o + 8, t(fr.ey), p);
       set(o + 12, rad, 0);
-      set(o + 16, fr.n, 0);
+      set(o + 16, t(fr.n), 0);
     });
     this.device.queue.writeBuffer(this.ubuf, 0, f);
   }

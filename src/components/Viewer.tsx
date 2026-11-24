@@ -44,8 +44,8 @@ const FORMAT_LIST: { id: Format; label: string }[] = [{ id: "story", label: "sto
 const LOOK_LIST: Look[] = ["clean", "film"];
 
 /**
- * The tee on a seamless sweep, turning slowly by itself. Put the pointer on it and it eases to a stop and is
- * yours to turn; the cloth swings with it. At rest the browser path-traces the exact view (same cotton, ink and
+ * The tee, turning slowly by itself. Put the pointer on it and it eases to a stop and is yours to turn: the view
+ * is a game camera walking round it, so at the show the place stays where it is and you see it from behind. At rest the browser path-traces the exact view (same cotton, ink and
  * softboxes as the offline renders) and fades it in.
  */
 export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; variant: Variant }) {

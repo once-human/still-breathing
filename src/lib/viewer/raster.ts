@@ -47,6 +47,9 @@ export class Raster {
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera((VFOV * 180) / Math.PI, ASPECT, 0.05, 40);
   pivot = new THREE.Group();
+  /** the lights; at a venue they turn with the pivot, so the camera walks round a place that stays put */
+  rig = new THREE.Group();
+  private venue = false;
   lights: THREE.RectAreaLight[] = [];
   hemi = new THREE.HemisphereLight(0xf4f2ee, 0x6d6a64, 0.15);
   paperMat = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0 });
@@ -73,7 +76,7 @@ export class Raster {
     this.renderer = new THREE.WebGPURenderer({ canvas, antialias: (globalThis.devicePixelRatio || 1) < 1.5, alpha: false });
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.scene.add(this.pivot, this.hemi);
+    this.scene.add(this.pivot, this.rig, this.hemi);
     this.sweep = new THREE.Mesh(sweepGeometry(), this.paperMat); this.scene.add(this.sweep);
     this.camera.position.set(...CAMERA.pos);
     this.camera.lookAt(...CAMERA.target);
@@ -90,7 +93,8 @@ export class Raster {
   private clothed() { return clothNodes(this.offsets, this.slopes).position; }
 
   setScene(s: Scene, cream: boolean) {
-    for (const l of this.lights) this.scene.remove(l);
+    for (const l of this.lights) this.rig.remove(l);
+    this.venue = !!s.venue; this.rig.rotation.y = this.venue ? this.pivot.rotation.y : 0;
     const k = cream ? s.creamK : 1;
     this.lights = s.lights.map((l) => {
       const fr = lightFrame(l), L = radiance(l, k);
@@ -98,7 +102,7 @@ export class Raster {
       const rl = new THREE.RectAreaLight(new THREE.Color(L[0] / peak, L[1] / peak, L[2] / peak), peak, l.size[0], l.size[1]);
       rl.position.set(...l.pos);
       rl.lookAt(l.pos[0] + fr.n[0], l.pos[1] + fr.n[1], l.pos[2] + fr.n[2]);
-      this.scene.add(rl);
+      this.rig.add(rl);
       return rl;
     });
     this.paperMat.color.setRGB(...s.paper, THREE.LinearSRGBColorSpace);
@@ -307,8 +311,14 @@ export class Raster {
     this.camera.lookAt(...c.target);
   }
 
+  /**
+   * The view is a game camera walking round someone standing still. Drawn as the person turning in front of a
+   * fixed camera (the same picture): in a studio the photographer's lights and paper walk round with the camera,
+   * at a venue the place stays put, so its lights turn with the person.
+   */
   setView(yaw: number, crop: [number, number, number], w: number, h: number) {
     this.pivot.rotation.y = (yaw * Math.PI) / 180;
+    this.rig.rotation.y = this.venue ? this.pivot.rotation.y : 0;
     const [cx, cy, z] = crop;
     if (z > 1.0001) {
       // magnify = crop the same frame (no camera move, so the perspective never changes)
@@ -319,13 +329,11 @@ export class Raster {
     this.camera.updateProjectionMatrix();
   }
 
-  private m3 = new THREE.Matrix3(); private m4 = new THREE.Matrix4();
-  /** advance the cloth to the pivot's current turn; true while the cloth is still moving */
+  private still = new THREE.Matrix3();
+  /** advance the cloth (the person stands still while the camera goes round: only the air moves it); true while it moves */
   simulate(dt: number) {
     if (!this.cloth) return false;
-    this.pivot.updateMatrixWorld();
-    this.m4.makeRotationFromQuaternion(this.pivot.quaternion);
-    this.cloth.setPose(this.m3.setFromMatrix4(this.m4), this.pivot.position, 1, dt);
+    this.cloth.setPose(this.still, this.pivot.position, 1, dt);
     return this.cloth.step(dt);
   }
 
