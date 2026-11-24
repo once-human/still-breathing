@@ -22,7 +22,7 @@
 // The preview is a mirror (the video is flipped). The tee is placed in that mirrored space without being flipped
 // itself, so its print reads the right way round.
 import * as THREE from "three/webgpu";
-import { texture, uv, vec2, vec3, float, normalMap, normalize, vertexColor, mix, positionGeometry, normalGeometry } from "three/tsl";
+import { texture, uv, vec2, vec3, vec4, float, normalMap, normalize, vertexColor, mix, positionGeometry, normalGeometry, positionView, cameraProjectionMatrix } from "three/tsl";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
@@ -203,11 +203,20 @@ export class TryOn {
     if (occ) {
       // the body the tee was draped on: depth only, drawn first, and it throws the head and neck's shadow
       const om = occ as THREE.SkinnedMesh;
-      om.material = this.occMat; om.renderOrder = -1; om.frustumCulled = false; om.castShadow = true;
+      om.material = this.occMat; om.renderOrder = -1; om.frustumCulled = false; om.castShadow = false;
+      // it hides only what is clearly behind you (the back panel, the inside of the collar and sleeves): its depth
+      // is set 3 cm further from the lens than your skin, so cloth lying on you, or folding at a raised shoulder,
+      // is never cut by it, while the back of the tee, 20 cm or more behind, always is
+      this.occMat.vertexNode = cameraProjectionMatrix.mul(vec4(positionView.xyz.sub(vec3(0, 0, 0.03)), 1));
       // and a second skin of it, drawn after the tee, that shows only the shadows falling on you: the hem's on
       // your trousers, the collar's on your neck, the sleeves' on your arms. The tee sits on you, not over you
-      const catcher = new THREE.SkinnedMesh(om.geometry, new THREE.ShadowNodeMaterial({ opacity: 0.4, depthWrite: false }));
-      catcher.bind(om.skeleton, om.bindMatrix); catcher.receiveShadow = true; catcher.frustumCulled = false; catcher.renderOrder = 2;
+      // (below the chin only: your face already carries its own light in the picture)
+      const shMat = new THREE.ShadowNodeMaterial({ opacity: 0.4, depthWrite: false });
+      gltf.scene.updateMatrixWorld(true);
+      shMat.maskNode = positionGeometry.y.lessThan(this.bone("neck01")!.getWorldPosition(new THREE.Vector3()).y + 0.05);
+      const catcher = new THREE.SkinnedMesh(om.geometry, shMat);
+      // the shadow of your head and neck is thrown by this skin, true to your surface (the occluder above is set back)
+      catcher.bind(om.skeleton, om.bindMatrix); catcher.receiveShadow = true; catcher.castShadow = true; catcher.frustumCulled = false; catcher.renderOrder = 2;
       om.parent!.add(catcher); catcher.position.copy(om.position); catcher.quaternion.copy(om.quaternion); catcher.scale.copy(om.scale);
     }
     this.rig.add(gltf.scene);

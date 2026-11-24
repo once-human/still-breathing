@@ -261,8 +261,7 @@ bm.to_mesh(body.data); bm.free()
 dec = body.modifiers.new("dec", "DECIMATE"); dec.ratio = 0.35
 bpy.ops.object.modifier_apply(modifier="dec")
 tidy(body, smooth=0)
-# the shoulder hands over to the arm through the helper too, and the whole body sits 8 mm inside its skin: under
-# a loose tee it only has to hide what's behind you, and a raised arm's deltoid never pokes out through the cloth
+# the shoulder hands over to the arm through the helper too, so a raised arm's shoulder keeps its shape
 for S in ("L", "R"): body.vertex_groups.new(name=f"armhole.{S}")
 bn_ = [g.name for g in body.vertex_groups]; Wb = np.zeros((len(body.data.vertices), len(bn_)), np.float32)
 for v in body.data.vertices:
@@ -272,7 +271,6 @@ for i, g in enumerate(body.vertex_groups):
     g.remove(list(range(len(Wb))))
     for j in np.nonzero(Wb[:, i] > 1e-4)[0]: g.add([int(j)], float(Wb[j, i]), "REPLACE")
 tidy(body, smooth=0)
-for v in body.data.vertices: v.co -= v.normal * 0.008
 body.data.materials.clear()
 am = body.modifiers.new("skel", "ARMATURE"); am.object = skel; body.parent = skel
 body.name = "occluder"
