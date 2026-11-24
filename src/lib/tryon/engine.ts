@@ -106,7 +106,7 @@ export class TryOn {
   private restArm = [new THREE.Vector3(), new THREE.Vector3()];
   private sizeScale = new THREE.Vector3(1, 1, 1);
   private filt = new Map<number, Euro3>();
-  private tFilt = new Euro3(1.2, 4, 0.35, 1.2);   // where the body stands; distance smoothed hardest
+  private tFilt = new Euro3(1.0, 2, 0.35, 0.8);   // where the body stands; distance smoothed hardest
   private armOn = [false, false];
   private fctx: CanvasRenderingContext2D;
   private keyOff = new THREE.Vector3(0, 2, 2); private shown = false; private qSpeed = 0;
@@ -400,7 +400,7 @@ export class TryOn {
     this.camera.aspect = W / H; this.camera.updateProjectionMatrix();
     for (const i of TRACK) {
       // the body's own shape (metres around the hips) and where it stands are smoothed apart
-      let f = this.filt.get(i); if (!f) this.filt.set(i, (f = new Euro3(1.0, 6)));
+      let f = this.filt.get(i); if (!f) this.filt.set(i, (f = new Euro3(0.9, 2.5)));
       const b = f.f(new THREE.Vector3(X(i), Y(i), Z(i)), t);
       this.P.set(i, new THREE.Vector3(b.x + T[0], b.y + T[1], -(b.z + T[2])));
     }
