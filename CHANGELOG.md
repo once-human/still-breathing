@@ -13,7 +13,7 @@ Three shirts: the crowd for the whole tour, a map for each city. And a viewer yo
 - Flat inks everywhere: no grain in any art.
 
 ### Viewer
-- Zoom up to 5x with the wheel, a pinch, a double-click or the +/− buttons, and keep turning the shirt while zoomed. Zoomed in, the print swaps to a full-resolution copy (3600 x 4800), fetched only then.
+- Zoom up to 5x with the wheel, a pinch, a double-click or the +/− buttons, and keep turning the shirt while zoomed. Zoomed in, the print swaps to a full-resolution copy, fetched only then.
 - Livelier, lighter cloth: a quicker sway, a little more breeze, and the hem keeps its carry when you let go. Edges stay smooth when you drag hard.
 - The chest no longer shows through the shirt. The display form is a hull, and the meshes are lighter.
 - The small notches at the hem and the sleeve ends are closed.
