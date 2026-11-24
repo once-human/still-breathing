@@ -37,7 +37,7 @@ const BREEZE = 0.75;            // m/s at the top of a gust: light air (Beaufort
 // (rho 1.2 kg/m3, Cd about 1 for a sheet face-on, 240 GSM jersey = 0.24 kg/m2) -> 2.5 per (m/s)^2
 const AIR = (0.5 * 1.2 * 1.0) / 0.24;
 const INERTIA = 0.2;            // share of a slow turn the cloth feels as inertia (less the faster it turns)
-const SLOPE_MAX = 0.35;         // the steepest a fold may tilt the shading
+const SLOPE_MAX = 0.25;         // the steepest a fold may tilt the shading
 
 type Mesh = { pos: Float32Array; idx: Uint32Array };
 
@@ -252,6 +252,25 @@ export class Cloth {
     this.settled = true;
   }
 
+  private nsum: Float32Array | null = null; private ncnt: Float32Array | null = null;
+  private smoothShown() {
+    const off = this.off, n = this.n;
+    const sum = (this.nsum ??= new Float32Array(3 * n)), cnt = (this.ncnt ??= new Float32Array(n));
+    for (let pass = 0; pass < 2; pass++) {
+      sum.fill(0); cnt.fill(0);
+      for (let j = 0; j < this.ea.length; j++) {
+        const a = this.ea[j], b = this.eb[j];
+        sum[3 * a] += off[3 * b]; sum[3 * a + 1] += off[3 * b + 1]; sum[3 * a + 2] += off[3 * b + 2]; cnt[a]++;
+        sum[3 * b] += off[3 * a]; sum[3 * b + 1] += off[3 * a + 1]; sum[3 * b + 2] += off[3 * a + 2]; cnt[b]++;
+      }
+      for (let c = 0; c < n; c++) {
+        if (this.pin[c] || !cnt[c]) continue;
+        const k = 1 / cnt[c];
+        for (let j = 0; j < 3; j++) off[3 * c + j] = 0.5 * off[3 * c + j] + 0.5 * sum[3 * c + j] * k;
+      }
+    }
+  }
+
   /** how hard the air is moving right now, 0 (a lull) to 1 (the top of a gust) */
   gust(t = this.time) {
     if (!this.wind) return 0;
@@ -297,7 +316,8 @@ export class Cloth {
         // it pushes along the patch's normal, as pressure on a sheet
         const lx = this.nrm[i], ly = this.nrm[i + 1], lz = this.nrm[i + 2];
         const nx = e[0] * lx + e[3] * ly + e[6] * lz, ny = e[1] * lx + e[4] * ly + e[7] * lz, nz = e[2] * lx + e[5] * ly + e[8] * lz;
-        const u = ux * nx + uy * ny + uz * nz, push = AIR * Math.abs(u) * u;
+        // (past about 1.2 m/s the knit lets air through and the patch turns edge-on instead of pushing harder)
+        const u0 = ux * nx + uy * ny + uz * nz, u = Math.max(-1.2, Math.min(1.2, u0)), push = AIR * Math.abs(u) * u;
         const ax = push * nx, ay = push * ny, az = push * nz;
         // the pull home stiffens smoothly as the cloth strays (it meets the form and its own seams): no wall
         const ox = x[i] - p[0], oy = x[i + 1] - p[1], oz = x[i + 2] - p[2];
@@ -308,8 +328,8 @@ export class Cloth {
         x[i + 1] += vy * h * keep + (ay - kk * oy) * h2;
         x[i + 2] += vz * h * keep + (az - kk * oz) * h2;
       }
-      // keep the jersey from stretching: two passes over the net
-      for (let it = 0; it < 2; it++) {
+      // keep the jersey from stretching: three passes over the net
+      for (let it = 0; it < 3; it++) {
         for (let j = 0; j < this.ea.length; j++) {
           const A = this.ea[j], B = this.eb[j], wa = this.inv[A], wb = this.inv[B];
           if (wa + wb === 0) continue;
@@ -342,6 +362,10 @@ export class Cloth {
       off[i + 2] = (e[6] * ox + e[7] * oy + e[8] * oz) * is;
     }
     if (!blowing && maxOff < 2e-4 && maxV < 2e-5) { this.snap(); return false; }
+    // cloth is continuous: a 3 cm net can't have a point standing out from its neighbours (that reads as spikes
+    // and grit on a hard turn), so what's shown is the net's shape with anything finer than its own spacing
+    // smoothed away. The simulation itself keeps its state; only the drawn shape is smoothed.
+    this.smoothShown();
     this.settled = false;
     const out = this.tex.image.data as Float32Array;
     for (let c = 0; c < this.n; c++) { out[4 * c] = off[3 * c]; out[4 * c + 1] = off[3 * c + 1]; out[4 * c + 2] = off[3 * c + 2]; }
