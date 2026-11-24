@@ -99,7 +99,7 @@ export class TryOn {
   private teeGeo: THREE.BufferGeometry | null = null; private basePos: Float32Array | null = null;
   private dims = { yTop: 0, zc: 0 };
   private mid = new THREE.Vector3();
-  private hem: { name: string; b: THREE.Bone; dir: THREE.Vector3; out: THREE.Vector3; len: number; p: THREE.Vector3; v: THREE.Vector3; live: boolean }[] = [];
+  private hem: { name: string; b: THREE.Bone; dir: THREE.Vector3; out: THREE.Vector3 | null; len: number; K: number; cone: number; p: THREE.Vector3; v: THREE.Vector3; live: boolean }[] = [];
   private filt = new Map<number, Euro3>();
   private tFilt = new Euro3(1.0, 2, 0.35, 0.8);   // where the body stands; distance smoothed hardest
   private armOn = [false, false];
@@ -216,7 +216,13 @@ export class TryOn {
     const axisZ = this.bp("spine01").z;
     for (let k = 0; this.bone(`hem${k}`); k++) {
       const name = `hem${k}`, b = this.bone(name)!, head = this.bp(name), tail = this.bp(`hem${k}end`), d = tail.clone().sub(head);
-      this.hem.push({ name, b, dir: d.clone().normalize(), len: d.length(), out: new THREE.Vector3(head.x, 0, head.z - axisZ).normalize(), p: new THREE.Vector3(), v: new THREE.Vector3(), live: false });
+      this.hem.push({ name, b, dir: d.clone().normalize(), len: d.length(), out: new THREE.Vector3(head.x, 0, head.z - axisZ).normalize(), K: 55, cone: 1.2, p: new THREE.Vector3(), v: new THREE.Vector3(), live: false });
+    }
+    // the sleeves' own springs: stiffer, and held within a small cone round the arm so they never pass through it
+    for (const S of ["L", "R"]) {
+      const name = `sleeve.${S}`, b = this.bone(name); if (!b) continue;
+      const d = this.bp(`sleeve.${S}end`).sub(this.bp(name));
+      this.hem.push({ name: b.name, b, dir: d.clone().normalize(), len: d.length(), out: null, K: 80, cone: 0.28, p: new THREE.Vector3(), v: new THREE.Vector3(), live: false });
     }
     this.modelShoulder = sL.distanceTo(sR);
     const xR = sL.clone().sub(sR).normalize(), yR = sL.clone().add(sR).multiplyScalar(0.5).sub(root).normalize();
@@ -258,16 +264,17 @@ export class TryOn {
   }
 
   /**
-   * The hem hangs like cloth. Eight spring bones run from the waist to the hem; each is a damped pendulum whose
+   * The hem and sleeves hang like cloth. Eight spring bones run from the waist to the hem and one down each sleeve
+   * to the cuff; each is a damped pendulum whose
    * tip is pulled toward where the body would carry it, while gravity and its own momentum act on it. Lean forward
    * and the front falls away from you; turn and the hem swings, then settles. It never goes further into the body
    * than it hangs at rest. Stiffness and damping are set for 240 GSM jersey: about one slow swing, no bounce.
    */
   private hang(dt: number) {
-    const K = 55, C = 7, G = new THREE.Vector3(0, -9.81, 0), s = this.rig.scale.x;
+    const C = 7, G = new THREE.Vector3(0, -9.81, 0), s = this.rig.scale.x;
     for (const h of this.hem) {
       const head = h.b.getWorldPosition(new THREE.Vector3()), D = this.carried(h.name);
-      const rest = h.dir.clone().applyQuaternion(D), out = h.out.clone().applyQuaternion(D), L = h.len * s;
+      const rest = h.dir.clone().applyQuaternion(D), out = h.out ? h.out.clone().applyQuaternion(D) : null, L = h.len * s, K = h.K;
       const T = head.clone().addScaledVector(rest, L);
       // the drape already hangs under gravity as you stand: only the change in gravity relative to the body pulls
       const g = G.clone().sub(G.clone().applyQuaternion(D));
@@ -277,8 +284,12 @@ export class TryOn {
         const a = T.clone().sub(h.p).multiplyScalar(K).add(g).addScaledVector(h.v, -C);
         h.v.addScaledVector(a, st); h.p.addScaledVector(h.v, st);
         const d = h.p.clone().sub(head).normalize();
-        const inside = d.dot(out) - rest.dot(out);
-        if (inside < -0.03) { d.addScaledVector(out, -0.03 - inside).normalize(); h.v.addScaledVector(out, -Math.min(0, h.v.dot(out))); }
+        if (out) {
+          const inside = d.dot(out) - rest.dot(out);
+          if (inside < -0.03) { d.addScaledVector(out, -0.03 - inside).normalize(); h.v.addScaledVector(out, -Math.min(0, h.v.dot(out))); }
+        }
+        const a0 = d.angleTo(rest);
+        if (a0 > h.cone) { d.copy(rest.clone().lerp(d, h.cone / a0).normalize()); h.v.multiplyScalar(0.5); }
         h.p.copy(head).addScaledVector(d, L);
       }
       const dir = h.p.clone().sub(head).normalize();

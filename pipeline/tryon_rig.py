@@ -134,13 +134,35 @@ for k in range(HEM):
     b = eb.new(f"hem{k}"); b.parent = eb["root"]; b.use_deform = True
     b.head = Vector((rw * math.sin(th), yc - rw * math.cos(th), waist)); b.tail = Vector((rh * math.sin(th), yc - rh * math.cos(th), zb))
     e = eb.new(f"hem{k}end"); e.parent = b; e.use_deform = True; e.head = b.tail; e.tail = b.tail + Vector((0, 0, -0.02))  # marks the tail
+# and one inside each sleeve, from half way along it to the cuff, so a sleeve droops and swings round the arm
+G0 = {g.name: g.index for g in tee.vertex_groups}
+Wg = np.zeros((len(V), 2), np.float32)
+for v in me.vertices:
+    for g in v.groups:
+        nm = tee.vertex_groups[g.group].name
+        if nm.startswith("upperarm"): Wg[v.index, 0 if nm.endswith(".L") else 1] += g.weight
+SLV = {}
+for si, S in enumerate(("L", "R")):
+    a0 = eb[f"upperarm01.{S}"].head.copy(); ax = (eb[f"lowerarm01.{S}"].head - a0).normalized()
+    m = Wg[:, si] > 0.5
+    proj = (V - np.array(a0[:])) @ np.array(ax[:])
+    cuff = float(np.percentile(proj[m], 97))
+    b = eb.new(f"sleeve.{S}"); b.parent = eb[f"upperarm02.{S}"]; b.use_deform = True
+    b.head = a0 + ax * (0.45 * cuff); b.tail = a0 + ax * cuff
+    e = eb.new(f"sleeve.{S}end"); e.parent = b; e.use_deform = True; e.head = b.tail; e.tail = b.tail + ax * 0.02
+    t = np.clip((proj - 0.35 * cuff) / (0.65 * cuff), 0, 1)
+    SLV[S] = (t * t * (3 - 2 * t)) * np.clip(Wg[:, si], 0, 1) * 0.85
+    print("sleeve", S, "cuff", round(cuff, 3), "verts", int(m.sum()))
 bpy.ops.object.mode_set(mode="OBJECT"); select_only(tee)
 for k in range(HEM): tee.vertex_groups.new(name=f"hem{k}")
+for S in ("L", "R"): tee.vertex_groups.new(name=f"sleeve.{S}")
 G = list(tee.vertex_groups); gi = {g.name: i for i, g in enumerate(G)}; W = np.zeros((len(V), len(G)), np.float32)
 for v in me.vertices:
     for g in v.groups: W[v.index, g.group] = g.weight
 t = np.clip((waist - V[:, 2]) / max(1e-3, waist - zb), 0, 1); hw = t * t * (3 - 2 * t)
 f = (ang % (2 * math.pi)) / (2 * math.pi) * HEM; k0 = np.floor(f).astype(int) % HEM; a1 = f - np.floor(f)
+for S in ("L", "R"):
+    sw = SLV[S]; W *= (1 - sw)[:, None]; W[:, gi[f"sleeve.{S}"]] += sw
 W *= (1 - hw)[:, None]
 for k in range(HEM):
     W[:, gi[f"hem{k}"]] += hw * ((k0 == k) * (1 - a1) + (((k0 + 1) % HEM) == k) * a1)
