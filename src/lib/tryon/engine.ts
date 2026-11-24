@@ -25,7 +25,7 @@
 // The preview is a mirror (the video is flipped). The tee is placed in that mirrored space without being
 // flipped itself, so its print reads the right way round.
 import * as THREE from "three/webgpu";
-import { texture, uv, vec2, vec3, float, normalMap, normalize, vertexColor, mix } from "three/tsl";
+import { texture, uv, vec2, vec3, float, normalMap, normalize, vertexColor, mix, positionGeometry, normalGeometry } from "three/tsl";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
@@ -222,6 +222,14 @@ export class TryOn {
     // between the shoulder joints: 6 cm under the top of the shoulder line, at the chest's mid depth
     this.anchor.set(0, yTop - 0.06, zn ? zs / zn : 0);
     const half = SIZES.M.chest_round / 400, armpit = yTop - 0.26;
+    // round the collar, any surface that faces in toward the body (the inside of the neckband, mostly the back
+    // half) is never seen on a person: your neck and shoulders fill it. It's cut, so only the outside shows
+    {
+      const P = positionGeometry, N = normalGeometry;
+      const collar = P.y.greaterThan(yTop - 0.13).and(P.x.abs().lessThan(0.17));
+      const inward = N.x.mul(P.x).add(N.z.mul(P.z.sub(this.anchor.z))).lessThan(0);
+      outer.maskNode = collar.and(inward).not();
+    }
     const joints = [new THREE.Vector3(0.18, yTop - 0.06, this.anchor.z), new THREE.Vector3(-0.18, yTop - 0.06, this.anchor.z)];
 
     // a skeleton: the body, and one bone per sleeve at the shoulder joint
