@@ -50,6 +50,28 @@ def front_hem(V):  # lowest point of the tee near the centre front / centre back
     return min(v.z for v in f), min(v.z for v in b)
 
 stand_hem = None
+def close_edges(bm, passes=8):
+    """The open edges (hem, sleeve ends, neck) run on unbroken, as sewn: where a seam's first stitch sits a
+    little above the edge, the two panel corners poke out as a notch. Any sharp turn along an open edge is
+    eased back onto the line of its neighbours (and the cloth just inside follows half way)."""
+    bv = [v for v in bm.verts if v.is_boundary]
+    nb = {v: [e.other_vert(v) for e in v.link_edges if e.is_boundary] for v in bv}
+    moved = 0
+    for _ in range(passes):
+        for v in bv:
+            ns = nb[v]
+            if len(ns) != 2: continue
+            a, c = ns[0].co, ns[1].co
+            u, w = (a - v.co), (c - v.co)
+            if u.length < 1e-9 or w.length < 1e-9: continue
+            if u.normalized().dot(w.normalized()) < -0.5: continue      # straighter than 120 degrees: leave it
+            d = (a + c) / 2 - v.co
+            v.co += d; moved += 1
+            for e in v.link_edges:
+                o = e.other_vert(v)
+                if not o.is_boundary: o.co += d * 0.5
+    print("edges closed", moved, flush=True)
+
 for pose in POSES:
     tee = bpy.data.objects[f"tee_{pose}"]; go(tee["frame"])
     BV, TV = verts(body), verts(tee)
@@ -99,11 +121,34 @@ def glb(path, **kw):
     except TypeError:   # older exporters: no vertex colour switch
         args.pop("export_vertex_color", None); bpy.ops.export_scene.gltf(**args)
 
+def close_edges(bm, passes=8):
+    """The open edges (hem, sleeve ends, neck) run on unbroken, as sewn: where a seam's first stitch sits a
+    little above the edge, the two panel corners poke out as a notch. Any sharp turn along an open edge is
+    eased back onto the line of its neighbours (and the cloth just inside follows half way)."""
+    bv = [v for v in bm.verts if v.is_boundary]
+    nb = {v: [e.other_vert(v) for e in v.link_edges if e.is_boundary] for v in bv}
+    moved = 0
+    for _ in range(passes):
+        for v in bv:
+            ns = nb[v]
+            if len(ns) != 2: continue
+            a, c = ns[0].co, ns[1].co
+            u, w = (a - v.co), (c - v.co)
+            if u.length < 1e-9 or w.length < 1e-9: continue
+            if u.normalized().dot(w.normalized()) < -0.5: continue      # straighter than 120 degrees: leave it
+            d = (a + c) / 2 - v.co
+            v.co += d; moved += 1
+            for e in v.link_edges:
+                o = e.other_vert(v)
+                if not o.is_boundary: o.co += d * 0.5
+    print("edges closed", moved, flush=True)
+
 for pose in POSES:
     tee = bpy.data.objects[f"tee_{pose}"]; go(tee["frame"])
     for o in sc.objects:
         if o.name.startswith("tee"): o.hide_render = o is not tee
     bm = bmesh.new(); bm.from_mesh(tee.data); bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=0.0008)
+    close_edges(bm)
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces); bm.to_mesh(tee.data); bm.free()
     if PROXY and pose == "stand":
         select_only(tee); glb(os.path.join(OUT, "proxy.glb"), export_draco_mesh_compression_enable=False)
