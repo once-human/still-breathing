@@ -108,6 +108,7 @@ export class TryOn {
   private tFilt = new Euro3(1.0, 2, 0.35, 0.8);   // where the body stands; distance smoothed hardest
   private armOn = [false, false];
   private fctx: CanvasRenderingContext2D;
+  private mask = document.createElement("canvas");
   private keyOff = new THREE.Vector3(0, 2, 2); private shown = false; private qSpeed = 0;
   private lit = false; private lum = 0.5; private tint = new THREE.Color(1, 1, 1); private side = new THREE.Vector2();
   private P = new Map<number, THREE.Vector3>();   // filtered camera-space points (mirrored), metres
@@ -450,27 +451,33 @@ export class TryOn {
   /** forearms and hands in front of the body, cut from the video and laid back over the tee */
   private drawArms() {
     const c = this.arms.getContext("2d")!, l = this.lms;
-    c.clearRect(0, 0, this.arms.width, this.arms.height);
+    const W = this.arms.width, H = this.arms.height;
+    c.clearRect(0, 0, W, H);
     if (!l || !this.rig.visible) return;
-    const W = this.arms.width, H = this.arms.height, P = this.P;
-    const torsoZ = (P.get(L_SH)!.z + P.get(R_SH)!.z) / 2;
-    const sw = Math.hypot((this.img[L_SH].x - this.img[R_SH].x) * W, (this.img[L_SH].y - this.img[R_SH].y) * H);
-    c.save(); c.beginPath();
+    const P = this.P, torsoZ = (P.get(L_SH)!.z + P.get(R_SH)!.z) / 2;
+    const sw = Math.hypot((this.img[L_SH].x - this.img[R_SH].x) * W, (this.img[L_SH].y - this.img[R_SH].y) * H), r = sw * 0.11;
+    // the arm as one solid shape: a round-capped stroke along the forearm into the hand, plus the palm.
+    // Drawn opaque into a mask (no overlapping sub-paths cancelling each other), softened, then filled with the video
+    const m = this.mask, mc = m.getContext("2d")!;
+    if (m.width !== W || m.height !== H) { m.width = W; m.height = H; }
+    mc.clearRect(0, 0, W, H);
+    mc.fillStyle = mc.strokeStyle = "#fff"; mc.lineCap = mc.lineJoin = "round"; mc.lineWidth = 2 * r;
     let any = false;
     for (const [el, wr, ix] of [[L_EL, L_WR, L_IDX], [R_EL, R_WR, R_IDX]]) {
-      // only an arm clearly in front of the chest (camera z grows toward the lens)
-      if ((l[wr].visibility ?? 0) < 0.55 || P.get(wr)!.z < torsoZ + 0.07) continue;
+      // only an arm the model is sure of, clearly in front of the chest (camera z grows toward the lens)
+      if (Math.min(l[el].visibility ?? 0, l[wr].visibility ?? 0) < 0.75 || P.get(wr)!.z < torsoZ + 0.1) continue;
       any = true;
-      const pts = [el, wr, ix].map((i) => [this.img[i].x * W, this.img[i].y * H]);
-      const r = sw * 0.12;
-      for (let i = 0; i < 2; i++) {
-        const [x0, y0] = pts[i], [x1, y1] = pts[i + 1], L = Math.hypot(x1 - x0, y1 - y0) || 1, nx = (-(y1 - y0) / L) * r, ny = ((x1 - x0) / L) * r;
-        c.moveTo(x0 + nx, y0 + ny); c.lineTo(x1 + nx, y1 + ny); c.lineTo(x1 - nx, y1 - ny); c.lineTo(x0 - nx, y0 - ny); c.closePath();
-        c.moveTo(x1 + r * 1.3, y1); c.arc(x1, y1, r * 1.3, 0, Math.PI * 2);
-      }
+      const [e, w, i] = [el, wr, ix].map((k) => [this.img[k].x * W, this.img[k].y * H]);
+      mc.beginPath(); mc.moveTo(e[0], e[1]); mc.lineTo(w[0], w[1]); mc.lineTo(i[0], i[1]); mc.stroke();
+      mc.beginPath(); mc.arc((w[0] + i[0]) / 2, (w[1] + i[1]) / 2, r * 1.35, 0, Math.PI * 2); mc.fill();
     }
-    if (any) { c.clip(); c.drawImage(this.frameCv, 0, 0, W, H); }
-    c.restore();
+    if (!any) return;
+    c.filter = `blur(${Math.max(1, r * 0.18).toFixed(1)}px)`;
+    c.drawImage(m, 0, 0);
+    c.filter = "none";
+    c.globalCompositeOperation = "source-in";
+    c.drawImage(this.frameCv, 0, 0, W, H);
+    c.globalCompositeOperation = "source-over";
   }
 
   /** the picture as you see it: the mirror, the tee, your hands */
