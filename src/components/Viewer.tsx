@@ -121,15 +121,16 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       };
       // close in, the back print is swapped for the full source resolution (fetched once per design)
       const sharpened = new Set<string>();
+      let ptFull: { key: string; url: string } | null = null, ptFullOn = "";
       const sharpen = async () => {
         const key = `${s.design}-${s.tee}`;
         if (sharpened.has(key)) return;
         sharpened.add(key);
         try {
-          const url = printBackURL(s.design, s.tee, true);
-          const tex = await raster.printTexture(url);
-          raster.setBackPrint(s.design, s.tee, tex); s.dirty = true; lastSig = "";
-          if (pt) { const [, f] = await colourMaps(s.design, s.tee); pt.setColourway(await bitmap(url), f); }
+          const d = s.design, t = s.tee, url = printBackURL(d, t, true);
+          raster.setFullPrint(d, t, await raster.printTexture(url)); s.dirty = true;
+          // the path tracer takes it later, at rest (it only traces then), so the upload never lands mid-zoom
+          ptFull = { key, url };
         } catch { /* the regular print stays */ }
       };
 
@@ -309,6 +310,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           s.dirty = true;
         }
         const moving = s.drag || s.goal !== null || spin !== 0 || zooming;
+        raster.detail(zm.z > 1.3);
         raster.setView(s.yaw, [zm.cx, zm.cy, zm.z], st.clientWidth, st.clientHeight);
         const swinging = raster.simulate(dt);
         // every display frame is drawn (60, 120, whatever the screen runs at): a skipped frame in a steady turn
@@ -328,6 +330,15 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         // the still steps aside at once: a fading still over a turning tee reads as a blur
         if (busyCloth && traced) { tc.style.transition = "none"; tc.style.opacity = "0"; traced = false; shown = -1; }
         if (!pt || busyCloth || s.photo || s.loading || busy || now - restSince < 300 || !quiet(now)) return;
+        // the full-resolution print for the path tracer, swapped in at rest when zoomed in (and back out)
+        const ptWant = zm.z > 1.3 && ptFull && ptFull.key === `${s.design}-${s.tee}` ? ptFull.url : "";
+        if (ptWant !== ptFullOn) {
+          ptFullOn = ptWant; busy = true;
+          const p = pt, d = s.design, t = s.tee;
+          void colourMaps(d, t).then(async ([b, f]) => { if (p === pt) p.setColourway(ptWant ? await bitmap(ptWant) : b, f); })
+            .finally(() => { busy = false; lastSig = ""; });
+          return;
+        }
         const sig = `${s.design}|${s.tee}|${s.yaw.toFixed(3)}|${zm.z.toFixed(4)}|${zm.cx.toFixed(4)}|${zm.cy.toFixed(4)}|${JSON.stringify(s.variant)}`;
         if (sig !== lastSig) { pt.setView({ yaw: s.yaw, crop: [zm.cx, zm.cy, zm.z], knit: true }); lastSig = sig; shown = -1; }
         if (pt.clean) return;
@@ -348,7 +359,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         setLook: async (d, t) => {
           const [c, o] = await Promise.all([pt ? colourMaps(d, t) : Promise.resolve(null), raster.setLook(d, t)]).then(([m]) => m ?? [null, null]);
           s.design = d; s.tee = t; raster.setScene(scene, t === "cream");
-          if (pt && c && o) { pt.setColourway(c, o); pt.setScene(scene, FABRIC[t], t === "cream"); }
+          if (pt && c && o) { pt.setColourway(c, o); ptFullOn = ""; pt.setScene(scene, FABRIC[t], t === "cream"); }
           s.dirty = true; lastSig = "";
         },
         zoomBy: (k) => { if (k === 0) zoomAt(1, 0, 0); else zoomAt(zm.zt * k, 0, 0); },

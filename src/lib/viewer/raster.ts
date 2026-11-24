@@ -129,21 +129,35 @@ export class Raster {
 
   async setLook(design: string, t: "black" | "cream") {
     const [b, f] = await this.look(design, t);
-    if (this.nodes) { this.nodes.back.value = b; this.nodes.front.value = f; }
+    this.current = `${design}-${t}`;
+    if (this.nodes) { this.nodes.back.value = this.detailOn && this.fullTex[this.current] || b; this.nodes.front.value = f; }
     this.fabric.value.setRGB(...FABRIC[t], THREE.LinearSRGBColorSpace);
     this.inner.color.setRGB(...FABRIC[t], THREE.LinearSRGBColorSpace);
   }
 
-  /** swap in a sharper back print (the full source resolution, fetched when someone zooms in) */
-  setBackPrint(design: string, t: "black" | "cream", tex: THREE.Texture) {
-    tex.anisotropy = this.maxAniso;
-    this.backTex[`${design}-${t}`] = tex;
-    if (this.nodes && this.current === `${design}-${t}`) this.nodes.back.value = tex;
+  /**
+   * The full source resolution of a back print, for close up. Close up the print is only ever magnified, so it
+   * needs no mip chain and no anisotropic filtering: uploaded as one plain level (a third less memory, no mip
+   * build), and only bound while zoomed in; zoomed out, the regular print with its mips is used.
+   */
+  setFullPrint(design: string, t: "black" | "cream", tex: THREE.Texture) {
+    this.fullTex[`${design}-${t}`] = tex;
+    this.detail(this.detailOn);
+  }
+  private fullTex: Record<string, THREE.Texture> = {};
+  private detailOn = false;
+  detail(on: boolean) {
+    this.detailOn = on;
+    if (!this.nodes) return;
+    const want = (on && this.fullTex[this.current]) || this.backTex[this.current];
+    if (want && this.nodes.back.value !== want) this.nodes.back.value = want;
   }
   current = "";
   async printTexture(url: string) {
     const t = new THREE.Texture(await bitmap(url));
-    t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true;
+    t.flipY = false; t.colorSpace = THREE.SRGBColorSpace;
+    t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter; t.anisotropy = 1;
+    t.needsUpdate = true;
     return t;
   }
 
