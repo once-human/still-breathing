@@ -2,6 +2,8 @@
 
 The Still Breathing site and the pipeline that makes its garments: every tee is simulated from the blank's real measurements, sewn in Blender's cloth solver, and shown exactly as it comes off the press.
 
+Live: https://still-breathing-studio.vercel.app (Vercel, deploys on every push to `main` that touches `public/`).
+
 ## Layout
 - `public/` the static site (open `public/index.html` through any static server)
 - `pipeline/` pattern, body, cloth sim, textures and renders
