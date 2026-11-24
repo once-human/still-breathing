@@ -7,6 +7,7 @@ import type { Variant } from "@/lib/viewer/raster";
 import { pickTier } from "@/lib/viewer/tier";
 import { prefetchTee, bitmap } from "@/lib/viewer/grab";
 import { printBackURL, printFrontURL } from "@/lib/viewer/print";
+import { asset } from "@/lib/asset";
 import dynamic from "next/dynamic";
 
 // the camera try-on, and the pose model behind it, only download when someone asks for it
@@ -78,7 +79,7 @@ const PHOTO_SPP = 64;
 // GPU time the background tracer may use per frame, and the full-sample cost past which it isn't worth it
 const TRACE_MS = 3;
 const SLOW_MS = 600;
-const STILL = (d: string, a: number) => `/tee/still/${d}/a${a}.webp`;
+const STILL = (d: string, a: number) => asset(`/tee/still/${d}/a${a}.webp`);
 const ANGLES = Array.from({ length: 12 }, (_, i) => i * 30);
 const FORMAT_LIST: { id: Format; label: string }[] = [{ id: "story", label: "story 9:16" }, { id: "post", label: "post 4:5" }];
 const LOOK_LIST: Look[] = ["clean", "film"];

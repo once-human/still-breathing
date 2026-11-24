@@ -1,11 +1,14 @@
 {
   "name": "still-breathing",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "private": true,
   "scripts": {
+    "predev": "node scripts/hash-assets.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/hash-assets.mjs",
     "build": "next build",
     "start": "next start",
+    "pretypecheck": "node scripts/hash-assets.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

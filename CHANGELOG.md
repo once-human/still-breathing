@@ -2,6 +2,10 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.10.2 — 2026-11-25
+### Studio
+- Turning the tee never mixes in an old design's frames again. Every file the viewer loads now has its own fingerprint in its address, so a frame or texture that changed is always fetched fresh, and the ones that didn't stay cached.
+
 ## 0.10.1 — 2026-11-25
 ### Studio
 - No more flicker while turning the tee. The twelve rendered frames load together and swap in place, so a drag never shows an empty stage. The path-traced still no longer comes and goes over the live cloth; it only develops the photos you ask for. The last view stays up while the next one loads.

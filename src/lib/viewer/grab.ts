@@ -1,11 +1,13 @@
 // One download per file, shared: the viewer starts fetching its tee, textures and decoder the moment it
 // knows it will run, while the 3D code itself is still on its way. Whoever asks later gets the same bytes.
+import { asset } from "@/lib/asset";
+
 const cache = new Map<string, Promise<Blob>>();
 
 export function grab(url: string): Promise<Blob> {
   let p = cache.get(url);
   if (!p) {
-    p = fetch(url, { priority: "high" } as RequestInit).then((r) => {
+    p = fetch(asset(url), { priority: "high" } as RequestInit).then((r) => {
       if (!r.ok) throw new Error(`${url}: ${r.status}`);
       return r.blob();
     });

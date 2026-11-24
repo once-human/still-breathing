@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { SIZE_ORDER, type Size } from "@/content/tee";
 import type { Pose, Variant } from "@/lib/viewer/raster";
 import type { V3 } from "@/lib/viewer/scene";
+import { asset } from "@/lib/asset";
 
 /** The five simulated bodies (Indian adult anthropometry) and the three sizes each was sewn into. */
 export const BODIES = [
@@ -82,7 +83,7 @@ export function Fit({ size, onVariant }: { size: Size; onVariant: (v: Variant) =
   const dir = `${body.id}-${shown}`;
   const data = index?.[dir];
 
-  useEffect(() => { if (on && !index) fetch("/tee/fit/index.json").then((r) => r.json()).then(setIndex).catch(() => setIndex({})); }, [on, index]);
+  useEffect(() => { if (on && !index) fetch(asset("/tee/fit/index.json")).then((r) => r.json()).then(setIndex).catch(() => setIndex({})); }, [on, index]);
   const seat = data?.poses.sit?.seat_cm;
   useEffect(() => {
     onVariant(on ? { dir, size: shown, pose, body: true, skin: SKINS[skin].lin, seat: seat ? seat / 100 : undefined } : SHOP);

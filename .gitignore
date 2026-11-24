@@ -17,3 +17,6 @@ pipeline/atlas-D-*.png
 pipeline/inkmask-D-*.png
 pipeline/figma-in/
 pipeline/figma-out/
+
+# content hashes of public/tee (scripts/hash-assets.mjs)
+src/lib/asset-hashes.json
