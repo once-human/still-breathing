@@ -17,8 +17,11 @@
 //    your chin can come down over it. Forearms in front of you are cut from the video and laid back on top.
 // 6. Light. The room is read from the video (how bright, what colour, which side the light comes from) and
 //    lights the tee through an image-based environment, so black cotton shows its folds.
-// 7. Steadiness. Every point goes through a One Euro filter: still when you're still, no lag when you move.
-//    The tee is drawn once per camera frame, in step with the video, so it never slides against you.
+// 7. Steadiness. The picture you see is not the live video: it is the very camera frame the pose was read
+//    from, drawn in the same instant as the tee on it, so the two can never slide against each other however
+//    long the pose model takes. The body's shape and where it stands are smoothed separately (One Euro: still
+//    when you're still, no lag when you move), the distance to the camera most of all, since that's the
+//    noisiest number and the one that would make the tee breathe in size. The sleeves ease to the arms.
 //
 // The preview is a mirror (the video is flipped). The tee is placed in that mirrored space without being
 // flipped itself, so its print reads the right way round.
@@ -54,7 +57,8 @@ class OneEuro {
   reset() { this.x = NaN; this.dx = 0; }
 }
 class Euro3 {
-  private c = [new OneEuro(), new OneEuro(), new OneEuro()];
+  private c: OneEuro[];
+  constructor(cut = 0.9, beta = 3, cutZ = cut, betaZ = beta) { this.c = [new OneEuro(cut, beta), new OneEuro(cut, beta), new OneEuro(cutZ, betaZ)]; }
   f(v: THREE.Vector3, t: number) { return v.set(this.c[0].f(v.x, t), this.c[1].f(v.y, t), this.c[2].f(v.z, t)); }
   reset() { this.c.forEach((c) => c.reset()); }
 }
@@ -101,17 +105,22 @@ export class TryOn {
   private restArm = [new THREE.Vector3(), new THREE.Vector3()];
   private sizeScale = new THREE.Vector3(1, 1, 1);
   private filt = new Map<number, Euro3>();
+  private tFilt = new Euro3(1.2, 4, 0.35, 1.2);   // where the body stands; distance smoothed hardest
+  private armOn = [false, false];
+  private fctx: CanvasRenderingContext2D;
+  private shown = false;
   private P = new Map<number, THREE.Vector3>();   // filtered camera-space points (mirrored), metres
   private img: { x: number; y: number }[] = [];
   private lms: NormalizedLandmark[] | null = null;
 
-  constructor(private video: HTMLVideoElement, private canvas: HTMLCanvasElement, private arms: HTMLCanvasElement, private onStatus: (s: TryOnStatus) => void) {
+  constructor(private video: HTMLVideoElement, private frameCv: HTMLCanvasElement, private canvas: HTMLCanvasElement, private arms: HTMLCanvasElement, private onStatus: (s: TryOnStatus) => void) {
     this.renderer = new THREE.WebGPURenderer({ canvas, antialias: true, alpha: true });
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.scene.add(this.key, this.key.target, this.fill, this.rig, this.occluders);
     this.probe.canvas.width = 16; this.probe.canvas.height = 9;
+    this.fctx = frameCv.getContext("2d", { alpha: false, desynchronized: true })!;
     // neck and head: depth only, drawn first, so the tee is hidden wherever they are in front of it
     const occ = new THREE.MeshBasicNodeMaterial({ colorWrite: false });
     this.neck = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 20, 1, true), occ);
@@ -270,9 +279,13 @@ export class TryOn {
   private frame(now: number) {
     const v = this.video, t = now / 1000;
     const dt = this.prevT ? Math.min(0.1, t - this.prevT) : 1 / 30; this.prevT = t;
-    if (v.readyState < 2 || !this.pose) return;
-    const r = this.pose.detectForVideo(v, now);
-    this.place(r.landmarks[0] ?? null, r.worldLandmarks[0] ?? null, t);
+    if (v.readyState < 2 || !this.pose || !v.videoWidth) return;
+    // freeze this camera frame: the pose is read from it and it's what is shown, together with the tee
+    const fc = this.frameCv;
+    if (fc.width !== v.videoWidth || fc.height !== v.videoHeight) { fc.width = v.videoWidth; fc.height = v.videoHeight; }
+    this.fctx.drawImage(v, 0, 0);
+    const r = this.pose.detectForVideo(fc, now);
+    this.place(r.landmarks[0] ?? null, r.worldLandmarks[0] ?? null, t, dt);
     if (this.frameN++ % 10 === 0) this.light();
     if (this.cloth && this.rig.visible) {
       const m3 = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(this.rig.quaternion));
@@ -281,12 +294,13 @@ export class TryOn {
     }
     this.renderer.render(this.scene, this.camera);
     this.drawArms();
+    if (!this.shown) { this.shown = true; v.style.opacity = "0"; }
   }
 
   /** the room: brightness, colour, and which side the light comes from */
   private light() {
     const c = this.probe, W = 16, H = 9;
-    c.drawImage(this.video, 0, 0, W, H);
+    c.drawImage(this.frameCv, 0, 0, W, H);
     const d = c.getImageData(0, 0, W, H).data;
     let r = 0, g = 0, b = 0, left = 0, right = 0, top = 0, bot = 0;
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
@@ -306,10 +320,10 @@ export class TryOn {
   }
 
   /** the camera solve, the body's frame, and the tee on it */
-  private place(l: NormalizedLandmark[] | null, w: Landmark[] | null, t: number) {
+  private place(l: NormalizedLandmark[] | null, w: Landmark[] | null, t: number, dt: number) {
     const ok = l && w && (l[L_SH].visibility ?? 0) > 0.55 && (l[R_SH].visibility ?? 0) > 0.55;
     if (!ok) {
-      if (++this.lost > 6) { this.rig.visible = false; this.occluders.visible = false; this.placed = false; this.lms = null; this.filt.forEach((f) => f.reset()); this.onStatus("nobody"); }
+      if (++this.lost > 6) { this.rig.visible = false; this.occluders.visible = false; this.placed = false; this.lms = null; this.filt.forEach((f) => f.reset()); this.tFilt.reset(); this.onStatus("nobody"); }
       return;
     }
     this.lost = 0;
@@ -336,14 +350,16 @@ export class TryOn {
       rows.push([this.f, 0, -U(i)]); rhs.push(U(i) * Z(i) - this.f * X(i));
       rows.push([0, this.f, -Vv(i)]); rhs.push(Vv(i) * Z(i) - this.f * Y(i));
     }
-    const T = lsq(rows, rhs, 3);
-    if (!T || T[2] < 0.25) return;
+    const T0 = lsq(rows, rhs, 3);
+    if (!T0 || T0[2] < 0.25) return;
+    const Tv = this.tFilt.f(new THREE.Vector3(T0[0], T0[1], T0[2]), t), T = [Tv.x, Tv.y, Tv.z];
     this.camera.fov = (2 * Math.atan(H / 2 / this.f) * 180) / Math.PI;
     this.camera.aspect = W / H; this.camera.updateProjectionMatrix();
     for (const i of TRACK) {
-      const p = new THREE.Vector3(X(i) + T[0], Y(i) + T[1], -(Z(i) + T[2]));
-      let f = this.filt.get(i); if (!f) this.filt.set(i, (f = new Euro3()));
-      this.P.set(i, f.f(p, t));
+      // the body's own shape (metres around the hips) and where it stands are smoothed apart
+      let f = this.filt.get(i); if (!f) this.filt.set(i, (f = new Euro3(1.0, 6)));
+      const b = f.f(new THREE.Vector3(X(i), Y(i), Z(i)), t);
+      this.P.set(i, new THREE.Vector3(b.x + T[0], b.y + T[1], -(b.z + T[2])));
     }
     this.lms = l;
     this.img = l!.map((p) => ({ x: p.x, y: p.y }));
@@ -362,15 +378,18 @@ export class TryOn {
     // sleeves: each bone turns from the sleeve's rest line toward the upper arm (garment frame)
     const inv = this.rig.matrixWorld.clone().invert();
     const pairs: [number, number, 0 | 1][] = [[R_SH, R_EL, 0], [L_SH, L_EL, 1]];
+    const ease = 1 - Math.exp(-dt * 16);
     for (const [sh, el, s] of pairs) {
-      const bone = this.bones[s];
-      if ((l![el].visibility ?? 0) < 0.5) { bone.quaternion.slerp(new THREE.Quaternion(), 0.2); continue; }
+      const bone = this.bones[s], vis = l![el].visibility ?? 0;
+      // an arm counts once it's clearly seen and stops counting only once it's clearly gone: no flicker
+      this.armOn[s] = this.armOn[s] ? vis > 0.4 : vis > 0.6;
+      if (!this.armOn[s]) { bone.quaternion.slerp(new THREE.Quaternion(), 1 - Math.exp(-dt * 5)); continue; }
       const J = this.P.get(sh)!.clone().applyMatrix4(inv), E = this.P.get(el)!.clone().applyMatrix4(inv);
       const q = new THREE.Quaternion().setFromUnitVectors(this.restArm[s], E.sub(J).normalize());
       // past about 100 degrees a cut-on sleeve can't follow without tearing the yoke: hold it there
       const ang = 2 * Math.acos(Math.min(1, Math.abs(q.w)));
       if (ang > 1.75) q.slerp(new THREE.Quaternion(), 1 - 1.75 / ang);
-      bone.quaternion.copy(q);
+      bone.quaternion.slerp(q, ease);
     }
 
     // neck and head occluders
@@ -410,7 +429,7 @@ export class TryOn {
         c.moveTo(x1 + r * 1.3, y1); c.arc(x1, y1, r * 1.3, 0, Math.PI * 2);
       }
     }
-    if (any) { c.clip(); c.drawImage(this.video, 0, 0, W, H); }
+    if (any) { c.clip(); c.drawImage(this.frameCv, 0, 0, W, H); }
     c.restore();
   }
 
@@ -420,7 +439,7 @@ export class TryOn {
     out.width = W; out.height = H;
     const c = out.getContext("2d")!;
     this.renderer.render(this.scene, this.camera);
-    c.save(); c.translate(W, 0); c.scale(-1, 1); c.drawImage(this.video, 0, 0, W, H); c.restore();
+    c.save(); c.translate(W, 0); c.scale(-1, 1); c.drawImage(this.frameCv, 0, 0, W, H); c.restore();
     c.drawImage(this.canvas, 0, 0, W, H);
     c.save(); c.translate(W, 0); c.scale(-1, 1); c.drawImage(this.arms, 0, 0, W, H); c.restore();
     return new Promise((res, rej) => out.toBlob((b) => (b ? res(b) : rej(new Error("no image"))), "image/jpeg", 0.92));

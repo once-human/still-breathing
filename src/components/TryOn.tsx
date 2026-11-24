@@ -20,6 +20,7 @@ export function TryOn({ design, tee, onClose }: { design: Design; tee: Colour; o
   const video = useRef<HTMLVideoElement>(null);
   const cv = useRef<HTMLCanvasElement>(null);
   const arms = useRef<HTMLCanvasElement>(null);
+  const frame = useRef<HTMLCanvasElement>(null);
   const eng = useRef<Engine | null>(null);
   const [status, setStatus] = useState<TryOnStatus>("model");
   const [err, setErr] = useState("");
@@ -34,8 +35,8 @@ export function TryOn({ design, tee, onClose }: { design: Design; tee: Colour; o
     (async () => {
       try {
         const { TryOn } = await import("@/lib/tryon/engine");
-        if (dead || !video.current || !cv.current || !arms.current) return;
-        const e = new TryOn(video.current, cv.current, arms.current, (s) => !dead && setStatus(s));
+        if (dead || !video.current || !frame.current || !cv.current || !arms.current) return;
+        const e = new TryOn(video.current, frame.current, cv.current, arms.current, (s) => !dead && setStatus(s));
         eng.current = e;
         await e.start(design, DESIGNS[design].colour ?? tee, "M");
       } catch (x) {
@@ -73,6 +74,8 @@ export function TryOn({ design, tee, onClose }: { design: Design; tee: Colour; o
           <div className="relative" style={{ aspectRatio: ar, width: `min(100%, calc((100dvh - 64px) * ${ar}))` }}>
             <video ref={video} playsInline muted className="absolute inset-0 h-full w-full -scale-x-100"
               onLoadedMetadata={(e) => { const v = e.currentTarget; if (v.videoWidth && v.videoHeight) setAr(v.videoWidth / v.videoHeight); }} />
+            {/* the camera frame the pose was read from, shown in the same instant as the tee on it */}
+            <canvas ref={frame} className="absolute inset-0 h-full w-full -scale-x-100" />
             {/* a breath of softness so the tee sits in the webcam's own focus */}
             <canvas ref={cv} className="absolute inset-0 h-full w-full" style={{ filter: "blur(0.35px)" }} />
             <canvas ref={arms} className="absolute inset-0 h-full w-full -scale-x-100" />
