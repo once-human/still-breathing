@@ -8,7 +8,8 @@
 #   - black jeans: MakeHuman's own tights helper, loosened into a straight leg and smoothed of muscle
 #   - eyes from the eye helpers (sclera, iris, pupil)
 # Skin under the tee and the jeans is cut away (it can never be seen, and can never poke through the cloth).
-# Out: one GLB, materials "skin", "jeans", "eyes", COLOR_0 albedo, subdivided once.
+# Out: one GLB, materials named "skin", "jeans", "eyes" (the viewer and render.py pick their surfaces by them),
+# COLOR_0 albedo, subdivided once.
 import bpy, bmesh, sys, math
 from mathutils import Vector, Matrix, Quaternion, noise
 from mathutils.bvhtree import BVHTree
@@ -298,8 +299,8 @@ outs = [obj("skin", skin), obj("jeans", jeans), obj("eyes", eyes)]
 for o in list(sc.objects):
     if o not in outs: bpy.data.objects.remove(o)
 for o in outs: o.select_set(True)
-args = dict(filepath=OUT, use_selection=True, export_apply=True, export_yup=True, export_materials="PLACEHOLDER",
-            export_draco_mesh_compression_enable=True, export_draco_mesh_compression_level=7, export_vertex_color="ACTIVE",
+args = dict(filepath=OUT, use_selection=True, export_apply=True, export_yup=True, export_materials="EXPORT",
+            export_draco_mesh_compression_enable=True, export_draco_mesh_compression_level=7, export_vertex_color="NAME", export_vertex_color_name="albedo", export_all_vertex_colors=False,
             export_skins=False, export_animations=False, export_morph=False)
 bpy.ops.export_scene.gltf(**args)
 print("saved", OUT, {o.name: len(o.data.polygons) for o in outs})
