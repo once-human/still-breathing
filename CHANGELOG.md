@@ -2,6 +2,10 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.13.2 — 2026-11-25
+### Studio
+- The shades near the edges come and go slowly and evenly now. The bottom one only rises at the very bottom, wider and softer.
+
 ## 0.13.1 — 2026-11-25
 ### Studio
 - Down by the bottom of the view a softer shade comes up too, so the strip of views and the counter read clearly over any light.

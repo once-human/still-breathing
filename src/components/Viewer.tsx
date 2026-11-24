@@ -645,7 +645,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           const r = e.currentTarget.getBoundingClientRect(), x = (e.clientX - r.left) / r.width;
           const v = x < 0.22 ? "l" : x > 0.78 ? "r" : null;
           if (v !== edge) setEdge(v);
-          const b = (e.clientY - r.top) / r.height > 0.8;
+          const b = (e.clientY - r.top) / r.height > 0.9;
           if (b !== low) setLow(b);
         }}
         onPointerLeave={() => { setEdge(null); setLow(false); }}
@@ -684,7 +684,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           const side = k < 0 ? "l" : "r", on = edge === side, to = SHOTS[(shotI + k + SHOTS.length) % SHOTS.length];
           return (
             <div key={side}>
-              <div aria-hidden className={`pointer-events-none absolute inset-y-0 z-10 w-[45%] transition-opacity duration-700 ease-out ${k < 0 ? "left-0 bg-[radial-gradient(ellipse_100%_75%_at_0%_50%,rgba(0,0,0,0.62),transparent_74%)]" : "right-0 bg-[radial-gradient(ellipse_100%_75%_at_100%_50%,rgba(0,0,0,0.62),transparent_74%)]"} ${on ? "opacity-100" : "opacity-0"}`} />
+              <div aria-hidden className={`pointer-events-none absolute inset-y-0 z-10 w-[45%] transition-opacity duration-[1100ms] ease-in-out ${k < 0 ? "left-0 bg-[radial-gradient(ellipse_100%_75%_at_0%_50%,rgba(0,0,0,0.62),transparent_74%)]" : "right-0 bg-[radial-gradient(ellipse_100%_75%_at_100%_50%,rgba(0,0,0,0.62),transparent_74%)]"} ${on ? "opacity-100" : "opacity-0"}`} />
               <button
                 onClick={() => void goShot(shotI + k)} aria-label={`${k < 0 ? "Previous" : "Next"} view: ${to.label}`}
                 className={`group/arrow absolute top-1/2 z-20 flex -translate-y-1/2 flex-col gap-0.5 p-3 text-ink transition-[opacity,scale] duration-300 ease-out [filter:drop-shadow(0_1px_3px_rgba(0,0,0,0.6))] ${k < 0 ? "left-1 origin-left items-start" : "right-1 origin-right items-end"} ${on ? "scale-100 opacity-100" : "scale-[0.72] opacity-55"}`}
@@ -709,7 +709,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           </div>
         ) : null}
         {/* down by the bottom: a softer shade than the sides', so the strip and the counter read clearly */}
-        <div aria-hidden className={`pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[30%] bg-[radial-gradient(ellipse_75%_100%_at_50%_100%,rgba(0,0,0,0.4),transparent_72%)] transition-opacity duration-700 ease-out ${low ? "opacity-100" : "opacity-0"}`} />
+        <div aria-hidden className={`pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[38%] bg-[radial-gradient(ellipse_120%_100%_at_50%_100%,rgba(0,0,0,0.36)_0%,rgba(0,0,0,0.2)_35%,rgba(0,0,0,0.07)_62%,transparent_85%)] transition-opacity duration-[1400ms] ease-in-out ${low ? "opacity-100" : "opacity-0"}`} />
         <p className={`pointer-events-none absolute right-3 bottom-3 z-20 text-[12px] tnum ${dark ? "text-white/70" : "text-black/55"}`}>{shotI + 1} / {SHOTS.length}</p>
         {/* the views as little pictures, like a photo app's strip, each as it really looks: see what's there, tap to go */}
         <div className="absolute bottom-3 left-1/2 z-20 hidden -translate-x-1/2 gap-2 md:flex" role="group" aria-label="Views">
