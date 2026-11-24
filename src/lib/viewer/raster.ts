@@ -1,7 +1,7 @@
 // Real-time view on three.js WebGPURenderer (falls back to WebGL2 by itself where WebGPU is missing).
 // It is the preview you drag; the path tracer takes over the moment you let go.
 import * as THREE from "three/webgpu";
-import { texture, uv, vec2, vec3, float, normalMap, normalize, uniform, mix, vertexColor, step, fwidth, clamp, length, normalWorldGeometry, atan, asin, cos, sin } from "three/tsl";
+import { texture, uv, vec2, vec3, float, normalMap, normalize, uniform, mix, vertexColor, step, fwidth, clamp, length, normalWorldGeometry, atan, asin, cos, sin, sqrt, max } from "three/tsl";
 import { PRINT_BACK, PRINT_FRONT, type Rect } from "./print";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
@@ -270,9 +270,29 @@ export class Raster {
     return m;
   }
   // skin: a little oil, and a soft warm fuzz at grazing angles where light goes into skin and comes back out
-  personSkin = this.painted({ roughness: 0.5, spec: 0.7, sheen: 1, sheenColor: [0.16, 0.07, 0.045] });
+  personSkin: THREE.MeshPhysicalNodeMaterial = this.painted({ roughness: 0.5, spec: 0.7, sheen: 1, sheenColor: [0.16, 0.07, 0.045] });
   personDenim = this.painted({ roughness: 0.85, spec: 0.5, sheen: 1, sheenColor: [0.035, 0.035, 0.04] });
   personEyes = this.painted({ roughness: 0.12, spec: 0.75 });
+  /**
+   * The person's skin from its two maps (pipeline/skin.py): colour, and relief + roughness (normal in R, G,
+   * roughness in B). The vertex colour, white on the skin, tints it.
+   */
+  private skinFrom(albedo: ImageBitmap, rn: ImageBitmap) {
+    const mk = (b: ImageBitmap, srgb: boolean) => {
+      const t = new THREE.Texture(b);
+      t.flipY = false; t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+      t.anisotropy = this.maxAniso; t.needsUpdate = true; return t;
+    };
+    const a = texture(mk(albedo, true)), r = texture(mk(rn, false));
+    const m = new THREE.MeshPhysicalNodeMaterial({ metalness: 0, specularIntensity: 0.7 });
+    m.colorNode = a.rgb.mul(vec3(vertexColor()));
+    m.roughnessNode = r.b;
+    const nx = r.r.mul(2).sub(1), ny = r.g.mul(2).sub(1);
+    m.normalNode = normalMap(vec3(r.r, r.g, sqrt(max(float(1).sub(nx.mul(nx)).sub(ny.mul(ny)), 0)).mul(0.5).add(0.5)));
+    // a soft warm fuzz at grazing angles, where light goes into skin and comes back out
+    m.sheen = 1; m.sheenRoughness = 0.5; m.sheenColor = new THREE.Color().setRGB(0.16, 0.07, 0.045, THREE.LinearSRGBColorSpace);
+    return m;
+  }
   stoolMat = new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0, color: new THREE.Color(0.05, 0.045, 0.04) });
 
   /**
@@ -284,6 +304,8 @@ export class Raster {
     const gl = this.gl;
     const glb = async (f: string) => gl.parseAsync(await (await grab(ASSET + f)).arrayBuffer(), ASSET + v.dir + "/");
     // everything at once (most of it is already downloading: the viewer started it before this code arrived)
+    // the person's skin maps sit beside its GLB: <name>-skin.webp (colour), <name>-skin-n.webp (relief, roughness)
+    const skinMapsP = v.person ? Promise.all([bitmap(v.person.replace(/\.glb$/, "-skin.webp")), bitmap(v.person.replace(/\.glb$/, "-skin-n.webp"))]).catch(() => null) : null;
     const [gltf, bodyGltf, [c0, o0], normalP, knitT] = await Promise.all([
       glb(`${v.dir}/${v.pose}.glb`),
       v.person ? grab(v.person).then(async (b) => gl.parseAsync(await b.arrayBuffer(), ASSET)) : v.body ? glb(`${v.dir}/body-${v.pose}.glb`) : Promise.resolve(null),
@@ -410,6 +432,8 @@ export class Raster {
         this.cloth = cloth;
       }).catch((e) => console.info("cloth off", e));
     }
+    const skinMaps = skinMapsP ? await skinMapsP : null;
+    if (skinMaps) this.personSkin = this.skinFrom(skinMaps[0], skinMaps[1]);
     if (bodyGltf) take(bodyGltf.scene, v.person ? "person" : "body");
     if (v.body && v.pose === "sit" && v.seat) {
       // a plain stool, its top where the simulation's seat was (Blender y forward -> three z back)
@@ -418,7 +442,10 @@ export class Raster {
       const grp = new THREE.Group(); grp.add(box); take(grp, "stool");
     }
     this.tris = I.length / 3;
-    return { pos: new Float32Array(P), nrm: new Float32Array(N), uv: new Float32Array(UV), idx: new Uint32Array(I), mat: new Uint8Array(M), col: new Float32Array(C) };
+    return {
+      pos: new Float32Array(P), nrm: new Float32Array(N), uv: new Float32Array(UV), idx: new Uint32Array(I), mat: new Uint8Array(M), col: new Float32Array(C),
+      skin: skinMaps ? { albedo: skinMaps[0], rn: skinMaps[1] } : undefined,
+    };
   }
 
   setCamera(c: Camera) {

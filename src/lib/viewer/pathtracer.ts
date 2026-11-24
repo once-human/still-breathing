@@ -4,8 +4,14 @@ import { TRACE_WGSL, SHOW_WGSL, DENOISE_WGSL } from "./pt.wgsl";
 import { buildBVHAsync } from "./bvh";
 import { CAMERA, VFOV, ASPECT, KNIT_REPEAT, cameraBasis, lightFrame, radiance, turnY, type Camera, type Scene, type V3 } from "./scene";
 
-/** col: linear albedo per vertex (the person's painted skin, denim, eyes); white elsewhere */
-export type TeeGeometry = { pos: Float32Array; nrm: Float32Array; uv: Float32Array; idx: Uint32Array; mat: Uint8Array; col?: Float32Array };
+/**
+ * col: linear albedo per vertex (the person's denim and eyes, a tint on the skin); white elsewhere.
+ * skin: the person's skin maps (pipeline/skin.py): colour, and relief + roughness (normal in R, G, roughness in B)
+ */
+export type TeeGeometry = {
+  pos: Float32Array; nrm: Float32Array; uv: Float32Array; idx: Uint32Array; mat: Uint8Array; col?: Float32Array;
+  skin?: { albedo: ImageBitmap; rn: ImageBitmap };
+};
 /** back: the back print, front: the chest print (both premultiplied, at print resolution) */
 export type TeeImages = { back: ImageBitmap; front: ImageBitmap; normal: ImageBitmap; knit: ImageBitmap };
 export type View = { yaw: number; crop: [number, number, number]; knit: boolean };
@@ -66,6 +72,8 @@ export class PathTracer {
   }
   private geo: { nodes: GPUBuffer; tris: GPUBuffer; triv: GPUBuffer; verts: GPUBuffer } | null = null;
   private tex: Record<string, GPUTexture> = {};
+  /** the person's skin maps (1 x 1 stand-ins without a person) */
+  private skinTex: GPUTexture[] = [];
   /** the venue's 360 degree picture (a 1 x 1 stand-in until it arrives, or where there is none) */
   private envTex: GPUTexture | null = null;
   private sampler!: GPUSampler;
@@ -142,6 +150,17 @@ export class PathTracer {
       this.device.queue.writeBuffer(b, 0, data.buffer, data.byteOffset, data.byteLength); return b;
     };
     this.geo = { nodes: up(new Float32Array(bvh.nodes)), tris: up(tris), triv: up(triv), verts: up(verts) };
+    for (const t of this.skinTex) t.destroy();
+    const img = (bmp: ImageBitmap | null, srgb: boolean, fill: number[]) => {
+      const t = this.device.createTexture({
+        size: bmp ? [bmp.width, bmp.height] : [1, 1], format: srgb ? "rgba8unorm-srgb" : "rgba8unorm",
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+      if (bmp) this.device.queue.copyExternalImageToTexture({ source: bmp }, { texture: t }, [bmp.width, bmp.height]);
+      else this.device.queue.writeTexture({ texture: t }, new Uint8Array(fill), {}, [1, 1]);
+      return t;
+    };
+    this.skinTex = [img(g.skin?.albedo ?? null, true, [255, 255, 255, 255]), img(g.skin?.rn ?? null, false, [128, 128, 128, 255])];
     this.traceBG = null;
     return { tris: n, nodes: bvh.nodeCount };
   }
@@ -285,6 +304,8 @@ export class PathTracer {
           { binding: 10, resource: this.tex.knit.createView() },
           { binding: 11, resource: { buffer: this.gbuf! } },
           { binding: 12, resource: this.envView() },
+          { binding: 13, resource: this.skinTex[0].createView() },
+          { binding: 14, resource: this.skinTex[1].createView() },
         ],
       });
     }

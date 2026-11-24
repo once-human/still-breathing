@@ -36,6 +36,8 @@ struct U {
 // first-hit guides for the denoiser, summed over samples: [normal.xyz, depth], [albedo.rgb, count]
 @group(0) @binding(11) var<storage, read_write> gbuf: array<vec4f>;
 @group(0) @binding(12) var texEnv: texture_2d<f32>;   // the place all round (equirect, sRGB), at a venue
+@group(0) @binding(13) var texSkin: texture_2d<f32>;  // the person's skin colour (sRGB)
+@group(0) @binding(14) var texSkinRN: texture_2d<f32>; // its relief (normal in r, g) and roughness (b)
 
 const PI = 3.14159265359;
 const INF = 1e30;
@@ -144,7 +146,8 @@ fn envAt(d: vec3f) -> vec3f {
 }
 
 // ---------- material ----------
-struct Surf { p: vec3f, n: vec3f, ng: vec3f, base: vec3f, rough: f32, sheen: f32, spec: f32 };
+// ns: the surface's own smooth normal (before any relief); sss: skin, whose light comes back out softened
+struct Surf { p: vec3f, n: vec3f, ng: vec3f, base: vec3f, rough: f32, sheen: f32, spec: f32, ns: vec3f, sss: f32 };
 
 fn hash3(p: vec3f) -> f32 { let q = fract(p * vec3f(0.1031, 0.1030, 0.0973)); let r = q + dot(q, q.yxz + 33.33); return fract((r.x + r.y) * r.z); }
 fn vnoise(x: vec3f) -> f32 {
@@ -174,6 +177,7 @@ fn teeSurf(h: Hit, ro: vec3f, rd: vec3f) -> Surf {
   let rdo = rotY(rd, c, -s);
   if (dot(ng, rdo) > 0.0) { ng = -ng; }
   if (dot(n, ng) < 0.0) { n = -n; }
+  let n0 = n;
   var S: Surf;
   S.p = ro + rd * h.t;
   let pObj = rotY(S.p, c, -s);
@@ -202,7 +206,19 @@ fn teeSurf(h: Hit, ro: vec3f, rd: vec3f) -> Surf {
     // someone wearing it: colour painted per vertex; 4 skin (a little oil), 5 denim, 6 eyes (wet)
     let k0 = verts[iv.x * 2u + 1u].yzw; let k1 = verts[iv.y * 2u + 1u].yzw; let k2 = verts[iv.z * 2u + 1u].yzw;
     S.base = k0 * w + k1 * h.b.x + k2 * h.b.y;
-    if (iv.w == 4u) { S.rough = 0.5; S.sheen = 0.0; S.spec = 0.028; }
+    if (iv.w == 4u) {
+      // skin: its maps (pipeline/skin.py) on the body's UVs, tangent frame as for the tee (T = dP/du, B = dP/dv)
+      let tR = textureSampleLevel(texSkinRN, samp, uv, 0.0);
+      S.base = S.base * textureSampleLevel(texSkin, samp, uv, 0.0).rgb;
+      let d1 = uv1 - uv0; let d2 = uv2 - uv0;
+      let r = 1.0 / (d1.x * d2.y - d1.y * d2.x + 1e-20);
+      var T = (e1 * d2.y - e2 * d1.y) * r; var B = (e2 * d1.x - e1 * d2.x) * r;
+      T = normalize(T - n * dot(n, T)); B = normalize(B - n * dot(n, B) - T * dot(T, B));
+      let nx = tR.r * 2.0 - 1.0; let ny = tR.g * 2.0 - 1.0;
+      let np = normalize(T * nx + B * ny + n * sqrt(max(1.0 - nx * nx - ny * ny, 0.0)));
+      n = select(n, np, dot(np, ng) > 0.02);
+      S.rough = tR.b; S.sheen = 0.0; S.spec = 0.028; S.sss = 1.0;
+    }
     else if (iv.w == 5u) { S.rough = 0.85; S.sheen = 0.35; S.spec = 0.02; }
     else { S.rough = 0.12; S.sheen = 0.0; S.spec = 0.03; }
   } else if (iv.w == 2u) {
@@ -211,12 +227,12 @@ fn teeSurf(h: Hit, ro: vec3f, rd: vec3f) -> Surf {
   } else {
     S.base = u.fabric; S.rough = 0.95; S.sheen = 0.35; S.spec = 0.02;
   }
-  S.n = rotY(n, c, s); S.ng = rotY(ng, c, s);
+  S.n = rotY(n, c, s); S.ng = rotY(ng, c, s); S.ns = rotY(n0, c, s);
   return S;
 }
 
 fn sweepSurf(h: Hit, ro: vec3f, rd: vec3f) -> Surf {
-  var S: Surf; S.p = ro + rd * h.t; S.n = sweepNormal(S.p); S.ng = S.n;
+  var S: Surf; S.p = ro + rd * h.t; S.n = sweepNormal(S.p); S.ng = S.n; S.ns = S.n;
   S.base = u.paper; S.rough = 0.95; S.sheen = 0.0; S.spec = 0.02;
   return S;
 }
@@ -232,7 +248,14 @@ fn bsdf(S: Surf, wo: vec3f, wi: vec3f) -> vec3f {
   let F = S.spec + (1.0 - S.spec) * pow(1.0 - vh, 5.0);
   let a = max(S.rough * S.rough, 0.002);
   let spec = ggxD(nh, a) * smithG1(nl, a) * smithG1(nv, a) * F / (4.0 * nl * nv);
-  let diff = S.base * (1.0 - S.spec) / PI;
+  var diff = S.base * (1.0 - S.spec) / PI;
+  if (S.sss > 0.0) {
+    // skin: light goes in and comes back out a few millimetres on, red the furthest. Red sees the body's smooth
+    // shape more than the fine relief, and wraps a little past the shadow line (energy-conserving wrap)
+    let nlc = mix(vec3f(nl), vec3f(max(dot(S.ns, wi), 0.0)), vec3f(0.75, 0.35, 0.12));
+    let w = vec3f(0.3, 0.1, 0.05);
+    diff = diff * clamp((nlc + w) / ((1.0 + w) * (1.0 + w)), vec3f(0.0), vec3f(1.0)) / max(nl, 0.05);
+  }
   // Charlie sheen, roughness 0.3, Neubelt visibility
   let ia = 1.0 / 0.3; let sh = sqrt(max(1.0 - nh * nh, 0.0));
   let Dc = (2.0 + ia) * pow(sh, ia) / (2.0 * PI);

@@ -1,12 +1,11 @@
 # blender -b --factory-startup -P stage.py -- <place> <out.exr> [strip strips] [samples] [width]
 # The places behind the person in the shop viewer, each one 360 degree picture rendered in Cycles:
-#   studio  a white cyclorama studio: coved floor and soft round corners, softboxes and their stands on the
-#           photographer's side, overhead panels on the grid lighting the cyc
-#   window  a living room in an Indian flat on a late afternoon: low sun through a wide sliding window, tiled floor,
-#           sofa, shelves, plants, a ceiling fan, the building across the road
-#   show    a dark hall and its stage: a low deck with an industrial backline, desk lamps, a row of white light bars,
-#           a big quiet screen, trusses of beams through haze, arched roof steel, the crowd, front of house behind
-# Built from boxes, planes and procedural materials here, nothing photographed.
+#   studio, window   the old built rooms; the viewer now uses real photographs of real rooms (photo_place.py)
+#   show    a night in the round in a Victorian exhibition hall: decks on a riser in the middle of the floor, a
+#           fabric canopy over the crowd lit from below, beams through haze, banks of LED walls showing the shop's
+#           own artworks, brick walls with tall arched windows under an iron-and-glass vault; the crowd is every
+#           fitted body (public/tee/fit) in its simulated tee, standing or with arms up, Indian skin and hair
+# Scanned surfaces (floor, brick) are Poly Haven textures (CC0), fetched once into ~/.cache/polyhaven.
 #
 # The picture is what the viewer's camera sees while it walks round the person: for every direction the ray starts
 # where that camera stands when it looks that way (2.86 m out, 1.1 m up, scene.ts WEAR_CAMERA), with its own
@@ -616,198 +615,348 @@ def build_window():
     SKY = True
 
 
+PH = os.path.expanduser("~/.cache/polyhaven")
+ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+
+
+def ph_tex(name, res="2k"):
+    """a Poly Haven texture (CC0, scanned): diffuse, GL normal and roughness maps, fetched once into ~/.cache/polyhaven"""
+    import json, urllib.request
+    d = os.path.join(PH, name); os.makedirs(d, exist_ok=True)
+    out, files = {}, None
+    for key, short in (("Diffuse", "diff"), ("nor_gl", "nor"), ("Rough", "rough")):
+        p = os.path.join(d, f"{short}_{res}.jpg")
+        if not os.path.exists(p):
+            if files is None:
+                files = json.load(urllib.request.urlopen(urllib.request.Request(
+                    f"https://api.polyhaven.com/files/{name}", headers={"User-Agent": "stage-builder"})))
+            url = files[key][res]["jpg"]["url"]
+            open(p, "wb").write(urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "stage-builder"})).read())
+        out[short] = p
+    return out
+
+
+def tex_mat(name, tex, size, tint=(1, 1, 1), rough_k=1.0, bump=1.0):
+    """a scanned surface, box-projected in world space, one texture tile every `size` metres"""
+    m, nt, p = node_mat(name)
+    tc = nt.nodes.new("ShaderNodeTexCoord"); mp = nt.nodes.new("ShaderNodeMapping")
+    mp.inputs["Scale"].default_value = (1 / size,) * 3; nt.links.new(tc.outputs["Object"], mp.inputs[0])
+    def img(path, data):
+        t = nt.nodes.new("ShaderNodeTexImage"); t.image = bpy.data.images.load(path, check_existing=True)
+        t.projection = "BOX"; t.projection_blend = 0.25
+        if data: t.image.colorspace_settings.name = "Non-Color"
+        nt.links.new(mp.outputs[0], t.inputs[0]); return t
+    nt.links.new(img(tex["diff"], False).outputs[0], p.inputs["Base Color"])
+    if tint != (1, 1, 1):
+        mx = nt.nodes.new("ShaderNodeMix"); mx.data_type = "RGBA"; mx.blend_type = "MULTIPLY"; mx.inputs["Factor"].default_value = 1.0
+        nt.links.new(p.inputs["Base Color"].links[0].from_socket, mx.inputs[6]); mx.inputs[7].default_value = (*tint, 1)
+        nt.links.new(mx.outputs[2], p.inputs["Base Color"])
+    r = img(tex["rough"], True); rm = nt.nodes.new("ShaderNodeMath"); rm.operation = "MULTIPLY"; rm.inputs[1].default_value = rough_k
+    nt.links.new(r.outputs[0], rm.inputs[0]); nt.links.new(rm.outputs[0], p.inputs["Roughness"])
+    nm = nt.nodes.new("ShaderNodeNormalMap"); nm.inputs["Strength"].default_value = bump
+    nt.links.new(img(tex["nor"], True).outputs[0], nm.inputs["Color"]); nt.links.new(nm.outputs[0], p.inputs["Normal"])
+    return m
+
+
+def screen_mat(name, art, strength):
+    """an LED wall showing one of the shop's artworks (pipeline/art): its lines glow, the rest is the screen's black"""
+    m = bpy.data.materials.new(name); m.use_nodes = True; nt = m.node_tree; nt.nodes.remove(nt.nodes["Principled BSDF"])
+    t = nt.nodes.new("ShaderNodeTexImage"); t.image = bpy.data.images.load(art, check_existing=True); t.extension = "CLIP"
+    e = nt.nodes.new("ShaderNodeEmission")
+    mx = nt.nodes.new("ShaderNodeMix"); mx.data_type = "RGBA"
+    nt.links.new(t.outputs["Alpha"], mx.inputs["Factor"]); mx.inputs[6].default_value = (0.004, 0.004, 0.005, 1)
+    nt.links.new(t.outputs["Color"], mx.inputs[7]); nt.links.new(mx.outputs[2], e.inputs[0]); e.inputs[1].default_value = strength
+    d = nt.nodes.new("ShaderNodeBsdfDiffuse"); d.inputs[0].default_value = (0.01, 0.01, 0.01, 1)
+    ad = nt.nodes.new("ShaderNodeAddShader"); nt.links.new(e.outputs[0], ad.inputs[0]); nt.links.new(d.outputs[0], ad.inputs[1])
+    nt.links.new(ad.outputs[0], nt.nodes["Material Output"].inputs[0])
+    return m
+
+
+def plane(c, w, h, m, face):
+    """an upright rectangle with UVs (0..1 across, 0..1 up), centre c, facing `face` (a level direction)"""
+    f = Vector(face).normalized(); rt = Vector((0, 0, 1)).cross(f).normalized()
+    me = bpy.data.meshes.new("pl"); hw, hh = rt * (w / 2), Vector((0, 0, h / 2)); c = Vector(c)
+    me.from_pydata([c - hw - hh, c + hw - hh, c + hw + hh, c - hw + hh], [], [(0, 1, 2, 3)])
+    uv = me.uv_layers.new(); [setattr(uv.data[i], "uv", q) for i, q in enumerate(((0, 0), (1, 0), (1, 1), (0, 1)))]
+    o = bpy.data.objects.new("pl", me); col.objects.link(o); me.materials.append(m); return o
+
+
+def crowd_materials():
+    """the people: Indian skin tones, dark hair, jeans or dark trousers, shoes, each person their own (Object Info
+    random, per instance); the tee in the shop's colours, most of the crowd in black"""
+    def ramp(nt, fac, stops, constant=False):
+        r = nt.nodes.new("ShaderNodeValToRGB"); nt.links.new(fac, r.inputs[0]); cr = r.color_ramp
+        if constant: cr.interpolation = "CONSTANT"
+        while len(cr.elements) < len(stops): cr.elements.new(0.5)
+        for el, (pos, c) in zip(cr.elements, stops): el.position = pos; el.color = (*c, 1)
+        return r.outputs[0]
+    def hashed(nt, rnd_out, k):
+        mu = nt.nodes.new("ShaderNodeMath"); mu.operation = "MULTIPLY"; mu.inputs[1].default_value = k
+        fr = nt.nodes.new("ShaderNodeMath"); fr.operation = "FRACT"
+        nt.links.new(rnd_out, mu.inputs[0]); nt.links.new(mu.outputs[0], fr.inputs[0]); return fr.outputs[0]
+    m, nt, p = node_mat("people")
+    oi = nt.nodes.new("ShaderNodeObjectInfo"); ca = nt.nodes.new("ShaderNodeVertexColor"); ca.layer_name = "mask"
+    sp = nt.nodes.new("ShaderNodeSeparateColor"); nt.links.new(ca.outputs["Color"], sp.inputs[0])
+    skin = ramp(nt, oi.outputs["Random"], [(0, (0.075, 0.03, 0.012)), (0.45, (0.2, 0.09, 0.04)), (1, (0.42, 0.21, 0.1))])
+    legs = ramp(nt, hashed(nt, oi.outputs["Random"], 7.31), [(0, (0.022, 0.03, 0.055)), (0.45, (0.01, 0.01, 0.012)), (0.75, (0.05, 0.055, 0.06)), (0.9, (0.16, 0.13, 0.08))], True)
+    hair = ramp(nt, hashed(nt, oi.outputs["Random"], 3.77), [(0, (0.008, 0.006, 0.005)), (0.85, (0.03, 0.018, 0.01))], True)
+    shoe = ramp(nt, hashed(nt, oi.outputs["Random"], 11.9), [(0, (0.012, 0.012, 0.012)), (0.6, (0.6, 0.6, 0.58)), (0.8, (0.08, 0.06, 0.05))], True)
+    c = mix_rgb(nt, sp.outputs[1], skin, legs); c = mix_rgb(nt, sp.outputs[0], c, hair); c = mix_rgb(nt, sp.outputs[2], c, shoe)
+    nt.links.new(c, p.inputs["Base Color"])
+    rough = nt.nodes.new("ShaderNodeMath"); rough.operation = "MULTIPLY_ADD"; rough.inputs[1].default_value = 0.35; rough.inputs[2].default_value = 0.5
+    nt.links.new(sp.outputs[1], rough.inputs[0]); nt.links.new(rough.outputs[0], p.inputs["Roughness"])
+    p.inputs["Sheen Weight"].default_value = 0.15
+    t, ntt, pt = node_mat("crowd tee")
+    oi2 = ntt.nodes.new("ShaderNodeObjectInfo")
+    tee = ramp(ntt, hashed(ntt, oi2.outputs["Random"], 2.13), [(0, (0.012, 0.012, 0.012)), (0.68, (0.62, 0.6, 0.55)), (0.84, (0.12, 0.12, 0.12)), (0.93, (0.07, 0.07, 0.04))], True)
+    ntt.links.new(tee, pt.inputs["Base Color"]); pt.inputs["Roughness"].default_value = 0.9; pt.inputs["Sheen Weight"].default_value = 0.4
+    return m, t
+
+
+def crowd_kinds():
+    """every fitted body (public/tee/fit: 19 bodies and sizes) standing and with arms up, each in its own simulated
+    tee, as collections to instance. The body gets a 'mask' (hair, legs, shoes) from where its vertices are."""
+    people, tee_m = crowd_materials()
+    fit = os.path.join(ROOT, "public", "tee", "fit")
+    kinds = {"stand": [], "up": []}
+    for v in sorted(os.listdir(fit)):
+        if v.startswith("form") or not os.path.exists(os.path.join(fit, v, "body-stand.glb")): continue
+        for pose in kinds:
+            k = bpy.data.collections.new(f"{v}-{pose}")
+            for f, m in ((f"body-{pose}.glb", people), (f"{pose}.glb", tee_m)):
+                before = set(bpy.data.objects); bpy.ops.import_scene.gltf(filepath=os.path.join(fit, v, f))
+                new = set(bpy.data.objects) - before
+                for o in new:
+                    if o.type != "MESH": continue
+                    o.data = o.data.copy(); o.data.transform(o.matrix_world); o.parent = None; o.matrix_world = Matrix()
+                    for c in list(o.users_collection): c.objects.unlink(o)
+                    k.objects.link(o); o.data.materials.clear(); o.data.materials.append(m)
+                    b = bmesh.new(); b.from_mesh(o.data)
+                    if m is tee_m:   # the sim's few stretched triangles at the armpits: drop them
+                        bmesh.ops.delete(b, geom=[e for e in b.edges if e.calc_length() > 0.03], context="EDGES")
+                        b.to_mesh(o.data); b.free(); o.data.shade_smooth(); continue
+                    b.free()
+                    vs = [vv.co for vv in o.data.vertices]
+                    top = max(c.z for c in vs if abs(c.x) < 0.12)
+                    front = min(c.y for c in vs if c.z > top - 0.25 and abs(c.x) < 0.1)
+                    s = top / 1.71
+                    a = o.data.color_attributes.new("mask", "FLOAT_COLOR", "POINT")
+                    for i, c in enumerate(vs):
+                        hairy = abs(c.x) < 0.125 and (c.z > top - 0.075 or (c.z > top - 0.17 and c.y > front + 0.075) or (c.z > top - 0.21 and c.y > front + 0.12))
+                        legs = 0.085 < c.z < 0.57 * top and abs(c.x) < 0.22 * s
+                        a.data[i].color = (float(hairy), float(legs), float(c.z <= 0.085), 1)
+                    o.data.shade_smooth()
+                for o in new:
+                    if o.type != "MESH": bpy.data.objects.remove(o)
+            kinds[pose].append(k)
+    return kinds
+
+
+def instance(k, x, y, rot, s=1.0):
+    e = bpy.data.objects.new("p", None); e.instance_type = "COLLECTION"; e.instance_collection = k
+    e.location = (x, y, 0); e.rotation_euler = (0, 0, rot); e.scale = (s, s, s); col.objects.link(e); return e
+
+
+def facing(x, y, tx, ty):
+    """the turn that points a body's face (its -Y) from (x, y) to (tx, ty)"""
+    return math.atan2(tx - x, -(ty - y))
+
+
 def build_show():
-    """The show (the picture the viewer has had since the start), with arched roof steel and rows of light battens
-    over the crowd, and the hard front lights the person is lit by placed where they really hang."""
+    """A night in the round in a Victorian exhibition hall (after the shape of Fred again.. and Thomas Bangalter at
+    Alexandra Palace, London: decks in the middle of the floor, the crowd all round, a fabric canopy over it all
+    taking the colour of the lights, banks of screens on the walls). Here the screens show the shop's own artworks.
+    The person is in the crowd a few metres from the decks; the hard front lights they are lit by hang over them."""
     global ZC
     M_BLACK = mat("black", (0.012, 0.012, 0.012), 0.85)
-    M_FLOOR = mat("floor", (0.035, 0.034, 0.032), 0.32)               # sealed concrete: a soft sheen of the stage
+    M_FLOOR = tex_mat("floor", ph_tex("concrete_floor_worn_001"), 3.0, tint=(0.35, 0.35, 0.35), rough_k=0.75)
+    M_BRICK = tex_mat("brick", ph_tex("large_red_bricks"), 2.5, tint=(0.45, 0.42, 0.4), bump=0.8)
     M_STAGE = mat("stage", (0.02, 0.02, 0.02), 0.55)
     M_CASE = mat("case", (0.025, 0.025, 0.026), 0.45)
     M_ALU = mat("alu", (0.6, 0.6, 0.62), 0.35, metal=1.0)
     M_TRUSS = mat("truss", (0.35, 0.35, 0.37), 0.4, metal=1.0)
-    M_CLOTH = mat("crowd", (0.03, 0.028, 0.027), 0.8)
-    M_SKIN = mat("skin", (0.12, 0.07, 0.045), 0.5)
+    M_IRON = mat("iron", (0.05, 0.05, 0.055), 0.5, metal=0.6)
+    M_GLASS = mat("night glass", (0.01, 0.012, 0.02), 0.08, emit=(0.08, 0.12, 0.25), strength=0.015)
     M_WOOD = mat("desk", (0.06, 0.04, 0.03), 0.5)
     M_SHADE = mat("shade", (0.05, 0.05, 0.05), 0.4, metal=0.6)
     M_BULB = emission("bulb", (1.0, 0.62, 0.3), 60)
     M_PHONE = emission("phone", (0.82, 0.88, 1.0), 2.2)
     M_EXIT = emission("exit", (0.15, 1.0, 0.35), 3.0)
-    M_TUBE = emission("tube", (0.9, 0.94, 1.0), 9.0)
-    M_BATTEN = emission("batten", (1.0, 0.8, 0.6), 1.6)
+    M_LCD = emission("lcd", (0.55, 0.7, 1.0), 0.9)
 
-    HX, Y0, Y1, HZ = 22.0, -26.0, 38.0, 17.0
+    HX, Y0, Y1, HZ = 22.0, -40.0, 36.0, 18.0
+    SPRING = 11.0                                                     # where the roof's arches spring from the walls
     ZC = HZ
+    CX, CY = 0.0, -12.6                                               # the decks, in the middle of the floor
     surf(lambda u, v: Vector((-HX + u * 2 * HX, Y0 + v * (Y1 - Y0), 0)), 1, 1, M_FLOOR, False)
-    box(0, (Y0 + Y1) / 2, HZ + 0.2, 2 * HX, Y1 - Y0, 0.4, M_BLACK)            # ceiling
-    box(-HX - 0.2, (Y0 + Y1) / 2, HZ / 2, 0.4, Y1 - Y0, HZ, M_BLACK)           # side walls
-    box(HX + 0.2, (Y0 + Y1) / 2, HZ / 2, 0.4, Y1 - Y0, HZ, M_BLACK)
-    box(0, Y0 - 0.2, HZ / 2, 2 * HX, 0.4, HZ, M_BLACK)                         # behind the stage
-    box(0, Y1 + 0.2, HZ / 2, 2 * HX, 0.4, HZ, M_BLACK)                         # back of the hall
-    # the roof: iron arches across the hall every 8 m, springing from the walls (a Victorian exhibition hall),
-    # with purlins along it; they only show where the haze is lit
+    # the long brick walls with tall arched windows between the arches (night outside), the end walls
+    for side in (-1, 1):
+        box(side * (HX + 0.3), (Y0 + Y1) / 2, SPRING / 2, 0.6, Y1 - Y0, SPRING, M_BRICK)
+        for y in range(int(Y0) + 8, int(Y1) - 3, 8):
+            yc = y - 4
+            for (z0, z1) in ((5.2, 9.6),):
+                box(side * (HX - 0.02), yc, (z0 + z1) / 2, 0.04, 2.6, z1 - z0, M_GLASS)
+                surf(lambda u, v, yc=yc: Vector((side * (HX - 0.01), yc - 1.3 * math.cos(math.pi * u), 9.6 + 1.3 * math.sin(math.pi * u) * v)), 12, 1, M_GLASS, False)
+                for k in range(1, 4):                                 # glazing bars
+                    box(side * (HX - 0.06), yc - 1.3 + k * 0.65, (z0 + z1) / 2 + 0.6, 0.05, 0.05, z1 - z0 + 1.2, M_IRON)
+                for zz in (6.6, 8.1):
+                    box(side * (HX - 0.06), yc, zz, 0.05, 2.6, 0.05, M_IRON)
+    for y in (Y0, Y1):
+        box(0, y + (0.3 if y == Y1 else -0.3), HZ / 2, 2 * HX, 0.6, HZ, M_BRICK)
+    # the roof: a barrel vault of iron arches every 8 m with purlins; dark glass between them
     for y in range(int(Y0) + 4, int(Y1), 8):
         prev = None
         for k in range(25):
             t = math.pi * k / 24
-            pt = Vector((HX * math.cos(t), y, 10.5 + (HZ - 0.6 - 10.5) * math.sin(t)))
+            pt = Vector((HX * math.cos(t), y, SPRING + (HZ - 0.6 - SPRING) * math.sin(t)))
             if prev is not None:
-                cyl(prev, pt, 0.18, M_TRUSS, 8)
-                cyl(prev + Vector((0, 0, -0.9)), pt + Vector((0, 0, -0.9 * (0.4 + 0.6 * math.sin(t)))), 0.05, M_TRUSS, 6)
+                cyl(prev, pt, 0.18, M_IRON, 8)
+                cyl(prev + Vector((0, 0, -0.9)), pt + Vector((0, 0, -0.9 * (0.4 + 0.6 * math.sin(t)))), 0.05, M_IRON, 6)
             prev = pt
-    for x in (-15, -8, 0, 8, 15):
-        z = 10.5 + (HZ - 0.6 - 10.5) * math.sin(math.acos(x / HX))
-        cyl((x, Y0, z), (x, Y1, z), 0.08, M_TRUSS, 6)
+    for x in (-18, -12, -6, 0, 6, 12, 18):
+        z = SPRING + (HZ - 0.6 - SPRING) * math.sin(math.acos(x / HX))
+        cyl((x, Y0, z), (x, Y1, z), 0.08, M_IRON, 6)
+    surf(lambda u, v: Vector((HX * math.cos(math.pi * u), Y0 + v * (Y1 - Y0), SPRING + (HZ - SPRING) * math.sin(math.pi * u))), 48, 1, M_GLASS)
 
-    # ---------- the stage: low deck, backline of flight cases, a long desk with lamps ----------
-    SY0, SY1, SZ = -11.5, -19.5, 1.4
-    box(0, (SY0 + SY1) / 2, SZ / 2, 22, SY0 - SY1, SZ, M_STAGE)
-    box(0, SY0 + 0.05, SZ / 2, 22, 0.1, SZ, M_BLACK)                  # the dark stage front
-    for x in range(-11, 12):                                          # barrier in front of the stage
-        box(x, SY0 + 1.6, 0.55, 0.96, 0.08, 1.1, M_ALU)
-    box(0, -14.2, SZ + 0.45, 3.4, 0.9, 0.9, M_WOOD)                   # the desk, small screens and pads glow faintly
-    for i, x in enumerate((-1.2, -0.45, 0.35, 1.1)):
-        box(x, -14.0, SZ + 0.93, 0.5, 0.35, 0.05, M_CASE)
-        box(x, -14.1, SZ + 0.97, 0.38, 0.22, 0.01, emission(f"pad{i}", (1.0, 0.55, 0.25) if i % 2 else (0.85, 0.9, 1.0), 1.5))
-    for side in (-1, 1):                                              # backline: stacks of flight cases
-        for k in range(5):
-            x = side * (3.2 + k * 1.45 + rnd.uniform(-0.15, 0.15))
-            h = 0
-            for j in range(rnd.randint(1, 3)):
-                sz = rnd.uniform(0.6, 1.1); sx = rnd.uniform(1.0, 1.35)
-                box(x, -16.8 + rnd.uniform(-0.6, 0.6), SZ + h + sz / 2, sx, 0.9, sz, M_CASE)
-                for zz in (h, h + sz):
-                    box(x, -16.8 + 0.46, SZ + zz, sx + 0.02, 0.03, 0.03, M_ALU)
-                h += sz
-    LAMPS = [(-1.55, -14.4, SZ + 0.9), (1.55, -14.3, SZ + 0.9), (-5.1, -16.4, SZ + 1.9), (4.6, -16.2, SZ + 2.2), (-8.0, -16.5, SZ + 1.3), (7.9, -16.6, SZ + 1.6)]
-    for i, (x, y, z) in enumerate(LAMPS):                             # desk lamps: warm bulbs under small shades
-        cyl((x, y, z), (x, y, z + 0.45), 0.012, M_SHADE)
-        cyl((x, y + 0.01, z + 0.56), (x, y + 0.09, z + 0.42), 0.06, M_SHADE, 24, r2=0.16)
-        sphere((x, y + 0.08, z + 0.44), 0.045, M_BULB)
-        light("POINT", (x, y + 0.1, z + 0.4), None, 40, (1.0, 0.6, 0.3), size=0.05)
+    # ---------- the decks: a low square riser in the middle of the floor, a barrier round it ----------
+    D, DZ = 2.8, 1.1
+    box(CX, CY, DZ / 2, 2 * D, 2 * D, DZ, M_STAGE)
+    for side in (-1, 1):
+        for k in range(-5, 6):
+            box(CX + k * 0.98, CY + side * (D + 1.3), 0.55, 0.96, 0.08, 1.1, M_ALU)
+            box(CX + side * (D + 1.3), CY + k * 0.98, 0.55, 0.08, 0.96, 1.1, M_ALU)
+    box(CX, CY, DZ + 0.45, 3.0, 0.9, 0.9, M_WOOD)                     # the table: decks and a mixer, lamps on it
+    for i, x in enumerate((-1.05, -0.35, 0.35, 1.05)):
+        box(CX + x, CY, DZ + 0.93, 0.5, 0.35, 0.05, M_CASE)
+        box(CX + x, CY - 0.05, DZ + 0.97, 0.36, 0.2, 0.01, emission(f"pad{i}", (1.0, 0.55, 0.25) if i % 2 else (0.85, 0.9, 1.0), 1.5))
+    for (x, y) in ((-1.5, -0.3), (1.5, 0.3)):
+        cyl((CX + x, CY + y, DZ + 0.9), (CX + x, CY + y, DZ + 1.35), 0.012, M_SHADE)
+        cyl((CX + x, CY + y + 0.01, DZ + 1.46), (CX + x, CY + y + 0.09, DZ + 1.32), 0.06, M_SHADE, 24, r2=0.16)
+        sphere((CX + x, CY + y + 0.08, DZ + 1.34), 0.045, M_BULB)
+        light("POINT", (CX + x, CY + y + 0.1, DZ + 1.3), None, 40, (1.0, 0.6, 0.3), size=0.05)
+    for y in (CY - 1.8, CY + 1.8):                                    # flight cases at the riser's ends
+        box(CX - 2.1, y, DZ + 0.45, 0.9, 0.7, 0.9, M_CASE); box(CX + 2.0, y, DZ + 0.35, 1.0, 0.7, 0.7, M_CASE)
 
-    # the screen: a big, quiet field of warm light (no picture on it), brighter in the middle, dim at the edges
-    SCR_Y, SCR_W, SCR_H, SCR_Z = -19.9, 15.0, 8.4, 4.2
-    bpy.ops.mesh.primitive_plane_add(size=1, location=(0, SCR_Y, SCR_Z + SCR_H / 2), rotation=(math.radians(90), 0, 0))
-    scr = bpy.context.object; scr.scale = (SCR_W, SCR_H, 1)
-    m = bpy.data.materials.new("screen"); m.use_nodes = True; nt = m.node_tree; nt.nodes.remove(nt.nodes["Principled BSDF"])
-    tc = nt.nodes.new("ShaderNodeTexCoord"); sep = nt.nodes.new("ShaderNodeSeparateXYZ"); nt.links.new(tc.outputs["UV"], sep.inputs[0])
-    mu = nt.nodes.new("ShaderNodeMath"); mu.operation = "SUBTRACT"; mu.inputs[1].default_value = 0.5; nt.links.new(sep.outputs[0], mu.inputs[0])
-    mv = nt.nodes.new("ShaderNodeMath"); mv.operation = "SUBTRACT"; mv.inputs[1].default_value = 0.45; nt.links.new(sep.outputs[1], mv.inputs[0])
-    pu = nt.nodes.new("ShaderNodeMath"); pu.operation = "MULTIPLY"; nt.links.new(mu.outputs[0], pu.inputs[0]); nt.links.new(mu.outputs[0], pu.inputs[1])
-    pv = nt.nodes.new("ShaderNodeMath"); pv.operation = "MULTIPLY"; nt.links.new(mv.outputs[0], pv.inputs[0]); nt.links.new(mv.outputs[0], pv.inputs[1])
-    su = nt.nodes.new("ShaderNodeMath"); su.operation = "MULTIPLY_ADD"; su.inputs[1].default_value = 1.6; nt.links.new(pu.outputs[0], su.inputs[0])
-    sv = nt.nodes.new("ShaderNodeMath"); sv.operation = "MULTIPLY"; sv.inputs[1].default_value = 2.4; nt.links.new(pv.outputs[0], sv.inputs[0]); nt.links.new(sv.outputs[0], su.inputs[2])
-    fa = nt.nodes.new("ShaderNodeMath"); fa.operation = "SUBTRACT"; fa.inputs[0].default_value = 1.0; fa.use_clamp = True; nt.links.new(su.outputs[0], fa.inputs[1])
-    st = nt.nodes.new("ShaderNodeMath"); st.operation = "MULTIPLY_ADD"; st.inputs[1].default_value = 0.55; st.inputs[2].default_value = 0.04; nt.links.new(fa.outputs[0], st.inputs[0])
-    em = nt.nodes.new("ShaderNodeEmission"); em.inputs[0].default_value = (1.0, 0.86, 0.72, 1); nt.links.new(st.outputs[0], em.inputs[1])
-    nt.links.new(em.outputs[0], nt.nodes["Material Output"].inputs[0])
-    add(scr, m)
-    box(0, SCR_Y - 0.15, SCR_Z + SCR_H / 2, SCR_W + 0.4, 0.2, SCR_H + 0.4, M_BLACK)   # its frame
+    def ring_truss(r, z, n=48):
+        pts = [Vector((CX + r * math.cos(2 * math.pi * i / n), CY + r * math.sin(2 * math.pi * i / n), z)) for i in range(n + 1)]
+        for dz in (-0.2, 0.2):
+            for dr in (-0.2, 0.2):
+                for a_, b_ in zip(pts, pts[1:]):
+                    ka = (r + dr) / r
+                    cyl(Vector((CX, CY, 0)) + (a_ - Vector((CX, CY, a_.z))) * ka + Vector((0, 0, z + dz)),
+                        Vector((CX, CY, 0)) + (b_ - Vector((CX, CY, b_.z))) * ka + Vector((0, 0, z + dz)), 0.025, M_TRUSS, 6)
+        for i in range(0, n, 6):                                      # chain hoists up to the roof
+            cyl(pts[i] + Vector((0, 0, 0.2)), pts[i] + Vector((0, 0, HZ - 1.2 - z)), 0.01, M_TRUSS, 6)
+        return pts
 
-    for i in range(14):                                              # a row of plain white tubes across the back
-        x = -9.75 + i * 1.5
-        cyl((x, -18.2, SZ), (x, -18.2, SZ + 2.6), 0.03, M_TUBE, 10)
-    light("AREA", (0, -18.0, SZ + 1.3), (0, -10, SZ + 1.3), 300, (0.9, 0.93, 1.0), size=2)
+    TZ = 10.0
+    pts = ring_truss(6.0, TZ)
+    cyl((CX - 6, CY, TZ), (CX + 6, CY, TZ), 0.06, M_TRUSS, 8)         # a bar across it for the front lights
+    for i in range(16):                                               # moving heads all round: beams out over the crowd
+        a_ = 2 * math.pi * (i + 0.5) / 16
+        p = Vector((CX + 6 * math.cos(a_), CY + 6 * math.sin(a_), TZ - 0.6))
+        cyl(p + Vector((0, 0, 0.35)), p, 0.14, M_CASE, 16)
+        far = rnd.uniform(9, 22)
+        tgt = (CX + far * math.cos(a_ + rnd.uniform(-0.3, 0.3)), CY + far * math.sin(a_ + rnd.uniform(-0.3, 0.3)), rnd.uniform(0, 1.5) if i % 3 else rnd.uniform(10, 16))
+        light("SPOT", p, tgt, 9000, (0.88, 0.92, 1.0), size=0.05, spot=3.5, blend=0.25)
+    for i in range(8):                                                # warm washes up into the canopy
+        a_ = 2 * math.pi * i / 8
+        p = Vector((CX + 5.6 * math.cos(a_), CY + 5.6 * math.sin(a_), TZ + 0.3))
+        light("SPOT", p, (CX + 11 * math.cos(a_), CY + 11 * math.sin(a_), 14), 5000, (1.0, 0.42, 0.14), size=0.15, spot=55, blend=0.7)
+    for i in range(12):                                               # and down onto the crowd round the decks
+        a_ = 2 * math.pi * (i + 0.25) / 12
+        p = Vector((CX + 6.2 * math.cos(a_), CY + 6.2 * math.sin(a_), TZ - 0.4))
+        light("SPOT", p, (CX + 9 * math.cos(a_), CY + 9 * math.sin(a_), 0), 1500, (1.0, 0.62, 0.32), size=0.1, spot=40, blend=0.6)
 
-    def truss(y, z, x0, x1):
-        s = 0.2
-        for dy in (-s, s):
-            for dz in (-s, s):
-                cyl((x0, y + dy, z + dz), (x1, y + dy, z + dz), 0.025, M_TRUSS, 8)
-        n = int((x1 - x0) / 0.5)
-        for i in range(n):
-            xa, xb = x0 + i * 0.5, x0 + (i + 1) * 0.5
-            cyl((xa, y - s, z - s), (xb, y - s, z + s), 0.012, M_TRUSS, 6)
-            cyl((xa, y + s, z - s), (xb, y + s, z + s), 0.012, M_TRUSS, 6)
-        for x in (x0, x1):                                            # chain hoists up to the roof
-            cyl((x, y, z + s), (x, y, HZ - 0.9), 0.01, M_TRUSS, 6)
+    # the canopy: a huge pale textile hung over the floor, billowing, lit from below
+    vm = bpy.data.materials.new("canopy"); vm.use_nodes = True; nt = vm.node_tree; nt.nodes.remove(nt.nodes["Principled BSDF"])
+    tl = nt.nodes.new("ShaderNodeBsdfTranslucent"); tl.inputs[0].default_value = (0.75, 0.72, 0.68, 1)
+    df = nt.nodes.new("ShaderNodeBsdfDiffuse"); df.inputs[0].default_value = (0.8, 0.78, 0.74, 1)
+    tr = nt.nodes.new("ShaderNodeBsdfTransparent")
+    m1 = nt.nodes.new("ShaderNodeMixShader"); m1.inputs[0].default_value = 0.5; nt.links.new(df.outputs[0], m1.inputs[1]); nt.links.new(tl.outputs[0], m1.inputs[2])
+    m2 = nt.nodes.new("ShaderNodeMixShader"); m2.inputs[0].default_value = 0.35; nt.links.new(m1.outputs[0], m2.inputs[1]); nt.links.new(tr.outputs[0], m2.inputs[2])
+    nt.links.new(m2.outputs[0], nt.nodes["Material Output"].inputs[0])
+    def canopy(u, v):
+        x = CX + (u - 0.5) * 30; y = CY + (v - 0.5) * 40
+        sag = 1.6 * math.sin(math.pi * u) * math.sin(math.pi * v)
+        wave = 0.7 * math.sin(3.1 * u * math.pi + 1.3 * v) * math.sin(2.2 * v * math.pi + 0.4) + 0.35 * math.sin(7.3 * u + 5.1 * v)
+        return Vector((x, y, 14.2 - sag + wave))
+    surf(canopy, 90, 120, vm)
 
-    TZ = 10.5
-    truss(-12.6, TZ, -11.5, 11.5)
-    truss(-18.6, TZ + 0.8, -11.5, 11.5)
-    for i in range(9):                                                 # moving heads on the front truss
-        x = -10 + i * 2.5
-        cyl((x, -12.6, TZ - 0.25), (x, -12.6, TZ - 0.6), 0.14, M_CASE, 16)
-        tgt = (x * 0.55 + rnd.uniform(-2.5, 2.5), rnd.uniform(-9, 4), 0) if i % 2 == 0 else (x * 2.2, rnd.uniform(4, 18), rnd.uniform(9, 15))
-        light("SPOT", (x, -12.6, TZ - 0.65), tgt, 9000, (0.88, 0.92, 1.0), size=0.05, spot=3.5, blend=0.25)
-    for i in range(7):                                                 # warm pars from the back truss onto the backline
-        x = -9 + i * 3
-        cyl((x, -18.6, TZ + 0.55), (x, -18.6, TZ + 0.2), 0.12, M_CASE, 16)
-        light("SPOT", (x, -18.6, TZ + 0.15), (x * 0.8, -15.5, SZ), 1800, (1.0, 0.58, 0.28), size=0.1, spot=24, blend=0.5)
-    for side in (-1, 1):                                               # low cool washes from the stage floor
-        light("SPOT", (side * 10.5, -14.5, SZ + 0.4), (side * 2, -15, 4), 1500, (0.8, 0.86, 1.0), size=0.1, spot=30, blend=0.6)
-    # the hard front lights the person in the viewer is lit by (scene.ts "show"), as real fixtures where they hang:
-    # a warm par on the front truss's end, a cool head over the barrier, a follow spot on a side tower
+    # ---------- banks of screens on the walls, showing the shop's artworks ----------
+    arts = [os.path.join(ROOT, "pipeline", "art", p) for p in ("art-c-crowd/art-black.png", "art-crowd-tour/art-black.png",
+            "art-c-breath/art-black.png", "art-b-lines/art-black-al3.png", "art-a-map/art-black-al3.png", "art-d-map/art-cream.png")]
+    sm = [screen_mat(f"screen{i}", a_, 2.6) for i, a_ in enumerate(arts)]
+    SW, SH = 6.6, 8.8                                                 # portrait LED walls, the artworks' 3:4
+    for i, x in enumerate((-13.5, -6.75, 0.0, 6.75, 13.5)):          # the far end, behind the person
+        plane((x, Y1 - 0.05, 2.6 + SH / 2), SW, SH, sm[i % len(sm)], (0, -1, 0))
+        box(x, Y1 - 0.0, 2.6 + SH / 2, SW + 0.25, 0.08, SH + 0.25, M_CASE)
+    for i, x in enumerate((-10, 0, 10)):                             # the other end, beyond the decks
+        plane((x, Y0 + 0.05, 2.6 + SH / 2), SW, SH, sm[(i + 2) % len(sm)], (0, 1, 0))
+        box(x, Y0, 2.6 + SH / 2, SW + 0.25, 0.08, SH + 0.25, M_CASE)
+    for side in (-1, 1):                                              # along the long walls, under the windows
+        for j, y in enumerate(range(int(Y0) + 8, int(Y1) - 3, 8)):
+            plane((side * (HX - 0.08), y - 4, 3.6), 2.25, 3.0, sm[(j + (side > 0) * 3) % len(sm)], (-side, 0, 0))
+
+    # ---------- front of house: a riser in the crowd behind the person, its desk and the light over it ----------
+    FX, FY = 0.0, 5.8
+    box(FX, FY, 0.3, 4.4, 2.6, 0.6, M_CASE)
+    box(FX, FY - 0.4, 0.6 + 0.45, 3.6, 0.9, 0.9, M_CASE)
+    for i, x in enumerate((-1.3, -0.45, 0.45, 1.3)):
+        box(FX + x, FY - 0.5, 1.53, 0.7, 0.03, 0.42, M_LCD if i % 2 else emission(f"lcd{i}", (1.0, 0.78, 0.55), 0.7), rot=0.0)
+    for x in (-2.3, 2.3):
+        for y in (3.6, 7.0):
+            cyl((FX + x, y, 0), (FX + x, y, 3.55), 0.05, M_TRUSS, 8)
+    for y in (3.6, 7.0):
+        cyl((FX - 2.3, y, 3.5), (FX + 2.3, y, 3.5), 0.06, M_TRUSS, 8)
+    for x in (-2.3, 2.3):
+        cyl((FX + x, 3.6, 3.5), (FX + x, 7.0, 3.5), 0.06, M_TRUSS, 8)
+    for side in (-1, 1):                                              # the house: lamps along the walls, exit signs
+        for y in range(int(Y0) + 6, int(Y1), 8):
+            light("POINT", (side * (HX - 0.6), y, 2.6), None, 10, (1.0, 0.55, 0.28), size=0.1)
+        box(side * (HX - 0.05), Y1 - 4, 3.0, 0.04, 0.45, 0.2, M_EXIT)
+
+    # the hard front lights the person in the viewer is lit by (scene.ts "show"), as real fixtures where they hang
     for name, pos3, size, power, tint in SHOW_LIGHTS:
-        if name == "foh": continue
         p = three(pos3)
         cyl(p + Vector((0, 0, 0.35)), p, 0.16, M_CASE, 16)
-        # the same light on the crowd around the person (a spot as wide as the patch the viewer's light paints)
         light("SPOT", p, (0, 0, 1.0), power * 4, tint, size=max(size) / 2, spot=16, blend=0.6)
         if name == "spot":   # its tower: a truss leg from the floor
             for dx in (-0.2, 0.2):
                 for dy in (-0.2, 0.2): cyl((p.x + dx, p.y + dy, 0), (p.x + dx, p.y + dy, p.z + 0.2), 0.025, M_TRUSS, 6)
-    # rows of warm light battens across the hall over the crowd, dimmed right down: lines in the haze
-    for y in range(-9, 19, 4):
-        for k in range(6):
-            x0 = -13.5 + k * 4.6
-            cyl((x0, y, 9.2), (x0 + 3.8, y, 9.2), 0.035, M_BATTEN, 8)
-        cyl((-14, y, 9.28), (14, y, 9.28), 0.02, M_TRUSS, 6)
-    for (x, y) in ((-9, -2), (9, 6), (0, 16), (-6, 26), (7, 26)):     # house lights, nearly out
-        light("POINT", (x, y, HZ - 1.2), None, 120, (1.0, 0.62, 0.34), size=0.3)
 
-    # ---------- front of house, behind the person: the desk, follow spots on a truss, the balcony ----------
-    FOH_Y = 21.0
-    box(0, FOH_Y, 0.5, 6, 3, 1.0, M_CASE)
-    box(0, FOH_Y + 1.2, 1.4, 6, 0.6, 1.8, M_CASE)
-    for i, x in enumerate((-2.2, -1.1, 0.0, 1.1, 2.2)):
-        box(x, FOH_Y - 0.3, 1.08, 0.7, 0.45, 0.02, emission(f"desk{i}", (0.55, 0.7, 1.0) if i % 2 else (1.0, 0.78, 0.55), 0.8))
-    for x in (-2.6, 2.6):
-        light("POINT", (x, FOH_Y - 0.5, 1.6), None, 12, (1.0, 0.62, 0.32), size=0.04)
-    truss(FOH_Y - 3, 9.5, -8, 8)
-    for x in (-5.5, 5.5):                                              # FOH spots: they light the crowd from behind
-        cyl((x, FOH_Y - 3, 9.2), (x, FOH_Y - 3.6, 8.9), 0.16, M_CASE, 16)
-        light("SPOT", (x, FOH_Y - 3.7, 8.85), (x * 0.3, -2, 1.2), 2400, (1.0, 0.86, 0.7), size=0.08, spot=9, blend=0.4)
-    box(0, 31, 5.2, 2 * HX, 1.2, 1.0, M_CASE)                          # balcony front, its lamps, exit signs
-    for x in range(-20, 21, 4):
-        light("POINT", (x, 30.3, 5.9), None, 6, (1.0, 0.6, 0.3), size=0.05)
-    for x in (-17, 17):
-        box(x, Y1 - 0.05, 3.2, 0.45, 0.04, 0.2, M_EXIT)
-    for side in (-1, 1):
-        for y in range(-6, 34, 8):
-            light("POINT", (side * (HX - 0.5), y, 5.5), None, 8, (1.0, 0.55, 0.28), size=0.1)
-
-    def person(x, y, h, face, arms):
-        s = h / 1.72
-        fx, fy = math.cos(face), math.sin(face)
-        rx, ry = -fy, fx
-        cyl((x, y, 0), (x, y, 1.42 * s), 0.19 * s, M_CLOTH, 10)
-        sphere((x, y, 1.58 * s), 0.105 * s, M_SKIN)
-        if arms:
-            for side in (-1, 1):
-                sh = Vector((x + side * 0.2 * s * rx, y + side * 0.2 * s * ry, 1.38 * s))
-                out, fwd = rnd.uniform(0.05, 0.3), rnd.uniform(0.0, 0.2)
-                hand = sh + Vector((side * out * rx + fwd * fx, side * out * ry + fwd * fy, rnd.uniform(0.55, 0.68) * s))
-                cyl(sh, hand, 0.045 * s, M_CLOTH, 6)
-
-    phones = 0
-    for (ya, yb, xa, xb, n) in ((-10.6, -3.6, -12, 12, 230), (3.8, 18.5, -16, 16, 420), (-3.6, 3.8, -16, -4.5, 60), (-3.6, 3.8, 4.5, 16, 60)):
-        for _ in range(n):
-            x, y = rnd.uniform(xa, xb), rnd.uniform(ya, yb)
-            if math.hypot(x, y) < 4.2: continue
-            face = math.atan2(-14 - y, -x) if rnd.random() < 0.85 else rnd.uniform(-math.pi, math.pi)
-            up = rnd.random() < (0.32 if y < 0 else 0.18)
-            person(x, y, rnd.uniform(1.55, 1.86), face, up)
-            if not up and phones < 22 and rnd.random() < 0.06:
+    # ---------- the crowd: everyone who wears the tee, all round the decks ----------
+    kinds = crowd_kinds()
+    deck = lambda x, y: abs(x - CX) < D + 1.9 and abs(y - CY) < D + 1.9
+    foh = lambda x, y: abs(x - FX) < 2.8 and 3.2 < y < 7.4
+    sp_ = three(next(l[1] for l in SHOW_LIGHTS if l[0] == "spot"))
+    instance(kinds["stand"][3], CX - 0.6, CY + 0.75, math.pi, 1.0)   # on the decks, facing the person
+    instance(kinds["up"][7], CX + 0.7, CY + 0.7, math.pi + 0.3, 1.0)
+    for k, (x, y) in enumerate(((-0.9, 6.3), (0.9, 6.4))):            # at the desk, facing the decks
+        instance(kinds["stand"][k * 5], FX + x, y, 0.0, 1.0)
+    phones = 0; n = 0
+    step = 0.74
+    for i in range(int((2 * HX - 2) / step)):
+        for j in range(int((Y1 - 6 - (Y0 + 4)) / step)):
+            x = -HX + 1 + (i + rnd.uniform(0.15, 0.85)) * step
+            y = Y0 + 4 + (j + rnd.uniform(0.15, 0.85)) * step
+            if math.hypot(x, y) < 0.85 or deck(x, y) or foh(x, y) or math.hypot(x - sp_.x, y - sp_.y) < 0.9: continue
+            if y > 26 and rnd.random() < (y - 26) / 6: continue      # it thins out toward the back
+            near = math.hypot(x - CX, y - CY)
+            up = rnd.random() < (0.3 if near < 12 else 0.14)
+            rot = facing(x, y, CX, CY) + rnd.gauss(0, 0.3) if rnd.random() < 0.88 else rnd.uniform(-math.pi, math.pi)
+            kk = kinds["up" if up else "stand"]
+            instance(kk[rnd.randrange(len(kk))], x, y, rot, rnd.uniform(0.97, 1.04)); n += 1
+            if not up and phones < 18 and rnd.random() < 0.004:
                 phones += 1
-                fx, fy = math.cos(face), math.sin(face)
-                box(x + fx * 0.35, y + fy * 0.35, 1.9, 0.07, 0.008, 0.14, M_PHONE, rot=face + math.pi / 2)
+                f = Vector((math.sin(rot), -math.cos(rot), 0))
+                box(x + f.x * 0.32, y + f.y * 0.32, 1.55, 0.07, 0.008, 0.14, M_PHONE, rot=rot)
+    print("crowd", n)
 
-    vm = bpy.data.materials.new("haze"); vm.use_nodes = True; nt = vm.node_tree; nt.nodes.remove(nt.nodes["Principled BSDF"])
-    pv_ = nt.nodes.new("ShaderNodeVolumePrincipled"); pv_.inputs["Density"].default_value = 0.022; pv_.inputs["Anisotropy"].default_value = 0.55
+    hz = bpy.data.materials.new("haze"); hz.use_nodes = True; nt = hz.node_tree; nt.nodes.remove(nt.nodes["Principled BSDF"])
+    pv_ = nt.nodes.new("ShaderNodeVolumePrincipled"); pv_.inputs["Density"].default_value = 0.02; pv_.inputs["Anisotropy"].default_value = 0.55
     nt.links.new(pv_.outputs[0], nt.nodes["Material Output"].inputs["Volume"])
-    box(0, (Y0 + Y1) / 2, HZ / 2, 2 * HX - 0.2, Y1 - Y0 - 0.2, HZ - 0.2, vm)
+    box(0, (Y0 + Y1) / 2, HZ / 2, 2 * HX - 0.2, Y1 - Y0 - 0.2, HZ - 0.2, hz)
 
 
 # ---------- the viewer's lights (scene.ts), three coordinates: name, pos, size, power, tint ----------

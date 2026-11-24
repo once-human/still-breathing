@@ -36,7 +36,7 @@ else:
     so = tee.modifiers.new("thick", "SOLIDIFY"); so.thickness = 0.0032; so.offset = 0; so.use_even_offset = True
     if "stiff" in tee.vertex_groups: so.vertex_group = "stiff"; so.thickness_vertex_group = 0.5
     sub = tee.modifiers.new("sub", "SUBSURF"); sub.levels = 1; sub.render_levels = 2
-# ---- someone wearing it: skin, jeans, eyes, colours painted per vertex (linear albedo) ----
+# ---- someone wearing it: skin (its maps beside the GLB, skin.py), jeans and eyes (colours per vertex) ----
 person = []
 if PERSON:
     before = set(bpy.data.objects)
@@ -60,6 +60,27 @@ if PERSON:
             pm.node_tree.links.new(col.outputs["Color"], pb.inputs["Base Color"])
             pb.inputs["Roughness"].default_value = r; pb.inputs["Specular IOR Level"].default_value = spec
             pb.inputs["Sheen Weight"].default_value = sheen; pb.inputs["Sheen Roughness"].default_value = 0.3
+            if kind == "skin" and os.path.exists(PERSON[:-4] + "-skin.webp"):
+                # the skin's maps (skin.py): colour, relief (R, G; green runs down the image, so it is turned for
+                # Blender, whose V runs up) and roughness (B); and real subsurface light, red reaching furthest
+                T = pm.node_tree; NN, LL = T.nodes, T.links
+                uvn = NN.new("ShaderNodeUVMap"); uvn.uv_map = po.data.uv_layers[0].name
+                ai = NN.new("ShaderNodeTexImage"); ai.image = bpy.data.images.load(PERSON[:-4] + "-skin.webp"); ai.interpolation = "Cubic"
+                ri = NN.new("ShaderNodeTexImage"); ri.image = bpy.data.images.load(PERSON[:-4] + "-skin-n.webp"); ri.interpolation = "Cubic"
+                ri.image.colorspace_settings.name = "Non-Color"
+                for im in (ai, ri): LL.new(uvn.outputs[0], im.inputs[0])
+                mul = NN.new("ShaderNodeMix"); mul.data_type = "RGBA"; mul.blend_type = "MULTIPLY"; mul.inputs[0].default_value = 1.0
+                LL.new(col.outputs["Color"], mul.inputs[6]); LL.new(ai.outputs[0], mul.inputs[7]); LL.new(mul.outputs[2], pb.inputs["Base Color"])
+                sep = NN.new("ShaderNodeSeparateColor"); LL.new(ri.outputs[0], sep.inputs[0])
+                flip = NN.new("ShaderNodeMath"); flip.operation = "SUBTRACT"; flip.inputs[0].default_value = 1.0; LL.new(sep.outputs[1], flip.inputs[1])
+                comb = NN.new("ShaderNodeCombineColor"); comb.inputs[2].default_value = 1.0
+                LL.new(sep.outputs[0], comb.inputs[0]); LL.new(flip.outputs[0], comb.inputs[1])
+                nm = NN.new("ShaderNodeNormalMap"); nm.uv_map = uvn.uv_map; LL.new(comb.outputs[0], nm.inputs["Color"])
+                LL.new(nm.outputs[0], pb.inputs["Normal"]); LL.new(sep.outputs[2], pb.inputs["Roughness"])
+                pb.subsurface_method = "RANDOM_WALK_SKIN"
+                pb.inputs["Subsurface Weight"].default_value = 1.0
+                pb.inputs["Subsurface Radius"].default_value = (1.0, 0.35, 0.2)
+                pb.inputs["Subsurface Scale"].default_value = 0.004
             po.data.materials[i] = pm
         po.location.z += FLOOR
     tee.location.z += FLOOR

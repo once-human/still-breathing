@@ -208,62 +208,75 @@ def is_skin(f):
 skin, SRC = part("skin", is_skin)
 skin.normal_update()
 print("skin faces", len(skin.faces), "settled", settle(skin, CUT + 0.15), flush=True)
-# painted skin, linear albedo
-BASE = Vector((0.26, 0.14, 0.085))           # an even Indian brown
-lipsC = Vector((0.19, 0.075, 0.062)); hairC = Vector((0.011, 0.009, 0.008)); palmC = Vector((0.46, 0.29, 0.2))
-nailC = Vector((0.5, 0.33, 0.27))
 eyeL, eyeR = joint("joint-l-eye"), joint("joint-r-eye"); mouth = joint("joint-mouth"); jaw = joint("joint-jaw")
 head = joint("joint-head")
 print("eyes", round(eyeL.z, 3), "mouth", round(mouth.z, 3), flush=True)
 fwd = Vector((0, -1, 0))
-lay = skin.verts.layers.float_color.new("albedo") if hasattr(skin.verts.layers, "float_color") else None
-skin.normal_update()
 
 
 def smooth(e0, e1, x):
     t = max(0.0, min(1.0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t)
 
 
+# ---------- the skin's maps: its surface laid out on MakeHuman's UVs, handed to skin.py ----------
+# Every visible texel of the skin (2048 square, above the shins: the jeans and the floor hide the rest) gets its
+# point on the posed body, its normal, the body's own region weights (lips, ears, nails, scalp, hand) and its
+# step across the body per texel; skin.py paints and sculpts from those. The colour lives in the maps, so the
+# skin's vertex colour is white.
+import numpy as np, json, subprocess, os, tempfile
+HANDB = ["wrist", "metacarpal1", "metacarpal2", "metacarpal3", "metacarpal4"] + [f"finger{f}-{j}" for f in range(1, 6) for j in (1, 2, 3)]
+skin.verts.ensure_lookup_table()
+uvl = skin.loops.layers.uv.active
+VA = np.zeros((len(skin.verts), 11), np.float32)          # P, N, lips, ears, nails, scalp, hand
 for v in skin.verts:
-    i, p, n = v[SRC], v.co, v.normal
-    c = BASE.copy()
-    # slow mottle: a few percent in value and warmth, never a texture you can see
-    m1 = noise.noise(p * 9.0); m2 = noise.noise(p * 23.0 + Vector((3, 1, 7)))
-    c *= 1.0 + 0.06 * m1 + 0.025 * m2
-    c.x *= 1.0 + 0.03 * noise.noise(p * 14 + Vector((9, 2, 4)))
-    # warmer where blood is near the surface: ears, nose tip, cheeks a touch, knuckles
-    c = c.lerp(Vector((0.3, 0.13, 0.09)), 0.5 * wt(i, "ears"))
-    c = c.lerp(lipsC, smooth(0.15, 0.7, wt(i, "lips")))
-    c = c.lerp(nailC, smooth(0.2, 0.8, wt(i, "fingernails")))
-    # palms and the inside of the fingers are much lighter than the back of the hand
-    hand = max(wt(i, g) for g in [f"{b}.{s}" for s in ("L", "R") for b in ("wrist", "metacarpal1", "metacarpal2", "metacarpal3", "metacarpal4",
-               "finger1-1", "finger1-2", "finger1-3", "finger2-1", "finger2-2", "finger2-3", "finger3-1", "finger3-2", "finger3-3",
-               "finger4-1", "finger4-2", "finger4-3", "finger5-1", "finger5-2", "finger5-3")] if g in VG)
-    if hand > 0.3:
-        palm = smooth(0.15, 0.6, n.dot(Vector((-math.copysign(1, p.x), 0, 0))))
-        c = c.lerp(palmC, 0.75 * palm * smooth(0.3, 0.8, hand))
-    # the head: buzz cut, brows, a close beard shadow
-    if p.z > mouth.z - 0.12 and abs(p.x) < 0.13:
-        # hairline: MakeHuman's scalp group, firmed up, carried down the back of the head to the nape
-        # (behind the ears, above the mouth line) as a short fade
-        behind = smooth(0.0, 0.04, p.y - (eyeL.y + 0.07))           # past the ears, toward the back
-        nape = smooth(mouth.z - 0.03, mouth.z + 0.02, p.z)
-        hair = max(smooth(0.2, 0.55, wt(i, "scalp")), behind * nape) * (1 - smooth(0.1, 0.4, wt(i, "ears")))
-        front = smooth(0.2, 0.5, n.dot(fwd))
-        # brows: two soft bands just above each eye
-        for e in (eyeL, eyeR):
-            d = p - e
-            brow = smooth(0.012, 0.022, d.z) * (1 - smooth(0.026, 0.034, d.z)) * (1 - smooth(0.025, 0.04, abs(d.x - math.copysign(0.004, e.x)))) * front
-            c = c.lerp(hairC * 2.0, 0.85 * brow)
-        # beard shadow: chin, jaw line and upper lip, not the lips, not the cheeks high up
-        if p.z < eyeL.z - 0.045 and p.z > jaw.z - 0.11:
-            onface = smooth(-0.2, 0.25, n.dot(fwd) + 0.3 * smooth(0.0, 0.05, mouth.z - p.z))
-            upper = 1 - smooth(eyeL.z - 0.085, eyeL.z - 0.055, p.z) * smooth(0.025, 0.045, abs(p.x))   # stays off the cheekbones
-            lip_side = 1 - smooth(0.1, 0.4, wt(i, "lips"))
-            beard = onface * upper * lip_side * smooth(0.0, 0.03, p.y - (mouth.y - 0.05))
-            c = c.lerp(Vector((0.035, 0.022, 0.016)), 0.55 * beard)
-        c = c.lerp(hairC * (1.0 + 0.15 * noise.noise(p * 300)), 0.92 * hair)
-    if lay: v[lay] = (c.x, c.y, c.z, 1.0)
+    i = v[SRC]
+    VA[v.index, :3] = v.co; VA[v.index, 3:6] = v.normal
+    VA[v.index, 6:11] = (wt(i, "lips"), wt(i, "ears"), wt(i, "fingernails"), wt(i, "scalp"),
+                         max(wt(i, f"{b_}.{sd}") for b_ in HANDB for sd in ("L", "R")))
+RES = 2048
+GY, GX, GV = [], [], []
+for f in skin.faces:
+    L_ = [(l.vert.index, l[uvl].uv.x, l[uvl].uv.y) for l in f.loops]
+    for k in range(1, len(L_) - 1):
+        t = (L_[0], L_[k], L_[k + 1])
+        vi = [q[0] for q in t]
+        A = VA[vi]
+        if A[:, 2].max() < 0.3: continue
+        uu = np.array([q[1] for q in t]) * RES - 0.5; vv = (1 - np.array([q[2] for q in t])) * RES - 0.5   # rows from the top
+        det = (uu[1] - uu[0]) * (vv[2] - vv[0]) - (uu[2] - uu[0]) * (vv[1] - vv[0])
+        if abs(det) < 1e-12: continue
+        x0, x1 = int(max(0, np.floor(uu.min()))), int(min(RES - 1, np.ceil(uu.max())))
+        y0, y1 = int(max(0, np.floor(vv.min()))), int(min(RES - 1, np.ceil(vv.max())))
+        ys, xs = np.mgrid[y0:y1 + 1, x0:x1 + 1]
+        b1 = ((xs - uu[0]) * (vv[2] - vv[0]) - (uu[2] - uu[0]) * (ys - vv[0])) / det
+        b2 = ((uu[1] - uu[0]) * (ys - vv[0]) - (xs - uu[0]) * (vv[1] - vv[0])) / det
+        b0 = 1 - b1 - b2
+        m = (b0 > -1e-4) & (b1 > -1e-4) & (b2 > -1e-4)
+        if not m.any(): continue
+        val = b0[m][:, None] * A[0] + b1[m][:, None] * A[1] + b2[m][:, None] * A[2]
+        # the step across the body for one texel along the image's x and down its rows
+        E1, E2 = A[1, :3] - A[0, :3], A[2, :3] - A[0, :3]
+        du1, dv1, du2, dv2 = uu[1] - uu[0], vv[1] - vv[0], uu[2] - uu[0], vv[2] - vv[0]
+        Pu = (E1 * dv2 - E2 * dv1) / det; Pv = (E2 * du1 - E1 * du2) / det
+        GY.append(ys[m]); GX.append(xs[m])
+        GV.append(np.hstack([val, np.tile(np.concatenate([Pu, Pv]), (len(val), 1))]).astype(np.float32))
+GY, GX, GV = np.concatenate(GY), np.concatenate(GX), np.concatenate(GV)
+print("skin texels", len(GY), "of", RES * RES, flush=True)
+B_ = rig.pose.bones
+LM = {k: list(v) for k, v in dict(eyeL=eyeL, eyeR=eyeR, mouth=mouth, jaw=jaw, head=head).items()}
+for sd in ("L", "R"):
+    for n_ in ["lowerarm01", "wrist"] + HANDB[1:]:
+        LM[f"{n_}.{sd}"] = [list(B_[f"{n_}.{sd}"].head), list(B_[f"{n_}.{sd}"].tail)]
+# SKIN_GBUF=<dir> keeps the hand-over there (to work on skin.py alone)
+tmp = os.environ.get("SKIN_GBUF") or tempfile.mkdtemp(); os.makedirs(tmp, exist_ok=True)
+np.savez(os.path.join(tmp, "g.npz"), res=RES, ys=GY.astype(np.int16), xs=GX.astype(np.int16), g=GV)
+del GV
+json.dump(LM, open(os.path.join(tmp, "lm.json"), "w"))
+SKIN_OUT = OUT[:-4] if OUT.endswith(".glb") else OUT
+subprocess.run(["python3", os.path.join(os.path.dirname(os.path.abspath(__file__)), "skin.py"), tmp, SKIN_OUT], check=True)
+if not os.environ.get("SKIN_GBUF"): import shutil; shutil.rmtree(tmp)
+lay = skin.verts.layers.float_color.new("albedo")
+for v in skin.verts: v[lay] = (1.0, 1.0, 1.0, 1.0)
 
 # ---------- jeans: the tights helper, loosened and smoothed ----------
 def is_jeans(f):
