@@ -1,7 +1,7 @@
 // Real-time view on three.js WebGPURenderer (falls back to WebGL2 by itself where WebGPU is missing).
 // It is the preview you drag; the path tracer takes over the moment you let go.
 import * as THREE from "three/webgpu";
-import { texture, uv, vec2, vec3, float, normalMap, normalize, uniform, mix, vertexColor, step } from "three/tsl";
+import { texture, uv, vec2, vec3, float, normalMap, normalize, uniform, mix, vertexColor, step, fwidth, clamp, length } from "three/tsl";
 import { PRINT_BACK, PRINT_FRONT, type Rect } from "./print";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
@@ -194,8 +194,13 @@ export class Raster {
       m.sheenRoughnessNode = float(0.3);
       // construction relief (rib, stitches) + jersey loops, whiteout blend
       const n1 = normalN.xyz.mul(2).sub(1);
-      const k = texture(knitT, uv().mul(vec2(KNIT_REPEAT[0], KNIT_REPEAT[1]))).xyz.mul(2).sub(1);
-      const blended = normalize(vec3(n1.xy.add(k.xy.mul(this.knit)), n1.z.mul(k.z)));
+      const kuv = uv().mul(vec2(KNIT_REPEAT[0], KNIT_REPEAT[1]));
+      const k = texture(knitT, kuv).xyz.mul(2).sub(1);
+      // the jersey loops only where a pixel can show them: once a pixel spans a loop or more they average to
+      // flat cotton (as the path tracer's many samples do), instead of flickering to grain as the cloth moves
+      const fp = length(fwidth(kuv));
+      const knitAmt = this.knit.mul(clamp(float(1.1).sub(fp).div(0.6), 0, 1));
+      const blended = normalize(vec3(n1.xy.add(k.xy.mul(knitAmt)), n1.z.mul(k.z)));
       const cloth = clothNodes(this.offsets, this.slopes);
       m.normalNode = cloth.bend(normalMap(blended.mul(0.5).add(0.5)));
       m.positionNode = cloth.position;
