@@ -96,6 +96,31 @@ function buildNet(meshes: { pos: Float32Array; idx: Uint32Array }[], CELL: numbe
     const L = Math.hypot(nrm[3 * c], nrm[3 * c + 1], nrm[3 * c + 2]) || 1;
     nrm[3 * c] /= L; nrm[3 * c + 1] /= L; nrm[3 * c + 2] /= L;
   }
+  // seams: where two panels are sewn (side seams, hem corners, sleeve and shoulder seams) the mesh may not
+  // share vertices, so the net is tied across anything closer than a cell and a half, as the stitching does;
+  // without it a front hem and a back hem could part in the breeze like a slit
+  {
+    const g = new Map<number, number[]>();
+    for (let c = 0; c < n; c++) {
+      const k = H(Math.floor(rest[3 * c] / CELL), Math.floor(rest[3 * c + 1] / CELL), Math.floor(rest[3 * c + 2] / CELL));
+      let l = g.get(k); if (!l) { l = []; g.set(k, l); } l.push(c);
+    }
+    const reach2 = (1.5 * CELL) ** 2;
+    for (let c = 0; c < n; c++) {
+      const gx = Math.floor(rest[3 * c] / CELL), gy = Math.floor(rest[3 * c + 1] / CELL), gz = Math.floor(rest[3 * c + 2] / CELL);
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
+        const l = g.get(H(gx + dx, gy + dy, gz + dz)); if (!l) continue;
+        for (const q of l) {
+          if (q <= c) continue;
+          const d2 = (rest[3 * q] - rest[3 * c]) ** 2 + (rest[3 * q + 1] - rest[3 * c + 1]) ** 2 + (rest[3 * q + 2] - rest[3 * c + 2]) ** 2;
+          if (d2 > reach2) continue;
+          const h = c * 16384 + q;
+          if (seen.has(h)) continue;
+          seen.add(h); A.push(c); B.push(q);
+        }
+      }
+    }
+  }
   const ea = Uint32Array.from(A), eb = Uint32Array.from(B), el = new Float32Array(A.length);
   for (let e = 0; e < A.length; e++) {
     const a = 3 * A[e], b = 3 * B[e];
@@ -167,6 +192,31 @@ function buildNet(meshes: { pos: Float32Array; idx: Uint32Array }[], CELL: numbe
       else { W[4 * v] = 1; W[4 * v + 1] = W[4 * v + 2] = W[4 * v + 3] = 0; }
     }
     skins.push({ I, W });
+  }
+  // the outer fabric and the inner shell are one cloth: every vertex of the second takes the skin of the
+  // nearest vertex of the first (its counterpart a millimetre or two away), so the two always move as one and
+  // the inner never shows past the outer at the hem or a sleeve end
+  if (meshes.length > 1) {
+    const A = meshes[0].pos, C = 0.01, g = new Map<number, number[]>();
+    for (let v = 0; v < A.length / 3; v++) {
+      const k = H(Math.floor(A[3 * v] / C), Math.floor(A[3 * v + 1] / C), Math.floor(A[3 * v + 2] / C));
+      let l = g.get(k); if (!l) { l = []; g.set(k, l); } l.push(v);
+    }
+    for (let mi = 1; mi < meshes.length; mi++) {
+      const B = meshes[mi].pos, sk = skins[mi], s0 = skins[0];
+      for (let v = 0; v < B.length / 3; v++) {
+        const x = B[3 * v], y = B[3 * v + 1], z = B[3 * v + 2];
+        const gx = Math.floor(x / C), gy = Math.floor(y / C), gz = Math.floor(z / C);
+        let best = -1, bd = 1e9;
+        for (let r = 1; r <= 2 && best < 0; r++)
+          for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) for (let dz = -r; dz <= r; dz++) {
+            const l = g.get(H(gx + dx, gy + dy, gz + dz)); if (!l) continue;
+            for (const u of l) { const d = (A[3 * u] - x) ** 2 + (A[3 * u + 1] - y) ** 2 + (A[3 * u + 2] - z) ** 2; if (d < bd) { bd = d; best = u; } }
+          }
+        if (best < 0) continue;
+        for (let k = 0; k < 4; k++) { sk.I[4 * v + k] = s0.I[4 * best + k]; sk.W[4 * v + k] = s0.W[4 * best + k]; }
+      }
+    }
   }
   return { n, rest, nrm, ea, eb, el, w2, damp, inv, mob, pin, skins };
 }
