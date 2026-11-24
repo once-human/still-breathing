@@ -148,10 +148,8 @@ export class TryOn {
       baseOptions: { modelAssetPath: `/mediapipe/pose_landmarker_${model}.task`, delegate },
       runningMode: "VIDEO" as const, numPoses: 1, minPoseDetectionConfidence: 0.5, minPosePresenceConfidence: 0.5, minTrackingConfidence: 0.6,
     });
-    // a phone, a small laptop or a browser without WebGPU starts one step down (the lighter pose model); every
-    // device is then watched frame by frame and eased down further only if it can't keep up (see govern)
-    const weak = /iPhone|iPad|Android/i.test(navigator.userAgent) || (navigator.hardwareConcurrency || 8) <= 4 || !("gpu" in navigator);
-    this.tier = weak ? 1 : 0;
+    // every device starts at full quality and is eased down only if it really can't keep up (see govern)
+    this.tier = 0;
     this.makePose = (model) => PoseLandmarker.createFromOptions(files, opts("GPU", model)).catch(() => PoseLandmarker.createFromOptions(files, opts("CPU", "lite")));
     this.pose = await this.makePose(this.tier ? "lite" : "full");
     if (this.dead) return;
@@ -321,26 +319,27 @@ export class TryOn {
   }
 
   /**
-   * Smooth on any device: the time each camera frame takes here (read the pose, place the tee, draw) is measured.
-   * If it keeps running past the camera's own frame time, the try-on eases down one step and stays there:
-   * 1 the lighter pose model, 2 lower render resolution and no soft shadow, 3 no cloth simulation.
-   * It never goes back up mid-session, so nothing flickers between levels.
+   * Realism first, then picture quality, then frame rate. The time each camera frame takes here (read the pose,
+   * place the tee, draw) is measured; only if it keeps running well past the camera's frame time (under about
+   * 20 fps) does the try-on ease down, and never far: 1 the lighter pose model, 2 a smaller shadow map and a
+   * render at the screen's own resolution. The cloth and the shadow always stay. It never steps back up
+   * mid-session, so nothing flickers between levels.
    */
   private govern(busy: number, interval: number) {
     this.busy = this.busy ? this.busy + (busy - this.busy) * 0.1 : busy;
-    const budget = Math.max(14, Math.min(40, interval * 1000)) * 0.85;
+    const budget = Math.max(14, Math.min(40, interval * 1000)) * 1.5;
     this.over = this.busy > budget ? this.over + 1 : 0;
-    if (this.over < 45 || this.tier >= 3 || this.swapping) return;
+    if (this.over < 45 || this.tier >= 2 || this.swapping) return;
     this.over = 0; this.busy = 0; this.tier++;
     if (this.tier === 1 && this.makePose) {
       this.swapping = true;
       this.makePose("lite").then((p) => { if (this.dead) { p.close(); return; } const old = this.pose; this.pose = p; old?.close(); }).catch(() => {}).finally(() => { this.swapping = false; });
     }
-    if (this.tier === 2) { this.key.castShadow = false; this.resize(); }
+    if (this.tier === 2) { this.key.shadow.mapSize.set(512, 512); this.key.shadow.map?.dispose(); this.key.shadow.map = null; this.resize(); }
   }
 
   resize() {
-    const r = this.canvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, this.tier >= 2 ? 1 : 1.5);
+    const r = this.canvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, this.tier >= 2 ? 1.25 : 1.5);
     this.renderer.setPixelRatio(dpr); this.renderer.setSize(r.width, r.height, false);
     this.arms.width = Math.round(r.width * dpr); this.arms.height = Math.round(r.height * dpr);
   }
@@ -357,7 +356,7 @@ export class TryOn {
     const r = this.pose.detectForVideo(fc, now);
     this.place(r.landmarks[0] ?? null, r.worldLandmarks[0] ?? null, t, dt);
     if (this.frameN++ % 10 === 0) this.light(dt * 10);
-    if (this.cloth && this.rig.visible && this.tier < 3) {
+    if (this.cloth && this.rig.visible) {
       this.cloth.setPose(this.m3.setFromMatrix4(this.m4.makeRotationFromQuaternion(this.rig.quaternion)), this.rig.position, this.rig.scale.x, dt);
       this.cloth.step(dt);
     }
