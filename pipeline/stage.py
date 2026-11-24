@@ -219,9 +219,11 @@ def build_studio():
     p.inputs["Specular IOR Level"].default_value = 0.3
     nt.links.new(mix_rgb(nt, soft_var(nt, 0.35, 0.0, 1.0), (0.80, 0.792, 0.772), (0.815, 0.806, 0.787)), p.inputs["Base Color"])
     CYC = m
-    m, nt, p = node_mat("cycfloor"); p.inputs["Roughness"].default_value = 0.55
-    p.inputs["Specular IOR Level"].default_value = 0.4
-    nt.links.new(mix_rgb(nt, soft_var(nt, 0.6, 0.0, 1.0), (0.70, 0.693, 0.676), (0.745, 0.738, 0.72)), p.inputs["Base Color"])
+    # the floor is the same paint walked on: greyer and a little scuffed, a soft sheen; under every lamp in the
+    # studio at once it would burn out at the wall's white
+    m, nt, p = node_mat("cycfloor"); p.inputs["Roughness"].default_value = 0.78
+    p.inputs["Specular IOR Level"].default_value = 0.3
+    nt.links.new(mix_rgb(nt, soft_var(nt, 0.6, 0.0, 1.0), (0.5, 0.494, 0.48), (0.545, 0.538, 0.522)), p.inputs["Base Color"])
     FLR = m
     M_WALL = mat("wall", (0.74, 0.735, 0.72), 0.9, spec=0.3)
     M_CEIL = mat("ceiling", (0.03, 0.03, 0.031), 0.9)
@@ -353,13 +355,13 @@ def build_studio():
 
 
 def build_window():
-    """A living room in an Indian flat, late afternoon. The person stands in the soft light of a wide aluminium
-    sliding window on their right (the balcony and the building across the road beyond it); the low sun comes in past
-    them and lies in warm patches on the tiles, the sofa and the wall behind. Vitrified tiles, warm white walls, a
-    bookshelf and a split AC on the far side, a dining corner and the door behind the camera."""
+    """A living room in an Indian flat, late afternoon. A wide aluminium sliding window ahead of the person and to
+    their right (the balcony and the building across the road beyond it) lets the low sun in across their front and
+    in long warm stripes over the tiles toward the sofa behind them. Vitrified tiles, warm white walls, a bookshelf
+    and a split AC on the far side, a dining corner by the window and the door behind the camera."""
     global ZC, SKY
     X0, X1, Y0, Y1, ZT = -3.2, 3.8, -4.2, 3.4, 3.0
-    WY0, WY1, WZ0, WZ1 = -1.8, 1.6, 0.45, 2.6                        # the window opening, just ahead-left of the person
+    WY0, WY1, WZ0, WZ1 = -3.9, -0.5, 0.45, 2.6                       # the window opening, ahead of the person, to their right
     ZC = ZT
     # vitrified tiles, 60 x 60 cm, warm ivory, polished (they mirror the window softly), hairline grout
     m, nt, p = node_mat("tiles"); p.inputs["Roughness"].default_value = 0.14
@@ -458,7 +460,7 @@ def build_window():
         cyl((X0 - 0.3, WY0, z), (X0 - 0.3, WY1, z), 0.008, M_GRILL, 6)
     # sheer curtains bunched at both ends, on a rod
     cyl((X0 + 0.12, WY0 - 0.5, 2.62), (X0 + 0.12, WY1 + 0.5, 2.62), 0.012, M_BRASS, 8)
-    for (ya, yb) in ((WY0 - 0.45, WY0 + 0.15), (WY1 - 0.15, WY1 + 0.45)):
+    for (ya, yb) in ((WY0, WY0 + 0.45), (WY1 - 0.3, WY1 + 0.35)):
         surf(lambda u, v, ya=ya, yb=yb: Vector((X0 + 0.12 + 0.05 * math.sin(u * 22) + 0.01 * math.sin(v * 9 + u * 40), ya + u * (yb - ya), 0.03 + v * 2.57)), 80, 6, SHEER)
 
     # ---- outside: the balcony, a neem tree, the building across the road, the ground four floors down ----
@@ -825,7 +827,7 @@ SHOW_LIGHTS = [
 ]
 # daylight: the sun's direction (towards it) in three is (-0.696, 0.264, 0.668): front-left, 15 deg up
 SUN_DIR = three((-0.696, 0.264 + FLOOR, 0.668)).normalized()
-SUN_E = float(os.environ.get("SUNE", "14"))    # W/m2 on a surface facing it (Blender sun strength)
+SUN_E = float(os.environ.get("SUNE", "5"))     # W/m2 on a surface facing it (Blender sun strength)
 SUN_TINT = (1.0, 0.8, 0.6)
 SKY_K = float(os.environ.get("SKYK", "5.0"))   # the sky, exposed for a room lit by it
 ZC = 100.0
