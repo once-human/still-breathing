@@ -89,6 +89,7 @@ area("rim", (0.6, 1.4, 2.4), (1.0, 1.0), 90 * k)
 w = bpy.data.worlds.new("w"); sc.world = w; w.use_nodes = True; w.node_tree.nodes["Background"].inputs[1].default_value = 0.03
 # ---- camera ----
 ANG = {"front": 0, "back": 180, "q": 35, "side": 90}[view] if not view.startswith("a") else float(view[1:])   # aNN = turntable angle
+tee.rotation_mode = "XYZ"   # the glTF importer leaves objects in quaternion mode, which ignores rotation_euler
 tee.rotation_euler[2] = math.radians(ANG)
 if bpy.data.objects.get("body"): bpy.data.objects["body"].rotation_euler[2] = math.radians(ANG)
 cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam")); sc.collection.objects.link(cam); sc.camera = cam
