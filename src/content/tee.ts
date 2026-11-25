@@ -8,12 +8,12 @@ export type City = "mumbai" | "bengaluru";
 
 /**
  * Four shirts. Same blank, same front (again.. in four scripts); the back is what changes.
- * The tour has two (the crowd, both cities in one drawing, and envelops me); each city has its map.
+ * The tour has two (the crowd, both cities in one drawing, and i am a party); each city has its map.
  * Each shirt comes in one colour only: a night shirt in black, a day shirt in off white.
  */
 export const DESIGNS: Record<Design, { no: string; name: string; city: City | null; colour: Colour; back: string }> = {
   c: { no: "01", name: "crowd", city: null, colour: "black", back: "both nights in one drawing: the crowd from behind, the green line stopping at Madavara on one side, the Mumbai skyline behind the race course on the other, people from both cities in front" },
-  e: { no: "02", name: "envelops me", city: null, colour: "black", back: "both nights through a heat camera: the crowd from the stage, hands up for the drop, every breath rising into the December air, the warmest place in the city, 16° in Bengaluru, 20° in Mumbai" },
+  e: { no: "02", name: "i am a party", city: null, colour: "black", back: "both nights through a heat camera: the crowd from the stage, hands up for the drop, every breath rising into the December air under a mirror ball, 16° in Bengaluru, 20° in Mumbai" },
   a: { no: "03", name: "map", city: "mumbai", colour: "cream", back: "the race course from above, the sea beside it, the sound rolling out from the stage" },
   d: { no: "04", name: "map", city: "bengaluru", colour: "cream", back: "the NICE grounds from above, every person in the crowd drawn, friends holding hands; the last train in at Madavara, Tumakuru Road jammed, the sound rolling out over the village to the lake" },
 };
