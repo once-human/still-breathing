@@ -11,7 +11,13 @@
 # Skin under the tee and the jeans is cut away (it can never be seen, and can never poke through the cloth).
 # Out: one GLB, materials named "skin", "jeans", "eyes" (the viewer and render.py pick their surfaces by them),
 # COLOR_0 albedo, subdivided once.
-import bpy, bmesh, sys, math
+# People.py's bodies (Blender Studio's sculpted base meshes with MakeHuman's rig: no helpers, no joint cubes) go
+# the same way, with: the artist's eyes (eye.L / eye.R, painted sclera, iris, pupil); landmarks from the rig's
+# bones and the eyes; trousers from trousers.py when TROUSERS=<trousers.blend> (TROUSERS_RGB="r,g,b" linear,
+# dark raw indigo by default), the leg skin under them cut and the feet kept; the visible skin's UV islands
+# (spread over the sculpt's 24 UDIM tiles) packed into one square, the face given twice the texels; no
+# subdivision (the sculpt's first level is already fine enough).
+import bpy, bmesh, sys, math, os
 from mathutils import Vector, Matrix, Quaternion, noise
 from mathutils.bvhtree import BVHTree
 from mathutils.kdtree import KDTree
@@ -22,9 +28,11 @@ bpy.ops.wm.read_factory_settings(use_empty=True)
 sc = bpy.context.scene
 
 with bpy.data.libraries.load(BODY) as (src, dst):
-    dst.objects = [n for n in src.objects if n in ("body", "rig")]
+    dst.objects = [n for n in src.objects if n in ("body", "rig", "eye.L", "eye.R")]
 for o in dst.objects: sc.collection.objects.link(o)
 body, rig = bpy.data.objects["body"], bpy.data.objects["rig"]
+ART_EYES = [bpy.data.objects[n] for n in ("eye.L", "eye.R") if n in bpy.data.objects]
+HBM = "helper-tights" not in body.vertex_groups      # people.py's bodies: the artist's sculpt, no helpers
 upd = bpy.context.view_layer.update
 
 
@@ -128,8 +136,21 @@ VG = {g.name: g.index for g in body.vertex_groups}
 W = [dict() for _ in me.vertices]
 for v in body.data.vertices:          # same vertex order: the armature only moves vertices
     for g in v.groups: W[v.index][g.group] = g.weight
-wt = lambda i, name: W[i].get(VG[name], 0.0) if name in VG else 0.0
+wt = lambda i, name: W[i].get(VG[name], 0.0) if name in VG else (1.0 if HBM and name == "body" else 0.0)
 joint = lambda name: sum((P[i] for i in range(len(P)) if wt(i, name) > 0.5), Vector()) / max(1, sum(1 for i in range(len(P)) if wt(i, name) > 0.5))
+B_ = rig.pose.bones
+bone = lambda n: rig.matrix_world @ B_[n].head
+if HBM:
+    # no joint cubes: the eyes' own centres, the bones' heads, the lips' middle for the mouth
+    EYEC = {}
+    for o in ART_EYES:
+        ev_ = o.evaluated_get(dg); m_ = ev_.to_mesh()
+        EYEC[o.name] = sum((o.matrix_world @ v.co for v in m_.vertices), Vector()) / len(m_.vertices); ev_.to_mesh_clear()
+    HIPZ = (bone("upperleg01.L").z + bone("upperleg01.R").z) / 2
+    JOINT = {"joint-l-eye": EYEC["eye.L"], "joint-r-eye": EYEC["eye.R"], "joint-jaw": bone("jaw"), "joint-head": bone("head"),
+             "joint-pelvis": Vector((0, (bone("upperleg01.L").y + bone("upperleg01.R").y) / 2, HIPZ)),
+             "joint-mouth": joint("lips")}
+    joint = lambda name: JOINT[name]
 
 # ---------- the tee, to find the skin it covers ----------
 bpy.ops.import_scene.gltf(filepath=TEE)
@@ -176,6 +197,19 @@ def settle(b, below=9.0):
 pelvis = joint("joint-pelvis")
 CUT = pelvis.z + 0.04          # the jeans start here, well inside the tee; the skin below is never seen
 print("pelvis", tuple(round(x, 3) for x in pelvis), flush=True)
+TROUSERS = os.environ.get("TROUSERS") if HBM else None
+HEMZ = -1.0                   # the trousers' hem: the feet below it stay (people.py's bodies only)
+if TROUSERS:
+    with bpy.data.libraries.load(TROUSERS) as (src, dst):
+        dst.objects = ["trousers"]
+    tro = dst.objects[0]; sc.collection.objects.link(tro); upd()
+    tme = bpy.data.meshes.new_from_object(tro.evaluated_get(bpy.context.evaluated_depsgraph_get()))
+    tme.transform(tro.matrix_world); bpy.data.objects.remove(tro)
+    HEMZ = min(v.co.z for v in tme.vertices) + 0.025
+    CUT = max(v.co.z for v in tme.vertices) - 0.01
+    print("trousers", len(tme.polygons), "faces, waist", round(CUT, 3), "hem", round(HEMZ, 3), flush=True)
+elif HBM:
+    CUT = -1.0                 # nothing over the legs: all of them is skin
 
 
 def part(name, keep):
@@ -199,7 +233,7 @@ leg = lambda i: sum(W[i].get(g, 0.0) for g in LEG)
 def is_skin(f):
     ix = [v.index for v in f.verts]
     if not all(wt(i, "body") > 0.5 for i in ix): return False
-    if all(P[i].z < CUT and leg(i) > 0.5 for i in ix): return False     # inside the jeans
+    if all(HEMZ < P[i].z < CUT and leg(i) > 0.5 for i in ix): return False     # inside the jeans
     c = sum((P[i] for i in ix), Vector()) / len(ix)
     n = (P[ix[1]] - P[ix[0]]).cross(P[ix[2]] - P[ix[0]]).normalized()
     return not covered(c, n) and not poking(c, n)
@@ -208,6 +242,50 @@ def is_skin(f):
 skin, SRC = part("skin", is_skin)
 skin.normal_update()
 print("skin faces", len(skin.faces), "settled", settle(skin, CUT + 0.15), flush=True)
+
+
+def pack_skin_uvs(b):
+    """the sculpt's UVs lie over 24 UDIM tiles, each part empty: the islands left after the cut are brought to an
+    even texel size (the face twice as fine), then packed into the one square the maps are baked on"""
+    uvl = b.loops.layers.uv.active
+    b.faces.ensure_lookup_table(); b.verts.ensure_lookup_table()
+    par = list(range(len(b.faces)))
+    def find(k):
+        while par[k] != k: par[k] = par[par[k]]; k = par[k]
+        return k
+    for e in b.edges:
+        if len(e.link_faces) != 2: continue
+        f1, f2 = e.link_faces
+        u1 = {l.vert.index: l[uvl].uv for l in f1.loops if l.vert in e.verts}
+        u2 = {l.vert.index: l[uvl].uv for l in f2.loops if l.vert in e.verts}
+        if all((u1[k] - u2[k]).length < 1e-5 for k in u1): par[find(f1.index)] = find(f2.index)
+    isl = {}
+    for f in b.faces: isl.setdefault(find(f.index), []).append(f)
+    neck = bone("neck01").z
+    for fs in isl.values():
+        a3 = sum(f.calc_area() for f in fs)
+        a2 = 0.0
+        for f in fs:
+            uv = [l[uvl].uv for l in f.loops]
+            a2 += abs(sum(uv[i].x * uv[i - 1].y - uv[i - 1].x * uv[i].y for i in range(len(uv)))) / 2
+        k = math.sqrt(a3 / max(a2, 1e-12)) * (2.0 if sum(f.calc_center_median().z for f in fs) / len(fs) > neck else 1.0)
+        ls = [l for f in fs for l in f.loops]
+        c = sum((l[uvl].uv for l in ls), Vector((0, 0))) / len(ls)
+        for l in ls: l[uvl].uv = (l[uvl].uv - c) * k + Vector((0.5, 0.5))
+    m_ = bpy.data.meshes.new("uvpack"); b.to_mesh(m_)
+    o_ = bpy.data.objects.new("uvpack", m_); sc.collection.objects.link(o_)
+    bpy.context.view_layer.objects.active = o_
+    for x in sc.objects: x.select_set(x is o_)
+    bpy.ops.object.mode_set(mode="EDIT"); bpy.ops.mesh.select_all(action="SELECT"); bpy.ops.uv.select_all(action="SELECT")
+    bpy.ops.uv.pack_islands(udim_source="CLOSEST_UDIM", rotate=True, scale=True, margin_method="FRACTION", margin=0.012, shape_method="CONCAVE")
+    bpy.ops.object.mode_set(mode="OBJECT")
+    for f, pf in zip(b.faces, m_.polygons):
+        for l, li in zip(f.loops, pf.loop_indices): l[uvl].uv = m_.uv_layers.active.data[li].uv
+    bpy.data.objects.remove(o_); bpy.data.meshes.remove(m_)
+    print("skin uv islands", len(isl), "packed", flush=True)
+
+
+if HBM: pack_skin_uvs(skin)
 eyeL, eyeR = joint("joint-l-eye"), joint("joint-r-eye"); mouth = joint("joint-mouth"); jaw = joint("joint-jaw")
 head = joint("joint-head")
 print("eyes", round(eyeL.z, 3), "mouth", round(mouth.z, 3), flush=True)
@@ -262,8 +340,8 @@ for f in skin.faces:
         GV.append(np.hstack([val, np.tile(np.concatenate([Pu, Pv]), (len(val), 1))]).astype(np.float32))
 GY, GX, GV = np.concatenate(GY), np.concatenate(GX), np.concatenate(GV)
 print("skin texels", len(GY), "of", RES * RES, flush=True)
-B_ = rig.pose.bones
 LM = {k: list(v) for k, v in dict(eyeL=eyeL, eyeR=eyeR, mouth=mouth, jaw=jaw, head=head).items()}
+LM["female"] = [1.0 if body.get("sex") == "female" else 0.0]
 for sd in ("L", "R"):
     for n_ in ["lowerarm01", "wrist"] + HANDB[1:]:
         LM[f"{n_}.{sd}"] = [list(B_[f"{n_}.{sd}"].head), list(B_[f"{n_}.{sd}"].tail)]
@@ -279,6 +357,7 @@ lay = skin.verts.layers.float_color.new("albedo")
 for v in skin.verts: v[lay] = (1.0, 1.0, 1.0, 1.0)
 
 # ---------- jeans: the tights helper, loosened and smoothed ----------
+# (people.py's bodies: trousers.py's trousers, if any, painted and settled under the tee)
 def is_jeans(f):
     ix = [v.index for v in f.verts]
     # the tights helper is a whole bodysuit: only its legs, below the waist
@@ -290,31 +369,59 @@ def is_jeans(f):
     return not covered(c, n) and not poking(c, n)
 
 
-jeans, _ = part("jeans", is_jeans)
-jeans.normal_update()
-crotch = min((v.co.z for v in jeans.verts if abs(v.co.x) < 0.015), default=pelvis.z - 0.12)
-for v in jeans.verts:
-    leg = smooth(crotch + 0.04, crotch - 0.06, v.co.z)        # straight-leg ease below the crotch
-    v.co += v.normal * (0.008 + 0.022 * leg)
-for _ in range(12):                                           # denim doesn't show the muscle under it
-    bmesh.ops.smooth_vert(jeans, verts=[v for v in jeans.verts if not v.is_boundary], factor=0.5, use_axis_x=True, use_axis_y=True, use_axis_z=True)
-jeans.normal_update()
+if HBM:
+    jeans = None
+    if TROUSERS:
+        jeans = bmesh.new(); jeans.from_mesh(tme); jeans.normal_update()
+        print("trousers settled", settle(jeans), flush=True)
+        rgb = [float(x) for x in os.environ.get("TROUSERS_RGB", "0.012,0.016,0.03").split(",")]
+        jl = jeans.verts.layers.float_color.new("albedo")
+        for v in jeans.verts:
+            c = Vector(rgb) * (1.0 + 0.06 * noise.noise(v.co * 6))
+            v[jl] = (c.x, c.y, c.z, 1.0)
+else:
+  jeans, _ = part("jeans", is_jeans)
+  jeans.normal_update()
+  crotch = min((v.co.z for v in jeans.verts if abs(v.co.x) < 0.015), default=pelvis.z - 0.12)
+  for v in jeans.verts:
+      leg = smooth(crotch + 0.04, crotch - 0.06, v.co.z)        # straight-leg ease below the crotch
+      v.co += v.normal * (0.008 + 0.022 * leg)
+  for _ in range(12):                                           # denim doesn't show the muscle under it
+      bmesh.ops.smooth_vert(jeans, verts=[v for v in jeans.verts if not v.is_boundary], factor=0.5, use_axis_x=True, use_axis_y=True, use_axis_z=True)
+  jeans.normal_update()
 
 
-print("jeans settled", settle(jeans), flush=True)
-jl = jeans.verts.layers.float_color.new("albedo")
-for v in jeans.verts:
-    p = v.co
-    c = Vector((0.022, 0.022, 0.025)) * (1.0 + 0.08 * noise.noise(p * 6))
-    # a slight wear on the front of the thighs
-    c *= 1.0 + 0.35 * smooth(0.3, 0.9, v.normal.dot(fwd)) * smooth(crotch - 0.02, crotch - 0.2, p.z) * smooth(crotch - 0.45, crotch - 0.3, p.z)
-    v[jl] = (c.x, c.y, c.z, 1.0)
-print("jeans faces", len(jeans.faces), "crotch", round(crotch, 3), flush=True)
+  print("jeans settled", settle(jeans), flush=True)
+  jl = jeans.verts.layers.float_color.new("albedo")
+  for v in jeans.verts:
+      p = v.co
+      c = Vector((0.022, 0.022, 0.025)) * (1.0 + 0.08 * noise.noise(p * 6))
+      # a slight wear on the front of the thighs
+      c *= 1.0 + 0.35 * smooth(0.3, 0.9, v.normal.dot(fwd)) * smooth(crotch - 0.02, crotch - 0.2, p.z) * smooth(crotch - 0.45, crotch - 0.3, p.z)
+      v[jl] = (c.x, c.y, c.z, 1.0)
+  print("jeans faces", len(jeans.faces), "crotch", round(crotch, 3), flush=True)
 
 # ---------- eyes ----------
-eyes, _ = part("eyes", lambda f: all(wt(v.index, "helper-l-eye") > 0.5 or wt(v.index, "helper-r-eye") > 0.5 for v in f.verts))
-el = eyes.verts.layers.float_color.new("albedo")
-for v in eyes.verts:
+if HBM:
+    # the artist's eyeballs, posed with the head; each one's gaze is where its front pole went
+    eyes = bmesh.new(); el = eyes.verts.layers.float_color.new("albedo")
+    for o in ART_EYES:
+        pole = min(o.data.vertices, key=lambda v: (o.matrix_world @ v.co).y).index      # the rest pose looks along -y
+        m_ = bpy.data.meshes.new_from_object(o.evaluated_get(bpy.context.evaluated_depsgraph_get())); m_.transform(o.matrix_world)
+        e = EYEC[o.name]; gaze = (m_.vertices[pole].co - e).normalized()
+        n0 = len(eyes.verts); eyes.from_mesh(m_); eyes.verts.ensure_lookup_table()
+        for v in eyes.verts[n0:]:
+            d = (v.co - e).normalized().dot(gaze)
+            # sclera; a dark brown iris (about 11.7 mm across) with a darker ring at its edge; the pupil
+            c = Vector((0.6, 0.54, 0.48)).lerp(Vector((0.02, 0.009, 0.005)), smooth(0.855, 0.875, d))
+            c = c.lerp(Vector((0.055, 0.025, 0.012)), smooth(0.885, 0.93, d)).lerp(Vector((0.003, 0.003, 0.003)), smooth(0.984, 0.99, d))
+            v[el] = (c.x, c.y, c.z, 1.0)
+        bpy.data.meshes.remove(m_)
+    eyes.normal_update()
+else:
+  eyes, _ = part("eyes", lambda f: all(wt(v.index, "helper-l-eye") > 0.5 or wt(v.index, "helper-r-eye") > 0.5 for v in f.verts))
+  el = eyes.verts.layers.float_color.new("albedo")
+  for v in eyes.verts:
     e = eyeL if v.co.x > 0 else eyeR
     d = (v.co - e).normalized().dot(fwd)
     c = Vector((0.62, 0.56, 0.5)).lerp(Vector((0.05, 0.022, 0.012)), smooth(0.9, 0.93, d)).lerp(Vector((0.004, 0.004, 0.004)), smooth(0.975, 0.985, d))
@@ -322,18 +429,18 @@ for v in eyes.verts:
 
 
 # ---------- out ----------
-def obj(name, b):
+def obj(name, b, sub=1):
     m = bpy.data.meshes.new(name); b.to_mesh(m); b.free()
     if m.validate(verbose=False): print("fixed", name)
     for p in m.polygons: p.use_smooth = True
     o = bpy.data.objects.new(name, m); sc.collection.objects.link(o)
     mat = bpy.data.materials.new(name); m.materials.append(mat)
     if m.color_attributes: m.color_attributes.active_color = m.color_attributes[0]
-    s = o.modifiers.new("sub", "SUBSURF"); s.levels = 1; s.render_levels = 1
+    if sub: s = o.modifiers.new("sub", "SUBSURF"); s.levels = sub; s.render_levels = sub
     return o
 
 
-outs = [obj("skin", skin), obj("jeans", jeans), obj("eyes", eyes)]
+outs = [obj("skin", skin, 0 if HBM else 1)] + ([obj("jeans", jeans, 0 if HBM else 1)] if jeans else []) + [obj("eyes", eyes)]
 for o in list(sc.objects):
     if o not in outs: bpy.data.objects.remove(o)
 for o in outs: o.select_set(True)

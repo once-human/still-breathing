@@ -1,0 +1,97 @@
+# Person: the people who wear the shop tee, made on the farm (pipeline/human.py: the body posed as the tee was
+# simulated on it, standing easy, its skin maps from skin.py, the eyes, trousers.py's trousers when there are
+# some), with small look-check pictures of each (pipeline/look.py). publish=true commits the person to the site
+# (public/tee/human/<fit>-stand.glb, -skin.webp, -skin-n.webp); false keeps everything as a run artifact.
+name: person
+on:
+  workflow_dispatch:
+    inputs:
+      people:
+        description: "body:fit pairs, comma separated (the fit's stand.glb must be on main, from fit.yml)"
+        default: "hm175:hm175-M,hf163:hf163-S"
+      publish:
+        description: "commit the people to the site (false = preview: run artifacts only)"
+        default: "false"
+
+permissions:
+  contents: write
+
+env:
+  BLENDER: "5.3.0"
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - id: m
+        run: |
+          python3 - <<'EOF' >> "$GITHUB_OUTPUT"
+          import json
+          inc = [dict(zip(("body", "fit"), p.strip().split(":"))) for p in "${{ inputs.people }}".split(",") if p.strip()]
+          print("matrix=" + json.dumps({"include": inc}))
+          EOF
+
+  person:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/blender
+          key: blender-${{ env.BLENDER }}
+      - name: Blender ${{ env.BLENDER }}
+        run: |
+          if [ ! -x ~/blender/blender ]; then
+            mkdir -p ~/blender
+            curl -sSL "https://download.blender.org/release/Blender${BLENDER%.*}/blender-${BLENDER}-linux-x64.tar.xz" | tar -xJ -C ~/blender --strip-components=1
+          fi
+          sudo apt-get -qq update && sudo apt-get -qq install -y libxi6 libxxf86vm1 libxfixes3 libxrender1 libgl1 libxkbcommon0 libsm6 > /dev/null
+          pip install -q numpy pillow
+      - name: Make ${{ matrix.body }} in ${{ matrix.fit }}
+        run: |
+          mkdir -p out; O="$PWD/out/${{ matrix.fit }}-stand.glb"
+          T="$PWD/pipeline/people/${{ matrix.body }}-trousers.blend"; [ -s "$T" ] && export TROUSERS="$T"
+          ~/blender/blender -b --factory-startup -P pipeline/human.py -- "$PWD/pipeline/bodies/${{ matrix.body }}.blend" \
+            "$PWD/public/tee/fit/${{ matrix.fit }}/stand.glb" "$O" | grep -E "pelvis|trousers|skin|eyes|jeans|saved|Error|Traceback|line [0-9]"
+          test -s "$O"; ls -la out
+      - name: Look
+        run: |
+          (cd pipeline && python3 texture.py C black && SIZE=M python3 texture.py detail)
+          E=1.52; [ "${{ matrix.body }}" = "hm175" ] && E=1.63
+          for v in full face hand back; do
+            VIEW=$v EYE_Z=$E OUTP="$PWD/out/look-${{ matrix.fit }}-$v.png" PERSON="$PWD/out/${{ matrix.fit }}-stand.glb" SCENE=show \
+              GLB="$PWD/public/tee/fit/${{ matrix.fit }}/stand.glb" W=480 H=600 THREADS=$(nproc) \
+              ~/blender/blender -b --factory-startup -P pipeline/look.py -- C black a0 /tmp/x.png 48 | grep -E "Error|Traceback|Saved"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: person-${{ matrix.fit }}
+          path: out/*
+          retention-days: 7
+
+  publish:
+    needs: person
+    if: always() && needs.person.result != 'cancelled' && inputs.publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { path: got, pattern: person-*, merge-multiple: true }
+      - name: Place and commit
+        run: |
+          D=public/tee/human; mkdir -p $D
+          for f in got/*-stand.glb got/*-stand-skin.webp got/*-stand-skin-n.webp; do [ -s "$f" ] && cp "$f" $D/; done
+          git config user.name "once-human"
+          git config user.email "121476278+once-human@users.noreply.github.com"
+          git add -A $D
+          git diff --cached --quiet && { echo "nothing new"; exit 0; }
+          git commit -m "Person: $(ls got/*-stand.glb | xargs -n1 basename | sed 's/-stand.glb//' | paste -sd, -) made on the farm"
+          for i in 1 2 3; do git pull --rebase -q && git push && break; sleep 5; done

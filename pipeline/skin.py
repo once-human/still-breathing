@@ -26,7 +26,9 @@ EARS = [_P[(_w[:, 1] > 0.5) & (np.sign(_P[:, 0]) == sg)].mean(0) for sg in (1, -
 del _P, _w
 fwd = np.array([0.0, -1.0, 0.0])
 HAIR = np.array([0.013, 0.010, 0.009])
-BASE = (0.27, 0.142, 0.084)        # an Indian brown, linear albedo
+SHE = bool(LM.get("female", np.zeros(1))[0])    # human.py says so for a woman: no beard, finer brows, little arm hair,
+#                                                 the hair itself a shell over the scalp (the scalp under it dark)
+BASE = (0.29, 0.155, 0.094) if SHE else (0.27, 0.142, 0.084)   # Indian browns, linear albedo; hers a shade lighter
 
 def sm(e0, e1, t):
     t = np.clip((t - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t)
@@ -90,11 +92,13 @@ def shade(P, N, lips, ears, nails, scalp, handw):
     edge = 0.006 * vnoise(P * 90.0) + 0.003 * vnoise(P * 260.0)
     earD = np.minimum(*(np.linalg.norm((P - e) * np.array([1.0, 1.0, 0.7]), axis=1) for e in EARS))
     # hair: a short cut. MakeHuman's scalp group, a hairline above the brows at the front, clear of the ears by a
-    # finger's width, and at the back a nape that fades out over three centimetres
+    # finger's width, and at the back a nape that fades out over three centimetres. Hers: the scalp under her
+    # hair, a hairline a little lower and softer at the front, down to the nape behind the ears
     front = 1 - sm(0.05, 0.1, d[:, 1])
-    hairline = 1 - front * (1 - sm(eyeL[2] + 0.05, eyeL[2] + 0.062, z + edge))
-    nape = sm(mouth[2] - 0.012, mouth[2] + 0.025, z + edge)
-    hairv = sm(0.3, 0.6, scalp) * hairline * nape * sm(0.038, 0.05, earD + edge) * isHead
+    hl = (0.044, 0.06) if SHE else (0.05, 0.062)
+    hairline = 1 - front * (1 - sm(eyeL[2] + hl[0], eyeL[2] + hl[1], z + edge))
+    nape = sm(mouth[2] - (0.03 if SHE else 0.012), mouth[2] + (0.0 if SHE else 0.025), z + edge)
+    hairv = sm(0.3, 0.6, scalp) * hairline * nape * sm(0.02 if SHE else 0.038, 0.032 if SHE else 0.05, earD + edge) * isHead
     # a short trimmed beard: moustache, chin and jaw; the cheek line rises from the mouth's corner to the
     # sideburn, the neck line sits a finger's width under the jaw; thinner high on the cheeks
     dy = d[:, 1]
@@ -104,7 +108,7 @@ def shade(P, N, lips, ears, nails, scalp, handw):
     sideburn = sm(0.075, 0.085, dy) * sm(mouth[2] + 0.0, mouth[2] + 0.015, z) * (1 - sm(eyeL[2] - 0.005, eyeL[2] + 0.008, z + edge))
     beard = np.maximum(beard, sideburn) * (1 - sm(0.095, 0.105, dy)) * sm(0.03, 0.04, earD + edge)
     mous = (1 - sm(0.024, 0.032, np.abs(d[:, 0]) - edge)) * sm(0.005, 0.009, d[:, 2]) * (1 - sm(0.018, 0.024, d[:, 2] + edge)) * (dy < 0.03)
-    beard = np.maximum(beard, mous) * (1 - sm(0.08, 0.35, lips)) * isHead
+    beard = np.maximum(beard, mous) * (1 - sm(0.08, 0.35, lips)) * isHead * (0.0 if SHE else 1.0)
     beard *= 1 - 0.4 * sm(mouth[2] + 0.005, mouth[2] + 0.035, z) * sm(0.025, 0.05, np.abs(d[:, 0]))   # thinner high on the cheek
     # hair grows down the face: strands a few millimetres long
     dn = np.tile(np.array([0.0, 0.0, 1.0]), (n, 1))
@@ -118,13 +122,17 @@ def shade(P, N, lips, ears, nails, scalp, handw):
     # brows (above the eyes; mostly out of the shop shot)
     for e in (eyeL, eyeR):
         de = P - e
-        brow = sm(0.012, 0.02, de[:, 2]) * (1 - sm(0.026, 0.034, de[:, 2])) * (1 - sm(0.024, 0.042, np.abs(de[:, 0] - np.sign(e[0]) * 0.004))) * sm(0.2, 0.5, facing)
+        if SHE:     # finer, arched: highest two thirds of the way out, tapering to the tail
+            ax_ = np.abs(de[:, 0] - np.sign(e[0]) * 0.002); arch = 0.017 + 0.004 * np.exp(-((ax_ - 0.012) / 0.012) ** 2)
+            brow = sm(arch - 0.003, arch, de[:, 2]) * (1 - sm(arch + 0.004 - 0.003 * sm(0.0, 0.03, ax_), arch + 0.007 - 0.003 * sm(0.0, 0.03, ax_), de[:, 2])) * (1 - sm(0.024, 0.036, ax_)) * sm(0.2, 0.5, facing)
+        else:
+            brow = sm(0.012, 0.02, de[:, 2]) * (1 - sm(0.026, 0.034, de[:, 2])) * (1 - sm(0.024, 0.042, np.abs(de[:, 0] - np.sign(e[0]) * 0.004))) * sm(0.2, 0.5, facing)
         C = C * (1 - 0.8 * brow[:, None]) + HAIR * (0.8 * brow[:, None]); R = R * (1 - brow) + 0.7 * brow
     # lips: brown-mauve, darker at the line, fine vertical lines; the skin round the mouth a shade darker
     lw = sm(0.12, 0.6, lips)
     peri = sm(0.03, 0.012, np.linalg.norm(d * np.array([0.8, 1.0, 1.4]), axis=1)) * (1 - lw) * isHead
     C *= (1 - 0.1 * peri[:, None])
-    C = C * (1 - lw[:, None]) + np.array([0.15, 0.068, 0.06]) * lw[:, None] * (1 + 0.15 * (1 - sm(0.6, 0.95, lips)))[:, None] * 0.95
+    C = C * (1 - lw[:, None]) + np.array([0.15, 0.06, 0.058] if SHE else [0.15, 0.068, 0.06]) * lw[:, None] * (1 + 0.15 * (1 - sm(0.6, 0.95, lips)))[:, None] * 0.95
     R = R * (1 - lw) + 0.3 * lw
     H -= 0.00005 * lw * (0.5 + 0.5 * np.sin(x * 2 * np.pi / 0.0011 + 2 * vnoise(P * 300.0)))
     # warm where blood is near the surface: ears, the nose's tip and wings, the cheeks a touch
@@ -156,7 +164,7 @@ def shade(P, N, lips, ears, nails, scalp, handw):
         C *= np.where(side, 1 - 0.07 * sm(-0.2, 0.6, out) + 0.07 * sm(-0.2, -0.7, out), 1)[:, None]
         # forearm hair: on the back and outer side, thinning at the wrist, lying toward the hand
         dens = sm(-0.4, 0.5, out) * 0.55 + 0.2
-        dens *= sm(1.02, 0.85, t_arm) * fore
+        dens *= sm(1.02, 0.85, t_arm) * fore * (0.25 if SHE else 1.0)
         st = vnoise(along(P * 650.0, np.tile(adir, (n, 1)), 6.0))
         a_ = np.clip(dens * (0.17 + 0.06 * st), 0, 1)
         C = C * (1 - a_[:, None]) + HAIR * a_[:, None]
