@@ -21,7 +21,9 @@ jobs:
       matrix: ${{ steps.m.outputs.matrix }}
     steps:
       - id: m
-        run: python3 -c "import json; print('matrix=' + json.dumps({'body': [b.strip() for b in '${{ inputs.bodies }}'.split(',') if b.strip()]}))" >> $GITHUB_OUTPUT
+        env: { BODIES: "${{ inputs.bodies }}" }
+        run: |
+          python3 -c "import json, os; print('matrix=' + json.dumps({'body': [b.strip() for b in os.environ['BODIES'].split(',') if b.strip()]}))" >> $GITHUB_OUTPUT
   hang:
     needs: plan
     runs-on: ubuntu-latest
