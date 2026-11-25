@@ -25,6 +25,8 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 - The actual size button is called artwork.
 
 ### Fixed
+- The tee's inside is plain cotton again, as in the renders, instead of carrying the prints; and the 3D draws the outside of the tee first, so what it covers (its inside, the body under it) is never lit only to be hidden: about a fifth less work for the graphics card every frame.
+- On a graphics card that can't draw 60 frames a second, the breeze, the breathing and the slow turn run at an even 30 instead of a ragged 15 to 40, leaving the card time for the rest of the page; turning it by hand still gets every frame.
 - The word and the breathing dot shown while a view gets ready sit on a soft shade of their own, so they read on a black tee too.
 - The tee shows in 3D again (worn and on its form): it had stopped being drawn at all, leaving a white space and the body hollow where the tee should be.
 - The places behind the person are sharp: the studio, the window and the show are drawn as finely as the screen shows them, about four times the detail they had, and nothing is blurred on purpose any more. The studio and the window come from photographs four times as large; the show is rendered at that size. Phones get them at half size, still twice what they had.

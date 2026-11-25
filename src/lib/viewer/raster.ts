@@ -624,7 +624,10 @@ export class Raster {
         const mesh = o as THREE.Mesh;
         if (!mesh.isMesh) return;
         const mname = (mesh.material as THREE.Material)?.name || "";
-        const isInner = kind === "tee" && /inner/i.test(mname);
+        // the tee's plain inside: named "inner" by the export, or (the fit files keep no material names, only the
+        // slots) its second primitive; Blender's solidify puts the inside shell on slot 1 (pipeline/export.py)
+        const sib = mesh.parent?.children.filter((c) => (c as THREE.Mesh).isMesh) ?? [];
+        const isInner = kind === "tee" && (/inner/i.test(mname) || (!mname && sib.length === 2 && sib[1] === mesh));
         // the person: 4 skin, 5 denim, 6 eyes, 7 hair, 8 the hair cards (the path tracer reads their colour per vertex
         // too, and cuts the cards out by their strands as the live view does)
         if (kind === "person" && /haircard/i.test(mname)) {
@@ -637,6 +640,9 @@ export class Raster {
         const pid = /jeans/i.test(mname) ? 5 : /eye/i.test(mname) ? 6 : /hair/i.test(mname) ? 7 : 4;
         mesh.material = kind === "person" ? [this.personSkin, this.personDenim, this.personEyes, this.personHair][pid - 4]
           : kind === "body" ? this.skinMat : kind === "stool" ? this.stoolMat : isInner ? this.inner : this.outer!;
+        // the tee's outside is drawn before everything else: whatever it covers (its own inside, the body under it)
+        // then fails the depth test before it's shaded, instead of being lit in full and painted over
+        if (kind === "tee" && !isInner) mesh.renderOrder = -1;
         const g = mesh.geometry, pa = g.attributes.position, na = g.attributes.normal, mw = mesh.matrixWorld.clone();
         const id = kind === "person" ? pid : kind === "body" ? 2 : kind === "stool" ? 3 : isInner ? 1 : 0;
         parts.push({ mesh, mw, id, person: kind === "person" });
@@ -787,5 +793,19 @@ export class Raster {
 
   /** while shaders are being built off the page's thread nothing is drawn (a frame then would build them on it) */
   private held = 0;
-  render() { if (!this.held) this.renderer.render(this.scene, this.camera); }
+  /** how long the graphics card takes over a frame (submitted to done, smoothed; 0 until known or on WebGL) */
+  gpuMs = 0;
+  private timing = false;
+  render() {
+    if (this.held) return;
+    this.renderer.render(this.scene, this.camera);
+    const dev = this.timing ? null : gpuDevice(this.renderer);
+    if (!dev) return;
+    this.timing = true;
+    const t0 = performance.now();
+    dev.queue.onSubmittedWorkDone().then(() => {
+      const ms = performance.now() - t0;
+      this.gpuMs = this.gpuMs ? this.gpuMs * 0.9 + ms * 0.1 : ms;
+    }, () => {}).finally(() => { this.timing = false; });
+  }
 }
