@@ -2,6 +2,13 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.14.2 — 2026-11-25
+The tee hangs even on you.
+
+### Try-on
+- Stand easy and the tee sits square and level, the same on both sides: the small tilts and turns the camera can't tell from noise no longer lean it, lift one shoulder or push one side of the hem forward.
+- A real lean, turn or shrug still comes through whole, with no lag.
+
 ## 0.14.1 — 2026-11-25
 The tee fills out on a bigger body, the way cotton does.
 

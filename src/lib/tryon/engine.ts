@@ -41,6 +41,16 @@ const SOLVE = [L_SH, R_SH, L_EL, R_EL, L_HIP, R_HIP, L_EAR, R_EAR, NOSE];
 // heights down from the shoulders to the hem) is the cloth pushed out to lie on you, and only as far as heavy
 // cotton jersey gives across the body; past that it stays tight, as a size too small would
 const FIT_BANDS = [0.3, 0.42, 0.54, 0.66, 0.78, 0.9], GIVE = 1.1, CLOTH = 0.004;
+// A person standing easy is square to you and level, and their tee hangs the same on both sides. The pose model's
+// noise is a few degrees of tilt and turn (more for turn, its depth is a guess), and the tee would wear that as a
+// lean, one shoulder up, one side of the hem forward. So tilts and turns smaller than that noise read as none, larger
+// ones come through whole, with a smooth hand-over between: never a jump, never a lag on a real move
+const quiet = (a: number, d: number) => { const t = Math.min(1, Math.max(0, (Math.abs(a) - 0.5 * d) / d)); return a * t * t * (3 - 2 * t); };
+/** a left-to-right line (x toward the preview's right) with its small tilt and turn taken out */
+const square = (x: THREE.Vector3, roll: number, turn: number) => {
+  const r = quiet(Math.asin(Math.max(-1, Math.min(1, x.y / (x.length() || 1)))), roll), y = quiet(Math.atan2(x.z, x.x), turn);
+  return new THREE.Vector3(Math.cos(r) * Math.cos(y), Math.sin(r), Math.cos(r) * Math.sin(y));
+};
 const TRACK = [L_SH, R_SH, L_EL, R_EL, L_WR, R_WR, L_HIP, R_HIP, L_EAR, R_EAR, NOSE, L_IDX, R_IDX, L_KNEE, R_KNEE];
 
 /** One Euro filter: heavy smoothing when still, almost none when moving fast (Casiez et al. 2012) */
@@ -614,6 +624,8 @@ export class TryOn {
     const hips = (l![L_HIP].visibility ?? 0) > 0.6 && (l![R_HIP].visibility ?? 0) > 0.6;
     const hipMid = hips ? this.P.get(L_HIP)!.clone().add(this.P.get(R_HIP)!).multiplyScalar(0.5) : null;
     const up = hipMid ? mid.clone().sub(hipMid).normalize() : new THREE.Vector3(0, 1, 0);
+    // a sideways lean the noise would give you is taken out too (a lean toward or away from you stays)
+    { const a = Math.atan2(up.x, up.y), q = quiet(a, 0.04), r = Math.hypot(up.x, up.y); up.set(Math.sin(q) * r, Math.cos(q) * r, up.z).normalize(); }
     const frame = (x: THREE.Vector3, y: THREE.Vector3) => {
       const z = new THREE.Vector3().crossVectors(x, y).normalize(), yy = new THREE.Vector3().crossVectors(z, x).normalize();
       return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x.clone().normalize(), yy, z));
@@ -623,8 +635,10 @@ export class TryOn {
     // Shrug one shoulder and only that shoulder rises: on a person the collarbone lifts it while the ribcage stays
     // nearly level. So the chest takes half the tilt of your shoulder line (or the hips' tilt, when they're seen),
     // and the collarbones below lift each shoulder of the tee the rest of the way, to where your shoulder is
-    const xH = hips ? this.P.get(R_HIP)!.clone().sub(this.P.get(L_HIP)!).normalize() : null;
-    const xT = new THREE.Vector3(xA.x, xH ? (xA.y + xH.y) / 2 : xA.y * 0.5, xA.z).normalize();
+    // (the hips are the pose model's least sure points, so theirs get the widest margin)
+    const xH = hips ? square(this.P.get(R_HIP)!.clone().sub(this.P.get(L_HIP)!), 0.06, 0.16) : null;
+    const xS = square(xA, 0.04, 0.1);
+    const xT = new THREE.Vector3(xS.x, xH ? (xS.y + xH.y) / 2 : xS.y * 0.5, xS.z).normalize();
     const qNew = frame(xT, up);
     if (!this.placed) { this.torsoQ.copy(qNew); this.hipQ.copy(qNew); this.qSpeed = 0; }
     else {
@@ -643,7 +657,7 @@ export class TryOn {
       // torso), or it would tip back with them
       const thigh = (leg.angleTo(up) * 180) / Math.PI, lw = 0.55 * Math.min(1, Math.max(0, (45 - thigh) / 20));
       const pelvisUp = leg.multiplyScalar(lw).add(up.clone().multiplyScalar(1 - lw)).normalize();
-      this.hipQ.slerp(frame(this.P.get(R_HIP)!.clone().sub(this.P.get(L_HIP)!), pelvisUp), 1 - Math.exp(-dt * 18));
+      this.hipQ.slerp(frame(xH!, pelvisUp), 1 - Math.exp(-dt * 18));
     } else this.hipQ.slerp(this.torsoQ, 1 - Math.exp(-dt * 4));
 
     // ---- the skeleton, posed like a game character's ----
@@ -673,7 +687,8 @@ export class TryOn {
       // about the forward axis, raising the model's left (+x) shoulder is a positive turn, the right's negative
       const lift = [ang[0], -ang[1]], both = (lift[0] + lift[1]) / 2;
       (["L", "R"] as const).forEach((S, i) => {
-        const e = Math.max(-0.3, Math.min(0.3, lift[i] - both)) * (i ? -1 : 1);
+        // and both collarbones level unless one shoulder is clearly up
+        const e = quiet(Math.max(-0.3, Math.min(0.3, lift[i] - both)), 0.06) * (i ? -1 : 1);
         set(`clavicle.${S}`, new THREE.Quaternion().setFromAxisAngle(zc, e).multiply(carried(`clavicle.${S}`)), ease);
       });
     }
