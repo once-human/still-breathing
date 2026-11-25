@@ -42,8 +42,23 @@ export type Pixels = { data: Uint8Array; width: number; height: number; texels: 
 // canvas keeps colour premultiplied by alpha, which would lose detail where a picture is see-through).
 const DECODE = `
 const read = (b) => { const c = new OffscreenCanvas(b.width, b.height).getContext("2d", { willReadFrequently: true }); c.drawImage(b, 0, 0); b.close(); return c.getImageData(0, 0, c.canvas.width, c.canvas.height).data; };
+// any picture, alpha and all, as the file stores it (WebCodecs: no canvas, so no premultiplying on the way)
+const rgba = async (blob) => {
+  const dec = new ImageDecoder({ data: blob.stream(), type: blob.type || "image/webp", colorSpaceConversion: "none", premultiplyAlpha: "none" });
+  try {
+    const { image } = await dec.decode();
+    const width = image.displayWidth, height = image.displayHeight, data = new Uint8Array(width * height * 4);
+    await image.copyTo(data, { format: "RGBA", rect: { x: 0, y: 0, width, height }, layout: [{ offset: 0, stride: width * 4 }] });
+    image.close();
+    return { width, height, data };
+  } finally { dec.close(); }
+};
 onmessage = async (e) => {
-  const { id, blob, w, h } = e.data, base = { colorSpaceConversion: "none", premultiplyAlpha: "none" };
+  const { id, blob, w, h, raw } = e.data, base = { colorSpaceConversion: "none", premultiplyAlpha: "none" };
+  if (raw) {
+    try { const r = await rgba(blob); postMessage({ id, ...r }, [r.data.buffer]); } catch (err) { postMessage({ id, error: String(err) }); }
+    return;
+  }
   try {
     const [big, small] = await Promise.all([
       createImageBitmap(blob, w ? { ...base, resizeWidth: w, resizeHeight: h, resizeQuality: "high" } : base),
@@ -61,7 +76,18 @@ onmessage = async (e) => {
 let decoder: Worker | null = null, nextId = 0;
 const waiting = new Map<number, { ok: (p: Pixels) => void; no: (e: Error) => void }>();
 export async function pixels(url: string, size?: [number, number]): Promise<Pixels> {
+  return decode(await grab(url), { w: size?.[0], h: size?.[1] }) as Promise<Pixels>;
+}
+/**
+ * Any picture (alpha included, exactly as stored) as raw RGBA bytes, decoded in the Worker; null where the browser
+ * can't (no WebCodecs image decoder): the caller then takes the ordinary image path.
+ */
+export async function rawImage(url: string): Promise<{ data: Uint8Array; width: number; height: number } | null> {
+  if (typeof ImageDecoder === "undefined") return null;
   const blob = await grab(url);
+  return (decode(blob, { raw: true }) as Promise<{ data: Uint8Array; width: number; height: number }>).catch(() => null);
+}
+function decode(blob: Blob, opt: { w?: number; h?: number; raw?: boolean }): Promise<unknown> {
   if (!decoder) {
     decoder = new Worker(URL.createObjectURL(new Blob([DECODE], { type: "text/javascript" })));
     decoder.onmessage = (e) => {
@@ -70,5 +96,5 @@ export async function pixels(url: string, size?: [number, number]): Promise<Pixe
     };
   }
   const id = ++nextId;
-  return new Promise((ok, no) => { waiting.set(id, { ok, no }); decoder!.postMessage({ id, blob, w: size?.[0], h: size?.[1] }); });
+  return new Promise((ok, no) => { waiting.set(id, { ok: ok as (p: Pixels) => void, no }); decoder!.postMessage({ id, blob, ...opt }); });
 }

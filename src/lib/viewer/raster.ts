@@ -9,7 +9,7 @@ import { RectAreaLightTexturesLib } from "three/addons/lights/RectAreaLightTextu
 import { CAMERA, VFOV, ASPECT, SWEEP, FLOOR, KNIT_REPEAT, SCENES, lightFrame, radiance, type Camera, type Scene, type V3 } from "./scene";
 import { ENV_W, projectEnv, turnSH } from "./sh";
 import type { TeeGeometry } from "./pathtracer";
-import { grab, bitmap, type Pixels } from "./grab";
+import { grab, bitmap, rawImage, type Pixels } from "./grab";
 import { ClothLink, offsetTexture, slopeTextures, clothNodes } from "./cloth";
 import type { FlatLay, LookNodes, Side } from "./flat";
 
@@ -238,8 +238,20 @@ export class Raster {
     this.ambient();
   }
 
+  /**
+   * A picture as a texture, decoded in a Worker into raw bytes and uploaded as a plain buffer copy (an image upload
+   * can hold the page while the graphics process converts it); the ordinary image path where the browser can't.
+   * Same filters either way (the default mipmapped ones), so swapping one for another never changes a shader.
+   */
+  private async picture(url: string) {
+    const raw = await rawImage(url);
+    if (!raw) return new THREE.Texture(await bitmap(url));
+    const t = new THREE.DataTexture(raw.data, raw.width, raw.height, THREE.RGBAFormat, THREE.UnsignedByteType);
+    t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
+    return t;
+  }
   private async tx(name: string, srgb: boolean) {
-    const t = new THREE.Texture(await bitmap(ASSET + name));
+    const t = await this.picture(ASSET + name);
     t.flipY = false; t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
     // the print stays crisp across the cloth as it turns away: full anisotropic filtering
     t.anisotropy = this.maxAniso; t.needsUpdate = true; return t;
@@ -285,7 +297,7 @@ export class Raster {
   }
   current = "";
   async printTexture(url: string, mips: boolean) {
-    const t = new THREE.Texture(await bitmap(url));
+    const t = await this.picture(url);
     t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.magFilter = THREE.LinearFilter;
     if (mips) { t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.anisotropy = this.maxAniso; }
     else { t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.anisotropy = 1; }

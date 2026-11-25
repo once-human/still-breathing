@@ -599,9 +599,10 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           const [c, o] = await Promise.all([pt ? colourMaps(d, t) : Promise.resolve(null), raster.setLook(d, t)]).then(([m]) => m ?? [null, null]);
           s.design = d; s.tee = t; raster.setScene(scene, t === "cream");
           if (pt && c && o) { pt.setColourway(c, o); ptFullOn = ""; pt.setScene(scene, FABRIC[t], t === "cream"); }
-          if (!lite && !firstFrame) void sharpen();
           s.dirty = true; lastSig = "";
           await frames(2);
+          // its print at full resolution in the next quiet moment, not in the switch (it's a big picture)
+          if (!lite && !firstFrame) ("requestIdleCallback" in window ? requestIdleCallback : (f: () => void) => setTimeout(f, 1500))(() => { if (!dead && s.design === d) void sharpen(); });
         },
         zoomBy: (k) => { if (k === 0) zoomAt(1, 0, 0); else zoomAt(zm.zt * k, 0, 0); },
         turnTo: (deg) => { const d = ((((deg - s.yaw) % 360) + 540) % 360) - 180; s.goal = s.yaw + d; holdUntil = performance.now() + 6000; },
