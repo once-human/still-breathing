@@ -4,15 +4,28 @@
 # over the decks, down low in a trough round the stage, rising again over the crowd (after the shape of the canopy
 # at Fred again..'s USB002 nights, Alexandra Palace, 2026). Every band of the ring is simulated twice with its own
 # gathers and fullness; stage.py turns copies of them round the ring.
+# MOTION=1 BAND=<k>: the canopy breathing, as it rose and fell at the show: after it settles, every ring of pick-ups
+# rises and falls on its winch line, one slow wave running out from the decks, and the cloth follows. One loop of
+# LOOP seconds is kept at FPS frames a second (b<k>v<j>_anim (frames, n, 3) float16), after a loop to get going, so
+# its end runs into its start. One band per call, so the farm runs the bands side by side (stage-motion.yml).
 # Run on the farm (stage.yml, job "canopy"); writes the settled cloth of every band as one .npz:
 #   b<k>v<j>_v (n, 3) float32 vertices, for the swag centred on the +Y axis round the deck centre at (0, 0)
 #   b<k>v<j>_f (m, 4) int32 quads, and N (swags per ring), RINGS (r, z) the pick-up rings
-import bpy, sys, math, random
+import bpy, sys, os, math, random
 import numpy as np
 from mathutils import Vector, Matrix
 
 a = sys.argv[sys.argv.index("--") + 1:]
 OUT = a[0]; TEST = len(a) > 1 and a[1] == "test"
+MOTION = os.environ.get("MOTION") == "1"; ONLY = int(os.environ.get("BAND", "-1"))
+LOOP, FPS, SIM_FPS = 8.0, 12, 24
+LIFT = [0.35, 0.5, 0.65, 0.6, 0.5, 0.4, 0.3]     # how far each ring of pick-ups rises and falls, m
+def lift(ring, f):
+    """a ring's pick-up height offset at simulation frame f: still while it settles, then a wave running outwards,
+    eased in over the first loop"""
+    t = (f - 1 - SETTLE) / SIM_FPS
+    if t <= 0: return 0.0
+    return LIFT[ring] * min(1.0, t / LOOP) * math.sin(2 * math.pi * (t / LOOP - 0.14 * ring))
 N = 16                                           # rigging lines round the decks
 # pick-up rings round the deck centre: (radius m, height m). High over the decks, a trough round the stage
 # where the swags hang lowest, rising again over the crowd to the outer rigging; low enough that from in the
@@ -20,14 +33,19 @@ N = 16                                           # rigging lines round the decks
 RINGS = [(3.5, 8.0), (7.0, 6.0), (11.0, 4.3), (15.0, 4.4), (20.0, 4.8), (26.0, 5.6), (33.0, 6.6)]
 VARIANTS = 2
 CELL = 0.09                                      # cloth grid spacing at rest, m
-END = 30 if TEST else 110                        # frames: gathered by 30, settled by the end
+SETTLE = 30 if TEST else 110                     # frames: gathered by 30, settled by the end
+END = SETTLE + (int((0.25 if TEST else 2) * LOOP * SIM_FPS) if MOTION else 0)
 rnd = random.Random(2026)
 th = 2 * math.pi / N
 res = {"N": np.int32(N), "RINGS": np.array(RINGS, np.float32)}
 
+DRAWS = 6                                        # rnd draws per swag (fullness 2, gathers 4)
 for k in range(1 if TEST else len(RINGS) - 1):
     (r0, z0), (r1, z1) = RINGS[k], RINGS[k + 1]
     for j in range(1 if TEST else VARIANTS):
+        if ONLY >= 0 and k != ONLY:              # another band's swag: its draws still taken, so every swag hangs
+            for _ in range(DRAWS): rnd.random()  # the same whether the bands are run together or one by one
+            continue
         bpy.ops.wm.read_factory_settings(use_empty=True)
         sc = bpy.context.scene; sc.frame_start, sc.frame_end = 1, END
         ft = rnd.uniform(1.14, 1.26)             # fullness across and along: the extra cloth that falls in folds
@@ -60,6 +78,10 @@ for k in range(1 if TEST else len(RINGS) - 1):
             ang = math.pi / 2 + s * th / 2
             e.location = (r * math.cos(ang), r * math.sin(ang), z); e.scale = (0.04, 0.04, 0.04)
             e.keyframe_insert("location", frame=30); e.keyframe_insert("scale", frame=30)
+            if MOTION:   # the winch line: the pick-up's height every frame of the breathing
+                ring = k if cv == 0 else k + 1
+                for f in range(SETTLE + 1, END + 1):
+                    e.location = (r * math.cos(ang), r * math.sin(ang), z + lift(ring, f)); e.keyframe_insert("location", frame=f)
             sc.frame_set(1)
             h = ob.modifiers.new(f"h{ci}{cv}", "HOOK"); h.object = e; h.vertex_group = g.name
             h.matrix_inverse = Matrix.Translation(c).inverted(); h.center = c; h.falloff_type = "NONE"
@@ -70,9 +92,18 @@ for k in range(1 if TEST else len(RINGS) - 1):
         s_.vertex_group_mass = "pin"; s_.pin_stiffness = 1.0
         cl.collision_settings.use_collision = False; cl.collision_settings.use_self_collision = False
         cl.point_cache.frame_start, cl.point_cache.frame_end = 1, END
-        for f in range(1, END + 1): sc.frame_set(f)
-        dg = bpy.context.evaluated_depsgraph_get(); em = ob.evaluated_get(dg).to_mesh()
-        co = np.empty(len(em.vertices) * 3, np.float32); em.vertices.foreach_get("co", co)
+        keep = set(range(END - int(LOOP * SIM_FPS) + 1, END + 1, SIM_FPS // FPS)) if MOTION else set()
+        anim = []; settled = None
+        def grab_co():
+            dg = bpy.context.evaluated_depsgraph_get(); em = ob.evaluated_get(dg).to_mesh()
+            c_ = np.empty(len(em.vertices) * 3, np.float32); em.vertices.foreach_get("co", c_)
+            ob.evaluated_get(dg).to_mesh_clear(); return c_
+        for f in range(1, END + 1):
+            sc.frame_set(f)
+            if f == SETTLE: settled = grab_co()
+            if f in keep: anim.append(grab_co().reshape(-1, 3).astype(np.float16))
+        co = settled
+        if MOTION: res[f"b{k}v{j}_anim"] = np.stack(anim)
         res[f"b{k}v{j}_v"] = co.reshape(-1, 3); res[f"b{k}v{j}_f"] = np.array(faces, np.int32)
         zz = co.reshape(-1, 3)[:, 2]
         print(f"band {k} ({r0}->{r1} m) variant {j}: {nu}x{nv}, hangs {zz.min():.2f}..{zz.max():.2f} m", flush=True)

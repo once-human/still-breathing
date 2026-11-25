@@ -9,6 +9,10 @@
 #     place, size and brightness, printed for src/lib/viewer/scene.ts; everything is exposed so a white tee's front
 #     reads 0.8 in the light of the whole room
 # Writes public/tee/stage/<place>.webp through pipeline/stage_post.py.
+# ROWS=r0,r1 (with width 16384, BAND_ROWS in stage_post.py): only the band the viewer's camera can see, sharp (no lens
+# blur) and from the 16k photo, written as public/tee/stage/<place>-band.webp: what the viewer shows behind the
+# person. The whole picture (4096) stays for the light on the person and the rest of the sphere.
+# The .hdr is read by Blender (pipeline/hdr2npy.py; $BLENDER, default blender) into ~/.cache/polyhaven once.
 import json, math, os, subprocess, sys, urllib.request
 import numpy as np
 
@@ -69,15 +73,24 @@ def read_hdr(path):
     return out[..., :3].astype(np.float32) * f[..., None]
 
 
+ROWS = os.environ.get("ROWS")
+RES = "16k" if ROWS else "8k"
+
+
 def hdri(name):
     os.makedirs(CACHE, exist_ok=True)
-    npy = os.path.join(CACHE, name + "_8k.npy"); src = os.path.join(CACHE, name + "_8k.hdr")
-    if os.path.exists(npy): return np.load(npy).astype(np.float32)
+    npy = os.path.join(CACHE, f"{name}_{RES}.npy"); src = os.path.join(CACHE, f"{name}_{RES}.hdr")
+    if os.path.exists(npy): return np.load(npy)
     if not os.path.exists(src):
-        req = urllib.request.Request(f"https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/8k/{name}_8k.hdr",
+        req = urllib.request.Request(f"https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/{RES}/{name}_{RES}.hdr",
                                      headers={"User-Agent": "stage-builder"})
-        open(src, "wb").write(urllib.request.urlopen(req).read())
-    a = read_hdr(src); np.save(npy, a.astype(np.float16)); return a
+        with urllib.request.urlopen(req) as r, open(src, "wb") as f:
+            while True:
+                c = r.read(1 << 22)
+                if not c: break
+                f.write(c)
+    subprocess.run([os.environ.get("BLENDER", "blender"), "-b", "--factory-startup", "-P", os.path.join(HERE, "hdr2npy.py"), "--", src, npy], check=True)
+    return np.load(npy)
 
 
 img = hdri(P["hdri"]); HH, HW, _ = img.shape
@@ -124,10 +137,11 @@ def sample(q):
 
 # ---------- the panorama the viewer sees, rays from its camera ring ----------
 Hh = W // 2
-out = np.zeros((Hh, W, 3), np.float32); depth = np.zeros((Hh, W), np.float32)
+R0, R1 = (int(x) for x in ROWS.split(",")) if ROWS else (0, Hh)
+out = np.zeros((R1 - R0, W, 3), np.float32); depth = np.zeros((R1 - R0, W), np.float32)
 SS = [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)]
-for r0 in range(0, Hh, 64):
-    rows = np.arange(r0, min(r0 + 64, Hh))
+for r0 in range(R0, R1, 64 if W <= 8192 else 16):
+    rows = np.arange(r0, min(r0 + (64 if W <= 8192 else 16), R1))
     acc = 0; dep = 0
     for sx, sy in SS:
         u = (np.arange(W) + sx) / W; v = (rows + sy) / Hh
@@ -137,7 +151,7 @@ for r0 in range(0, Hh, 64):
         t = np.maximum(hit(o, d), 0.88 * RING)
         p = o + d * t[..., None]
         acc = acc + sample(p - np.array([0, H, 0], np.float32)); dep = dep + t
-    out[rows] = acc / len(SS); depth[rows] = dep / len(SS)
+    out[rows - R0] = acc / len(SS); depth[rows - R0] = dep / len(SS)
 print("projected", W, "x", Hh)
 
 # ---------- the lens: blur by the circle of confusion at each depth, from a stack of disc blurs ----------
@@ -152,7 +166,7 @@ def disc(a, R):
     return np.stack([np.fft.irfft2(np.fft.rfft2(a[..., c]) * K, s=a.shape[:2]) for c in range(3)], -1).astype(np.float32)
 
 
-radii = [0, 1, 2, 3, 4.5, 6.5]
+radii = [0, 1, 2, 3, 4.5, 6.5] if not ROWS else [0]   # the band the viewer shows is sharp
 stack = [disc(out, R) for R in radii]
 cc = np.clip(coc, 0, radii[-1]); res = np.zeros_like(out)
 for i in range(len(radii) - 1):
@@ -160,7 +174,7 @@ for i in range(len(radii) - 1):
     w = np.clip((cc - a) / (b - a), 0, 1)
     m = ((cc >= a) & (cc <= b))[..., None]
     res = np.where(m, stack[i] * (1 - w[..., None]) + stack[i + 1] * w[..., None], res)
-out = np.maximum(res, 0)
+out = np.maximum(res, 0) if len(radii) > 1 else out
 print("lens: blur radius px, median", round(float(np.median(coc)), 2), "max", round(float(coc.max()), 2))
 
 # ---------- exposure: a white tee's front reads 0.8 in the whole room's light ----------
@@ -173,7 +187,7 @@ E = float(np.sum((img @ LUM) * np.clip(cosf, 0, None) * dw[:, None]))
 K = 0.8 * math.pi / (0.8 * E)                                                 # white (0.8): 0.8 E K / pi = 0.8
 print("front irradiance", round(E, 3), "exposure", round(K, 4))
 out *= K
-band = out[int(Hh * 0.3):int(Hh * 0.62)] @ LUM
+band = (out if ROWS else out[int(Hh * 0.3):int(Hh * 0.62)]) @ LUM
 print("background band median", round(float(np.median(band)), 3), "p95", round(float(np.percentile(band, 95)), 3))
 
 # ---------- the lights: the bright parts of the photo, where they are ----------
@@ -206,6 +220,6 @@ for az0, az1, e0, e1, dist, name in P["lights"]:
 world = (out.reshape(-1, 3).mean(0))
 print(json.dumps(dict(lights=lights, world=[round(float(c), 3) for c in world]), indent=1))
 
-npy = os.path.join(CACHE, f"{PLACE}_photo.npy"); np.save(npy, out.astype(np.float16))
-dst = os.path.join(HERE, "..", "public", "tee", "stage", f"{PLACE}.webp")
-subprocess.run([sys.executable, os.path.join(HERE, "stage_post.py"), PLACE, dst, npy], check=True)
+npy = os.path.join(CACHE, f"{PLACE}_photo{'_band' if ROWS else ''}.npy"); np.save(npy, out.astype(np.float16))
+dst = os.path.join(HERE, "..", "public", "tee", "stage", f"{PLACE}{'-band' if ROWS else ''}.webp")
+subprocess.run([sys.executable, os.path.join(HERE, "stage_post.py"), PLACE, dst, npy], check=True, env={**os.environ, "BAND": "1" if ROWS else ""})

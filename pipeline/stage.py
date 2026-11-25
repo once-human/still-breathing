@@ -772,6 +772,9 @@ def facing(x, y, tx, ty):
 CANOPY = os.environ.get("CANOPY") or os.path.expanduser("~/.cache/stage/canopy.npz")
 
 
+SWAGS = []   # (band, variant, mesh) of the canopy, for the breathing frames (FRAMES)
+
+
 def canopy_cloth():
     """the canopy's settled cloth (canopy.py): made on the farm before the strips (stage.yml), or here if missing"""
     if not os.path.exists(CANOPY):
@@ -931,7 +934,7 @@ def build_show():
             if f"b{k}v{j}_v" not in cn: break
             vv, ff = cn[f"b{k}v{j}_v"], cn[f"b{k}v{j}_f"]
             me = bpy.data.meshes.new(f"swag{k}{j}"); me.from_pydata(vv.tolist(), [], ff.tolist())
-            me.shade_smooth(); me.materials.append(fab); meshes.append(me)
+            me.shade_smooth(); me.materials.append(fab); meshes.append(me); SWAGS.append((k, j, me))
         for i in range(Nn if meshes else 0):
             o = bpy.data.objects.new("swag", meshes[(i + k) % len(meshes)]); col.objects.link(o)
             o.location = (CX, CY, 0); o.rotation_euler = (0, 0, 2 * math.pi * i / Nn)
@@ -1170,6 +1173,14 @@ r.engine = "CYCLES"; r.resolution_x = W; r.resolution_y = W // 2; r.resolution_p
 r.use_border = STRIPS > 1; r.use_crop_to_border = True
 r.border_min_x, r.border_max_x = 0, 1
 r.border_max_y = 1 - STRIP / STRIPS; r.border_min_y = 1 - (STRIP + 1) / STRIPS   # strip 0 is the top
+# ROWS=r0,r1: only these rows of the picture (of W/2, from the top), split into the strips: the band the viewer's
+# camera can see (stage_post.py BAND_ROWS at width 16384), drawn sharp: no lens blur, every detail kept
+ROWS = os.environ.get("ROWS")
+if ROWS:
+    r0_, r1_ = (int(x) for x in ROWS.split(","))
+    a_ = r0_ + (r1_ - r0_) * STRIP // STRIPS; b_ = r0_ + (r1_ - r0_) * (STRIP + 1) // STRIPS
+    r.use_border = True; r.border_max_y = 1 - a_ / (W // 2); r.border_min_y = 1 - b_ / (W // 2)
+    cam.data.dof.use_dof = False
 r.image_settings.file_format = "OPEN_EXR"; r.image_settings.color_depth = "16"
 r.filepath = OUT
 cy = sc.cycles
@@ -1185,9 +1196,29 @@ else:   # white rooms are lit mostly by their own walls: let the light go round
     cy.max_bounces = 10; cy.diffuse_bounces = 6; cy.glossy_bounces = 3; cy.transmission_bounces = 6; cy.transparent_max_bounces = 8
     cy.blur_glossy = 0.6
 r.threads_mode = "AUTO"
-bpy.ops.render.render(write_still=True)
 import numpy as np
-im = bpy.data.images.load(OUT); w, h = im.size
-px = np.empty(w * h * 4, np.float32); im.pixels.foreach_get(px)
-np.save(OUT.rsplit(".", 1)[0] + ".npy", px.reshape(h, w, 4)[::-1, :, :3].astype(np.float16))
-print("saved", PLACE, OUT, "strip", STRIP, "of", STRIPS, w, "x", h)
+
+
+def render_to(out):
+    r.filepath = out; bpy.ops.render.render(write_still=True)
+    im = bpy.data.images.load(out); w, h = im.size
+    px = np.empty(w * h * 4, np.float32); im.pixels.foreach_get(px); bpy.data.images.remove(im)
+    np.save(out.rsplit(".", 1)[0] + ".npy", px.reshape(h, w, 4)[::-1, :, :3].astype(np.float16))
+    print("saved", PLACE, out, "strip", STRIP, "of", STRIPS, w, "x", h, flush=True)
+
+
+# FRAMES=a-b CANOPY_ANIM=<dir of band<k>.npz from canopy.py MOTION=1>: the canopy breathing, frames a..b of its loop,
+# the scene built once and only the cloth moved between frames (the same noise seed every frame, so what stands
+# still stays still); each frame saved as <out>-fNNN.npy
+FRAMES = os.environ.get("FRAMES")
+if FRAMES:
+    fa, fb = (int(x) for x in FRAMES.split("-"))
+    anim = {}
+    for k, j, me in SWAGS:
+        if k not in anim: anim[k] = dict(np.load(os.path.join(os.environ["CANOPY_ANIM"], f"band{k}.npz")))
+    for f in range(fa, fb + 1):
+        for k, j, me in SWAGS:
+            me.vertices.foreach_set("co", anim[k][f"b{k}v{j}_anim"][f].astype(np.float32).ravel()); me.update()
+        render_to(OUT.rsplit(".", 1)[0] + f"-f{f:03d}.exr")
+else:
+    render_to(OUT)
