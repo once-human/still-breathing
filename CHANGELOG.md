@@ -2,6 +2,10 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.16.3 — 2026-11-25
+### Shirts
+- 02 i am a party has no mirror ball after all; the title sits centred again.
+
 ## 0.16.2 — 2026-11-25
 ### Shirts
 - The mirror ball on 02 i am a party is smaller and sits right after the date, no string: bigger tiles, lit from one side, every tile its own flat tone.
