@@ -2,6 +2,15 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.15.0 — 2026-11-25
+Breath belongs to the whole tour now.
+
+### Shirts
+- 02 breath (black) is drawn again for both nights: a real crowd seen from the stage through a heat camera, the heat in flat bands of colour with clean edges, the far crowd melting into a purple haze, every breath rising. No grain.
+- Its back reads breath.. / india . 12 . 2026, lettered in the crowd's hand, with notes: bengaluru, 16° at night; mumbai, 20° at night; hands up since the first song; the nose stays cold.
+- The tour has two shirts, the crowd and breath; Mumbai and Bengaluru each have their map.
+- New try-on textures and turntable frames for breath.
+
 ## 0.14.2 — 2026-11-25
 The tee hangs even on you.
 

@@ -67,7 +67,7 @@ export default function Home() {
           <section className="mt-16 md:col-span-5 md:mt-0 lg:col-span-4 lg:col-start-9">
             <Label>about this tee</Label>
             <p className="max-w-[40ch] text-[14px] text-ink/85">
-              still breathing makes one shirt per moment. lineup 01 is for the december shows in india: the crowd, one drawing for the whole tour, a map of the ground for each city, mumbai and bengaluru, and two more for bengaluru: breath and end of the line. each one is made to order and sent anywhere in india.
+              still breathing makes one shirt per moment. lineup 01 is for the december shows in india: two for the whole tour, the crowd and breath, both nights in each, and a map of the ground for each city, mumbai and bengaluru. each one is made to order and sent anywhere in india.
             </p>
           </section>
         </div>

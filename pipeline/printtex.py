@@ -44,10 +44,16 @@ def over(dst, src):
     al = a + dst[..., 3:4] * (1 - a)
     return np.dstack([rgb / np.maximum(al, 1e-4), al])
 
-def save8(a8, path):
+# the heat picture (breath) is continuous tone, not line art: lossless it's 3.5x the crowd, so its colour goes lossy
+# (no visible change at 88 over flat bands) and its alpha stays exact
+LOSSY = {"e"}
+
+def save8(a8, path, lossy=False):
     a = a8.astype(np.float32)
     a[..., :3] *= a[..., 3:4] / 255
-    Image.fromarray((a + 0.5).astype(np.uint8), "RGBA").save(path, lossless=True, quality=100, method=6, exact=True)
+    im = Image.fromarray((a + 0.5).astype(np.uint8), "RGBA")
+    if lossy: im.save(path, quality=88, alpha_quality=100, method=6, exact=True)
+    else: im.save(path, lossless=True, quality=100, method=6, exact=True)
 
 def save(arr, path):
     save8((np.clip(arr, 0, 1) * 255 + 0.5).astype(np.uint8), path)
@@ -66,7 +72,7 @@ for d, tee in pairs:
         # lettering exported at print size or above is simply area-averaged; exported small, it's recut
         b = over(b, resize_rgba(o, (BW, BH)) if o.width >= BW else recut(o, (BW, BH)))
     b8 = knockout((np.clip(b, 0, 1) * 255 + 0.5).astype(np.uint8), tee)
-    save8(b8, f"{OUT}/print-back-{d}-{tee}{'-full' if FULL else ''}.webp")
+    save8(b8, f"{OUT}/print-back-{d}-{tee}{'-full' if FULL else ''}.webp", d in LOSSY)
 if FULL: sys.exit()
 
 # chest: again.. in four scripts, rebuilt at 4x from the Figma export (the old one was these lines at 1x)
