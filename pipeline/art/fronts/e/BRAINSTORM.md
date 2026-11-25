@@ -51,19 +51,20 @@ cut by hand.
 15. **A handprint on cold steel** (the barricade). The back's hands again, in another pose: cut.
 16. **A thermometer** or temperature scale under the word. A camera/weather interface: cut.
 
-## The eight, and why
+## The two, and why
 
-| # | slug | wordmark | the one idea | where | why it is in |
+The owner then asked for two fronts, not eight: the two strongest and most different, made properly, with more
+passes and more craft, "don't go too light". The other six were drafted to three rounds and dropped.
+
+| # | slug | wordmark | the idea | where | why these two |
 |---|---|---|---|---|---|
-| 01 | warm-word | again.. | heat in the letters (nested bands) | left chest, 10 cm | the most direct partner to the back, all in the type |
-| 02 | two-nights | again.. | the dots are the two nights | left chest, 10 cm | quiet, true, and only this shirt has the two temperatures |
-| 03 | breath-on-glass | again.. | the word wiped through breath fog | left chest, 10.5 cm | breath as a real thing everyone did that night, not a picture of the crowd |
-| 04 | one-line | four scripts | none: the wordmark alone | collarbone, 24 cm | the brand's four scripts made new, very restrained |
-| 05 | the-seal | four scripts | a small warm core | left chest, 9.5 cm | a badge that holds the scripts, the label-shirt one |
-| 06 | quiet-violet | fred again.. | none: tone on tone | centre chest, 22 cm | the boldest size but the calmest colour |
-| 07 | rising | fred again.. | the dots rise as breath | lower hem, left, 12 cm | a different place on the shirt, one small gesture |
-| 08 | warm-arcs | actual life | arcs of warmth | centre chest, 13 cm | the liked half circles carried to this shirt |
+| 01 | breath-on-glass | again.. | the word wiped by a finger through breath fog on the cab window home; the dots show a streetlamp's orange | left chest, ~12 cm | the truest moment of the night (the cold, the breath, going home still buzzing), a picture of its own that the back never shows, and the word is the picture |
+| 02 | warm-word | fred again.. | the name with its own heat round it, two hand-drawn isotherms (orange, violet) that sit higher than the letters, so the warmth rises | centre chest, ~22 cm | the most direct partner to the back: its heat bands, carried by the lettering alone |
 
-Each is genuinely different: two are pure wordmarks (04, 06), four pair a wordmark with one small idea (02, 03, 07,
-08), one is lettering with the idea inside it (01), one is a seal (05). Placements: left chest ×4, centre chest ×2,
-collarbone, hem.
+They are different in every way that matters: one is a left-chest object in cream with the letters as negative space,
+the other a centre-chest wordmark in line; one is cold glass, the other body heat; one says again.., the other
+fred again...
+
+Developed from ideas 3 and 1 above. On the way, two ideas were tried and taken out of 01: a halftone edge on the fog
+(read as splatter) and a streetlamp drawn outside the fog with rings of light (read as an icon). 02 started as solid
+nested bands (read as 70s bubble type) and became the contour lines.
