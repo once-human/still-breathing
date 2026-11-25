@@ -41,7 +41,11 @@ band = img[int(H * 0.3):int(H * 0.62)]
 lum = band @ np.array([0.2126, 0.7152, 0.0722], np.float32)
 k = EXPOSE or (1.0 / max(float(np.percentile(lum, 99.7)), 1e-6) if PLACE == "show" else 1.0)
 print("exposure", round(k, 3), "band median", round(float(np.median(lum)) * k, 4))
-img = np.clip(img * k, 0, 1)
+img = img * k
+if PLACE == "show":   # the black point a photographer sets for a night show: the haze's faint floor goes to black
+    b = 0.6 * float(np.percentile(lum, 10)) * k
+    img = np.maximum(img - b, 0) / (1 - b)
+img = np.clip(img, 0, 1)
 srgb = np.where(img <= 0.0031308, img * 12.92, 1.055 * np.power(img, 1 / 2.4) - 0.055)
 q = np.clip(np.floor(srgb * 255 + np.random.default_rng(7).uniform(0, 1, srgb.shape)), 0, 255).astype(np.uint8)
 Image.fromarray(q, "RGB").save(OUT, quality=88 if PLACE == "show" else 92, method=6)

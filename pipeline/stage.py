@@ -787,13 +787,13 @@ def fabric_mat():
     """the canopy: a sheer white synthetic, a little glossy, crinkled; light passes through it and glows in it"""
     m = bpy.data.materials.new("canopy"); m.use_nodes = True; nt = m.node_tree; N_ = nt.nodes
     p = N_["Principled BSDF"]
-    p.inputs["Base Color"].default_value = (0.84, 0.85, 0.86, 1); p.inputs["Roughness"].default_value = 0.34
+    p.inputs["Base Color"].default_value = (0.84, 0.85, 0.86, 1); p.inputs["Roughness"].default_value = 0.5
     p.inputs["Sheen Weight"].default_value = 0.35; p.inputs["Sheen Roughness"].default_value = 0.4
     tl = N_.new("ShaderNodeBsdfTranslucent"); tl.inputs[0].default_value = (0.82, 0.84, 0.86, 1)
     tp = N_.new("ShaderNodeBsdfTransparent")
     m1 = N_.new("ShaderNodeMixShader"); m1.inputs[0].default_value = 0.55
     nt.links.new(p.outputs[0], m1.inputs[1]); nt.links.new(tl.outputs[0], m1.inputs[2])
-    m2 = N_.new("ShaderNodeMixShader"); m2.inputs[0].default_value = 0.6      # how much light the weave stops
+    m2 = N_.new("ShaderNodeMixShader"); m2.inputs[0].default_value = 0.48     # how much light the weave stops
     nt.links.new(tp.outputs[0], m2.inputs[1]); nt.links.new(m1.outputs[0], m2.inputs[2])
     nt.links.new(m2.outputs[0], N_["Material Output"].inputs[0])
     # crinkles: the creases a thin synthetic keeps from being packed, a few cm across
@@ -832,7 +832,7 @@ def build_show():
     global ZC
     M_STAGE = mat("stage", (0.012, 0.012, 0.012), 0.95)          # black stage cloth
     M_CASE = mat("case", (0.022, 0.022, 0.023), 0.45)
-    M_ALU = mat("alu", (0.6, 0.6, 0.62), 0.35, metal=1.0)
+    M_ALU = mat("barrier", (0.03, 0.03, 0.032), 0.55, metal=0.4)    # crowd barrier, painted black
     M_TRUSS = mat("truss", (0.5, 0.5, 0.52), 0.35, metal=1.0)
     M_BLACK = mat("black truss", (0.02, 0.02, 0.02), 0.4, metal=0.5)
     M_WOOD = mat("desk", (0.05, 0.035, 0.025), 0.5)
@@ -911,7 +911,7 @@ def build_show():
             p = Vector((tx, CY + dy, SZ + 4.2))
             cyl(p, p + Vector((0, 0, 0.3)), 0.12, M_CASE, 12)
             out_ = Vector((CX + side * 13, CY + (dy * 9), 4.0))       # up into the canopy's trough
-            light("SPOT", p, out_, 4000, (0.82, 0.88, 1.0) if k % 2 else (0.35, 0.55, 1.0), size=0.1, spot=34, blend=0.7)
+            light("SPOT", p, out_, 2600, (0.82, 0.88, 1.0) if k % 2 else (0.35, 0.55, 1.0), size=0.1, spot=34, blend=0.7)
         light("SPOT", (tx, CY, SZ + 4.0), (CX, CY, SZ + 1.4), 900, (1.0, 0.58, 0.28), size=0.1, spot=40, blend=0.7)
     # hangs of speakers either side of the stage
     for side in (-1, 1):
@@ -951,7 +951,7 @@ def build_show():
     for i in range(24):                                                 # soft washes down onto the cloth: it glows
         a_ = 2 * math.pi * (i + 0.25) / 24; r = 6 + 20 * ((i * 7) % 24) / 24
         p = Vector((CX + r * math.cos(a_), CY + r * math.sin(a_), TZ - 0.5))
-        light("SPOT", p, (p.x, p.y, 0), 3000, (0.86, 0.9, 1.0), size=0.3, spot=70, blend=0.9)
+        light("SPOT", p, (p.x, p.y, 0), 500, (0.86, 0.9, 1.0) if i % 3 else (0.3, 0.5, 1.0), size=0.3, spot=45, blend=0.9)
     for side in (-1, 1):                                                # the stage's light back onto the crowd round it
         for y in (CY + 9, CY - 9):
             light("SPOT", (CX + side * (SX - 0.4), CY, SZ + 4.4), (CX + side * 3, y, 1.6), 1500, (1.0, 0.7, 0.45), size=0.1, spot=34, blend=0.7)
@@ -959,7 +959,7 @@ def build_show():
         a_ = 2 * math.pi * (i + 0.5) / 10; r = 17.5
         p = Vector((CX + r * math.cos(a_), CY + r * math.sin(a_), 0.4))
         box(p.x, p.y, 0.2, 0.4, 0.4, 0.4, M_CASE)
-        light("SPOT", p, (CX + (r - 3) * math.cos(a_), CY + (r - 3) * math.sin(a_), 5.5), 1800, (0.25, 0.42, 1.0), size=0.15, spot=60, blend=0.8)
+        light("SPOT", p, (CX + (r - 3) * math.cos(a_), CY + (r - 3) * math.sin(a_), 5.5), 900, (0.25, 0.42, 1.0), size=0.15, spot=60, blend=0.8)
 
     # ---------- the bar over the front of the stage the person's front lights hang on ----------
     yb = -3.1
@@ -1017,7 +1017,7 @@ def build_show():
             if abs(abs(x - CX) - (SX - 0.4)) < 0.5: continue          # the towers
             if math.hypot(x - sl.x, y - sl.y) < 1.0 or rnd.random() < 0.2: continue
             instance(pick(rnd.random() < 0.45), x, y, facing(x, y, CX, TY) + rnd.gauss(0, 0.4), rnd.uniform(0.97, 1.04), SZ); n += 1
-    deck = lambda x, y: abs(x - CX) < SX + 1.9 and abs(y - CY) < SY + 1.9
+    deck = lambda x, y: abs(x - CX) < SX + 1.5 and abs(y - CY) < SY + 1.5   # the front row at the barrier
     foh = lambda x, y: abs(x - FX) < 2.8 and 3.2 < y < 7.4
     sp_ = three(next(l[1] for l in SHOW_LIGHTS if l[0] == "spot"))
     for k, (x, y) in enumerate(((-0.9, 6.3), (0.9, 6.4))):            # at the desk, facing the decks
@@ -1042,7 +1042,7 @@ def build_show():
     print("crowd", n)
 
     hz = bpy.data.materials.new("haze"); hz.use_nodes = True; nt = hz.node_tree; nt.nodes.remove(nt.nodes["Principled BSDF"])
-    pv_ = nt.nodes.new("ShaderNodeVolumePrincipled"); pv_.inputs["Density"].default_value = float(os.environ.get("HAZE", "0.028"))
+    pv_ = nt.nodes.new("ShaderNodeVolumePrincipled"); pv_.inputs["Density"].default_value = float(os.environ.get("HAZE", "0.02"))
     pv_.inputs["Anisotropy"].default_value = 0.55
     nt.links.new(pv_.outputs[0], nt.nodes["Material Output"].inputs["Volume"])
     box(CX, CY, 8.0, 2 * HX - 0.2, 64.0, 15.9, hz)
