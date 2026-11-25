@@ -68,8 +68,8 @@ def grow(b, SRC, wt, she, eyeL, eyeR, mouth):
     if she:
         zb = eyeZ + 0.07
         back = max((v for v in head if abs(v.co.z - zb) < 0.01 and abs(v.co.x) < 0.02), key=lambda v: v.co.y)
-        bn = back.normal.copy()
-        bc = back.co + bn * 0.004
+        bn = Vector((0.0, back.normal.y, back.normal.z)).normalized()   # straight back from the middle of the head
+        bc = Vector((0.0, back.co.y, back.co.z)) + bn * 0.004
     crown = top + Vector((0, 0.035, -0.012))
 
     def flow_at(p, n):
@@ -102,21 +102,26 @@ def grow(b, SRC, wt, she, eyeL, eyeR, mouth):
         from mathutils.bvhtree import BVHTree
         bvh = BVHTree.FromBMesh(b)
         tl = b.verts.layers.float.get("tail") or b.verts.layers.float.new("tail")
-        L, NS_, NU = 0.2, 40, 18
+        L, NS_, NU = 0.22, 44, 20
         def rad(s_):
-            if s_ < 0.03: return 0.009 + 0.011 * sm(0.0, 0.03, s_)
-            return 0.003 + 0.017 * (1 - (s_ - 0.03) / (L - 0.03)) ** 0.8
-        pts = [bc.copy()]; d = (bn + Vector((0, 0, 0.35))).normalized()
+            if s_ < 0.035: return 0.01 + 0.016 * sm(0.0, 0.035, s_)
+            return 0.004 + 0.022 * (1 - (s_ - 0.035) / (L - 0.035)) ** 0.75
+        # out and up from the tie, arcing over, then hanging; it stays in the middle (any push off the head is
+        # straight back or down, never sideways)
+        pts = [bc.copy()]; d = (bn + Vector((0, 0, 0.7))).normalized()
         for k in range(1, NS_ + 1):
             s_ = L * k / NS_
-            d = (d + Vector((0, 0, -1)) * (0.16 if s_ < 0.08 else 0.1)).normalized()
+            d = (d + Vector((0, 0, -1)) * (0.2 if s_ < 0.07 else 0.12)).normalized()
             q = pts[-1] + d * (L / NS_)
-            for _ in range(3):                                 # rests on the back of the head, never in it
+            for _ in range(4):                                 # rests on the back of the head, never in it
                 hit = bvh.find_nearest(q)
                 if hit[0] is None: break
-                gap = rad(s_) * 0.85 + 0.003
-                if (q - hit[0]).length < gap and (q - hit[0]).dot(hit[1]) > -1e-4:
-                    q = hit[0] + hit[1] * gap
+                gap = rad(s_) * 0.9 + 0.003
+                off = q - hit[0]
+                if off.length < gap:
+                    push = Vector((0.0, max(off.y, 0.0) + 1e-4, off.z)).normalized()
+                    q = q + push * (gap - off.length)
+            q.x *= 0.3
             d = (q - pts[-1]).normalized(); pts.append(q)
         side = Vector((1, 0, 0))
         rings = []
