@@ -1,7 +1,7 @@
 // Real-time view on three.js WebGPURenderer (falls back to WebGL2 by itself where WebGPU is missing).
 // It is the preview you drag; the path tracer takes over the moment you let go.
 import * as THREE from "three/webgpu";
-import { texture, uv, vec2, vec3, float, normalMap, normalize, uniform, mix, vertexColor, step, fwidth, clamp, length, normalWorldGeometry, atan, asin, cos, sin, sqrt, max } from "three/tsl";
+import { positionLocal, texture, uv, vec2, vec3, float, normalMap, normalize, uniform, mix, vertexColor, step, fwidth, clamp, length, normalWorldGeometry, atan, asin, cos, sin, sqrt, max } from "three/tsl";
 import { PRINT_BACK, PRINT_FRONT, type Rect } from "./print";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
@@ -16,6 +16,7 @@ const breathe = () => new Promise<void>((r) => { const c = new MessageChannel();
 /** bytes written to the graphics card per slice: a few milliseconds of the page's time each */
 const SLICE = 2 << 20;
 import { ClothLink, offsetTexture, slopeTextures, clothNodes } from "./cloth";
+import { Motion, MOTION_ATTRS } from "./motion";
 import type { FlatLay, LookNodes, Side } from "./flat";
 
 export const ASSET = "/tee/fit/";
@@ -89,6 +90,8 @@ function soupOf(parts: { mesh: THREE.Mesh; mw: THREE.Matrix4; id: number; person
 }
 
 export class Raster {
+  /** the person's idle motion, and the tee's with them (motion.ts) */
+  motion = new Motion();
   renderer: THREE.WebGPURenderer;
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera((VFOV * 180) / Math.PI, ASPECT, 0.05, 40);
@@ -148,7 +151,7 @@ export class Raster {
     THREE.RectAreaLightNode.setLTC(RectAreaLightTexturesLib.init());
     this.isWebGPU = !!(this.renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend;
     this.maxAniso = Math.max(1, this.renderer.getMaxAnisotropy?.() ?? 8);
-    this.inner.positionNode = this.clothed();
+    this.inner.positionNode = this.motion.node(this.clothed());
   }
 
   private clothed() { return clothNodes(this.offsets, this.slopes).position; }
@@ -344,6 +347,7 @@ export class Raster {
   private painted(o: { roughness: number; spec: number; sheen?: number; sheenColor?: V3 }) {
     const m = new THREE.MeshPhysicalNodeMaterial({ roughness: o.roughness, metalness: 0, specularIntensity: o.spec });
     m.colorNode = vec3(vertexColor());
+    m.positionNode = this.motion.node(positionLocal);
     if (o.sheen) { m.sheen = o.sheen; m.sheenRoughness = 0.5; m.sheenColor = new THREE.Color().setRGB(...(o.sheenColor ?? [1, 1, 1]), THREE.LinearSRGBColorSpace); }
     return m;
   }
@@ -352,7 +356,7 @@ export class Raster {
   personDenim = this.painted({ roughness: 0.85, spec: 0.5, sheen: 1, sheenColor: [0.035, 0.035, 0.04] });
   personEyes = this.painted({ roughness: 0.12, spec: 0.75 });
   // hair (pipeline/hair.py): the skin's maps paint its strands; it shines, with no warm glow through it
-  personHair: THREE.MeshPhysicalNodeMaterial = this.painted({ roughness: 0.45, spec: 0.8 });
+  personHair: THREE.MeshPhysicalNodeMaterial = this.painted({ roughness: 0.55, spec: 0.55 });
   /**
    * The person's skin from its two maps (pipeline/skin.py): colour, and relief + roughness (normal in R, G,
    * roughness in B). The vertex colour, white on the skin, tints it.
@@ -364,8 +368,9 @@ export class Raster {
       t.anisotropy = this.maxAniso; t.needsUpdate = true; return t;
     };
     const a = texture(mk(albedo, true)), r = texture(mk(rn, false));
-    const m = new THREE.MeshPhysicalNodeMaterial({ metalness: 0, specularIntensity: hair ? 0.8 : 0.7 });
+    const m = new THREE.MeshPhysicalNodeMaterial({ metalness: 0, specularIntensity: hair ? 0.55 : 0.7 });
     m.colorNode = a.rgb.mul(vec3(vertexColor()));
+    m.positionNode = this.motion.node(positionLocal);
     m.roughnessNode = r.b;
     const nx = r.r.mul(2).sub(1), ny = r.g.mul(2).sub(1);
     m.normalNode = normalMap(vec3(r.r, r.g, sqrt(max(float(1).sub(nx.mul(nx)).sub(ny.mul(ny)), 0)).mul(0.5).add(0.5)));
@@ -429,7 +434,7 @@ export class Raster {
       const blended = normalize(vec3(n1.xy.add(k.xy.mul(knitAmt)), n1.z.mul(k.z)));
       const cloth = clothNodes(this.offsets, this.slopes);
       m.normalNode = cloth.bend(normalMap(blended.mul(0.5).add(0.5)));
-      m.positionNode = cloth.position;
+      m.positionNode = this.motion.node(cloth.position);
       this.outer = m;
       this.lookNodes = { color: m.colorNode as LookNodes["color"], rough: m.roughnessNode as LookNodes["rough"], sheen: m.sheenNode as LookNodes["sheen"], relief: blended as unknown as LookNodes["relief"], fabric: this.fabric as unknown as LookNodes["fabric"] };
       this.nodes = { back: backN, front: frontN, normal: normalN };
@@ -455,6 +460,8 @@ export class Raster {
     // the body inside the tee, for the cloth to rest on (garment frame: no lift); not the eyes
     const skinP: number[] = [], skinN: number[] = [];
     let triCount = 0;
+    const motionBody = { pos: [] as number[], w: MOTION_ATTRS.map(() => [] as number[]) };
+    let joints: Record<string, [number, number, number]> | null = null;
     const take = (root: THREE.Object3D, kind: "tee" | "body" | "stool" | "person") => {
       root.updateMatrixWorld(true);
       root.traverse((o) => {
@@ -469,6 +476,16 @@ export class Raster {
         const g = mesh.geometry, pa = g.attributes.position, na = g.attributes.normal, mw = mesh.matrixWorld.clone();
         const id = kind === "person" ? pid : kind === "body" ? 2 : kind === "stool" ? 3 : isInner ? 1 : 0;
         parts.push({ mesh, mw, id, person: kind === "person" });
+        if (kind === "tee" || kind === "person") Motion.ensure(g);
+        if (kind === "person" && pid !== 6 && pid !== 7) {
+          // the body under the tee, with how it moves, for the tee's own weights
+          const vv2 = new THREE.Vector3(), att = MOTION_ATTRS.map((nm) => g.getAttribute(nm));
+          for (let i = 0; i < pa.count; i++) {
+            vv2.fromBufferAttribute(pa, i).applyMatrix4(mw); motionBody.pos.push(vv2.x, vv2.y, vv2.z);
+            att.forEach((a, k) => motionBody.w[k].push(a.getX(i)));
+          }
+          if (typeof mesh.userData.motion === "string") joints = JSON.parse(mesh.userData.motion);
+        }
         triCount += (g.index ? g.index.count : pa.count) / 3;
         const vv = new THREE.Vector3();
         if (kind === "tee") {
@@ -508,6 +525,9 @@ export class Raster {
       this.personHair = this.hairMats.get(v.person) ?? this.hairMats.set(v.person, this.skinFrom(skinMaps[0], skinMaps[1], true)).get(v.person)!;
     }
     if (bodyGltf) take(bodyGltf.scene, v.person ? "person" : "body");
+    // the person moves (if their GLB says how), and the tee with them
+    this.motion.setJoints(joints);
+    if (joints) for (const t of teeMeshes) Motion.fromBody(t.mesh.geometry, t.mesh.matrixWorld, motionBody);
     if (v.body && v.pose === "sit" && v.seat) {
       // a plain stool, its top where the simulation's seat was (Blender y forward -> three z back)
       const box = new THREE.Mesh(new THREE.BoxGeometry(0.46, v.seat, 0.42));
@@ -558,8 +578,12 @@ export class Raster {
   /** advance the cloth (the person stands still while the camera goes round: only the air moves it); true while it moves */
   simulate(dt: number) {
     if (this.flat?.side) return this.flat.tick(dt);
-    return this.cloth ? this.cloth.step(dt) : false;
+    const alive = this.motion.step(dt);
+    return (this.cloth ? this.cloth.step(dt) : false) || alive;
   }
+
+  /** the person alive (false: eased to the pose the tee was simulated in, for photos and reduced motion) */
+  setLive(on: boolean) { this.motion.live = on; }
 
   /**
    * Up close: the tee laid flat on the table, `side` up, settled afresh each time (null: back on its form).

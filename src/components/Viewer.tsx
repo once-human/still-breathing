@@ -515,6 +515,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         // the full print: everywhere once it's in (with its mips), or on a small device only zoomed in
         raster.detail(!lite || zm.z > 1.3);
         raster.setView(s.yaw, [zm.cx, zm.cy, zm.z], st.clientWidth, st.clientHeight);
+        // the person breathes and shifts (motion.ts), at rest for a photo and for anyone who asks for less motion
+        raster.setLive(!still.matches && !s.photo);
         const swinging = raster.simulate(dt);
         // every display frame is drawn (60, 120, whatever the screen runs at): a skipped frame in a steady turn
         // reads as a judder

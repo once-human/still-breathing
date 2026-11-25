@@ -1,0 +1,142 @@
+// The person who wears the tee is alive, not a statue: they breathe, their weight drifts from foot to foot, the
+// head turns a little now and then, the arms hang loose and swing a touch, the hands ease. Slowly, and small (a
+// few degrees at most), the way someone stands at a show between songs.
+//
+// pipeline/human.py gives every vertex of the person five weights from the rig's own skin weights (how much it
+// follows the breath, the head, its arm from the shoulder, its forearm from the elbow, its hand from the wrist;
+// left or right is the sign of x) and puts the joints in the GLB. Here the angles are worked out once a frame on
+// the CPU and the vertex shader turns each vertex about those joints, child before parent (hand, forearm, arm,
+// head), then the breath, then the whole body over the feet. The tee moves with the body under it: each of its
+// vertices takes the weights of the nearest point of the body (not of a forearm or hand, so a hand by the hem
+// doesn't drag the hem), so it breathes and sways with them and the live cloth moves on top of that.
+// For photos (the path tracer's still) and for anyone who asks for less motion, everything eases to the rest
+// pose the tee was simulated in.
+import * as THREE from "three/webgpu";
+import { attribute, uniform, vec3, float, cos, sin, cross, dot, select } from "three/tsl";
+
+export const MOTION_ATTRS = ["_breath", "_head", "_arm", "_fore", "_hand"] as const;
+type V = THREE.Node<"vec3">;
+type F = THREE.Node<"float">;
+type Joints = Record<string, [number, number, number]>;
+
+/** rotate p about the line through c along the unit axis k by angle a (Rodrigues) */
+function turn(p: V, c: V, k: V, a: F): V {
+  const v = p.sub(c), ca = cos(a), sa = sin(a);
+  return c.add(v.mul(ca).add(cross(k, v).mul(sa)).add(k.mul(dot(k, v).mul(float(1).sub(ca)))));
+}
+
+export class Motion {
+  private j = {
+    neck: uniform(new THREE.Vector3()), feet: uniform(new THREE.Vector3()), chest: uniform(new THREE.Vector3()),
+    shL: uniform(new THREE.Vector3()), shR: uniform(new THREE.Vector3()), elL: uniform(new THREE.Vector3()),
+    elR: uniform(new THREE.Vector3()), wrL: uniform(new THREE.Vector3()), wrR: uniform(new THREE.Vector3()),
+  };
+  private a = {
+    breath: uniform(0), yaw: uniform(0), pitch: uniform(0), side: uniform(0), fb: uniform(0),
+    armL: uniform(0), armR: uniform(0), foreL: uniform(0), foreR: uniform(0), handL: uniform(0), handR: uniform(0),
+  };
+  private t = Math.random() * 60;
+  private amp = 0;
+  /** a person who carries the weights is on screen */
+  on = false;
+  /** wanted: alive (false: at rest, for photos and reduced motion) */
+  live = true;
+
+  /** the joints from the person GLB (glTF frame, metres); null: nobody, everything stays put */
+  setJoints(m: Joints | null) {
+    this.on = !!m;
+    if (!m) { this.amp = 0; this.apply(); return; }
+    const s = (u: { value: THREE.Vector3 }, k: string) => u.value.set(...(m[k] ?? [0, 0, 0]));
+    s(this.j.neck, "neck"); s(this.j.feet, "feet");
+    s(this.j.shL, "shoulder.L"); s(this.j.shR, "shoulder.R"); s(this.j.elL, "elbow.L"); s(this.j.elR, "elbow.R");
+    s(this.j.wrL, "wrist.L"); s(this.j.wrR, "wrist.R");
+    // the breath pushes out from the middle of the chest (between the shoulders, a hand's depth back)
+    this.j.chest.value.set(0, 0, (this.j.shL.value.z + this.j.shR.value.z) / 2 - 0.02);
+  }
+
+  /** position node: p (the rest pose, or the cloth on it) moved as the person is, by this vertex's weights */
+  node(p: V): V {
+    const [wb, wh, wa, wf, wn] = MOTION_ATTRS.map((n) => attribute(n, "float"));
+    const X = vec3(1, 0, 0), Y = vec3(0, 1, 0), Z = vec3(0, 0, 1);
+    const left = p.x.greaterThan(0);
+    const pick = (l: V, r: V): V => select(left, l, r);
+    const pickF = (l: F, r: F): F => select(left, l, r);
+    let q: V = turn(p, pick(this.j.wrL, this.j.wrR), X, pickF(this.a.handL, this.a.handR).mul(wn));
+    q = turn(q, pick(this.j.elL, this.j.elR), X, pickF(this.a.foreL, this.a.foreR).mul(wf));
+    q = turn(q, pick(this.j.shL, this.j.shR), X, pickF(this.a.armL, this.a.armR).mul(wa));
+    q = turn(q, this.j.neck, Y, this.a.yaw.mul(wh));
+    q = turn(q, this.j.neck, X, this.a.pitch.mul(wh));
+    // breath: the chest and belly out from the middle, the shoulders (and all above) a touch up
+    const out = vec3(q.x.sub(this.j.chest.x), 0, q.z.sub(this.j.chest.z));
+    const r = out.length().max(0.03);
+    q = q.add(out.div(r).mul(this.a.breath.mul(wb).mul(0.0026))).add(Y.mul(this.a.breath.mul(wa.mul(0.9).add(wh.mul(0.7))).mul(0.0014)));
+    // the whole body sways over the feet: side to side and a little front to back
+    q = turn(q, this.j.feet, Z, this.a.side);
+    return turn(q, this.j.feet, X, this.a.fb);
+  }
+
+  /** zero weights for a mesh that has none of its own (a tee on its form, an older person GLB) */
+  static ensure(g: THREE.BufferGeometry) {
+    for (const n of MOTION_ATTRS) if (!g.getAttribute(n)) g.setAttribute(n, new THREE.BufferAttribute(new Float32Array(g.attributes.position.count), 1));
+  }
+
+  /**
+   * The tee's weights from the body under it: each vertex takes those of the nearest point of the body (pos and
+   * weights in the same frame), never a forearm's or a hand's; the head only half (the collar follows the neck a little).
+   */
+  static fromBody(g: THREE.BufferGeometry, mw: THREE.Matrix4, body: { pos: number[]; w: number[][] }) {
+    const C = 0.015, cells = new Map<string, number[]>();
+    const key = (x: number, y: number, z: number) => `${Math.floor(x / C)},${Math.floor(y / C)},${Math.floor(z / C)}`;
+    const n = body.pos.length / 3;
+    for (let i = 0; i < n; i++) {
+      if (body.w[3][i] > 0.3 || body.w[4][i] > 0.3) continue;
+      const k = key(body.pos[3 * i], body.pos[3 * i + 1], body.pos[3 * i + 2]);
+      let c = cells.get(k); if (!c) cells.set(k, (c = [])); c.push(i);
+    }
+    const pa = g.attributes.position, cnt = pa.count, out = MOTION_ATTRS.map(() => new Float32Array(cnt)), v = new THREE.Vector3();
+    for (let i = 0; i < cnt; i++) {
+      v.fromBufferAttribute(pa, i).applyMatrix4(mw);
+      const cx = Math.floor(v.x / C), cy = Math.floor(v.y / C), cz = Math.floor(v.z / C);
+      let best = -1, bd = Infinity;
+      for (let R = 1; R <= 4 && best < 0; R += 3) {
+        for (let dx = -R; dx <= R; dx++) for (let dy = -R; dy <= R; dy++) for (let dz = -R; dz <= R; dz++) {
+          const c = cells.get(`${cx + dx},${cy + dy},${cz + dz}`); if (!c) continue;
+          for (const j of c) {
+            const ex = body.pos[3 * j] - v.x, ey = body.pos[3 * j + 1] - v.y, ez = body.pos[3 * j + 2] - v.z, d = ex * ex + ey * ey + ez * ez;
+            if (d < bd) { bd = d; best = j; }
+          }
+        }
+      }
+      if (best < 0) continue;
+      out[0][i] = body.w[0][best]; out[1][i] = body.w[1][best] * 0.5; out[2][i] = body.w[2][best];
+    }
+    MOTION_ATTRS.forEach((nm, k) => g.setAttribute(nm, new THREE.BufferAttribute(out[k], 1)));
+  }
+
+  /** advance; true while anything moves */
+  step(dt: number) {
+    const want = this.on && this.live ? 1 : 0;
+    this.amp += (want - this.amp) * (1 - Math.exp(-dt / 0.8));
+    if (want === 0 && this.amp < 1e-3) this.amp = 0;
+    if (want) this.t += Math.min(dt, 0.1);
+    this.apply();
+    return this.amp > 0;
+  }
+
+  private apply() {
+    const t = this.t, k = this.amp, TAU = Math.PI * 2, w = (p: number, ph = 0) => Math.sin((TAU * t) / p + ph);
+    // breathing in is quicker than breathing out: a rise over 40 % of the 4.3 s cycle, the fall over the rest
+    const ph = (t / 4.3) % 1, br = ph < 0.4 ? 0.5 - 0.5 * Math.cos((Math.PI * ph) / 0.4) : 0.5 + 0.5 * Math.cos((Math.PI * (ph - 0.4)) / 0.6);
+    const A = this.a;
+    A.breath.value = k * br;
+    A.side.value = k * (0.0045 * w(11.3, 0.3) + 0.0018 * w(6.7, 1.1));
+    A.fb.value = k * 0.0028 * w(8.3, 2.0);
+    A.yaw.value = k * (0.034 * w(9.7) + 0.02 * w(15.3, 1.0));
+    A.pitch.value = k * (0.012 * w(7.1, 0.5) + 0.006 * w(12.9, 2.2));
+    // the arms swing a little against the sway, each its own way; forearms and hands loosely after them
+    A.armL.value = k * 0.011 * w(6.1, 0.4) - 0.6 * A.side.value;
+    A.armR.value = k * 0.011 * w(5.6, 2.1) + 0.6 * A.side.value;
+    A.foreL.value = k * 0.018 * w(5.3, 1.3); A.foreR.value = k * 0.016 * w(4.9, 3.0);
+    A.handL.value = k * 0.028 * w(4.7, 0.2); A.handR.value = k * 0.025 * w(4.1, 2.6);
+  }
+}

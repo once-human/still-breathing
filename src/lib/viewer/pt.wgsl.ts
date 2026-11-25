@@ -218,7 +218,7 @@ fn teeSurf(h: Hit, ro: vec3f, rd: vec3f) -> Surf {
       let nx = tR.r * 2.0 - 1.0; let ny = tR.g * 2.0 - 1.0;
       let np = normalize(T * nx + B * ny + n * sqrt(max(1.0 - nx * nx - ny * ny, 0.0)));
       n = select(n, np, dot(np, ng) > 0.02);
-      S.rough = tR.b; S.sheen = 0.0; S.spec = select(0.028, 0.046, iv.w == 7u); S.sss = select(1.0, 0.0, iv.w == 7u);
+      S.rough = tR.b; S.sheen = 0.0; S.spec = select(0.028, 0.038, iv.w == 7u); S.sss = select(1.0, 0.0, iv.w == 7u);
     }
     else if (iv.w == 5u) { S.rough = 0.85; S.sheen = 0.35; S.spec = 0.02; }
     else { S.rough = 0.12; S.sheen = 0.0; S.spec = 0.03; }
