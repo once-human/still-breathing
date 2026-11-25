@@ -203,11 +203,12 @@ fn teeSurf(h: Hit, ro: vec3f, rd: vec3f) -> Surf {
   } else if (iv.w == 3u) {
     S.base = vec3f(0.05, 0.045, 0.04); S.rough = 0.7; S.sheen = 0.0; S.spec = 0.03;   // the stool
   } else if (iv.w >= 4u) {
-    // someone wearing it: colour painted per vertex; 4 skin (a little oil), 5 denim, 6 eyes (wet)
+    // someone wearing it: colour painted per vertex; 4 skin (a little oil), 5 denim, 6 eyes (wet), 7 hair
     let k0 = verts[iv.x * 2u + 1u].yzw; let k1 = verts[iv.y * 2u + 1u].yzw; let k2 = verts[iv.z * 2u + 1u].yzw;
     S.base = k0 * w + k1 * h.b.x + k2 * h.b.y;
-    if (iv.w == 4u) {
-      // skin: its maps (pipeline/skin.py) on the body's UVs, tangent frame as for the tee (T = dP/du, B = dP/dv)
+    if (iv.w == 4u || iv.w == 7u) {
+      // skin: its maps (pipeline/skin.py) on the body's UVs, tangent frame as for the tee (T = dP/du, B = dP/dv);
+      // the hair shares them (its strands painted there), shinier, and no light through it
       let tR = textureSampleLevel(texSkinRN, samp, uv, 0.0);
       S.base = S.base * textureSampleLevel(texSkin, samp, uv, 0.0).rgb;
       let d1 = uv1 - uv0; let d2 = uv2 - uv0;
@@ -217,7 +218,7 @@ fn teeSurf(h: Hit, ro: vec3f, rd: vec3f) -> Surf {
       let nx = tR.r * 2.0 - 1.0; let ny = tR.g * 2.0 - 1.0;
       let np = normalize(T * nx + B * ny + n * sqrt(max(1.0 - nx * nx - ny * ny, 0.0)));
       n = select(n, np, dot(np, ng) > 0.02);
-      S.rough = tR.b; S.sheen = 0.0; S.spec = 0.028; S.sss = 1.0;
+      S.rough = tR.b; S.sheen = 0.0; S.spec = select(0.028, 0.046, iv.w == 7u); S.sss = select(1.0, 0.0, iv.w == 7u);
     }
     else if (iv.w == 5u) { S.rough = 0.85; S.sheen = 0.35; S.spec = 0.02; }
     else { S.rough = 0.12; S.sheen = 0.0; S.spec = 0.03; }

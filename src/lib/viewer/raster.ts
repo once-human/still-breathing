@@ -321,27 +321,31 @@ export class Raster {
   personSkin: THREE.MeshPhysicalNodeMaterial = this.painted({ roughness: 0.5, spec: 0.7, sheen: 1, sheenColor: [0.16, 0.07, 0.045] });
   personDenim = this.painted({ roughness: 0.85, spec: 0.5, sheen: 1, sheenColor: [0.035, 0.035, 0.04] });
   personEyes = this.painted({ roughness: 0.12, spec: 0.75 });
+  // hair (pipeline/hair.py): the skin's maps paint its strands; it shines, with no warm glow through it
+  personHair: THREE.MeshPhysicalNodeMaterial = this.painted({ roughness: 0.45, spec: 0.8 });
   /**
    * The person's skin from its two maps (pipeline/skin.py): colour, and relief + roughness (normal in R, G,
    * roughness in B). The vertex colour, white on the skin, tints it.
    */
-  private skinFrom(albedo: ImageBitmap, rn: ImageBitmap) {
+  private skinFrom(albedo: ImageBitmap, rn: ImageBitmap, hair = false) {
     const mk = (b: ImageBitmap, srgb: boolean) => {
       const t = new THREE.Texture(b);
       t.flipY = false; t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
       t.anisotropy = this.maxAniso; t.needsUpdate = true; return t;
     };
     const a = texture(mk(albedo, true)), r = texture(mk(rn, false));
-    const m = new THREE.MeshPhysicalNodeMaterial({ metalness: 0, specularIntensity: 0.7 });
+    const m = new THREE.MeshPhysicalNodeMaterial({ metalness: 0, specularIntensity: hair ? 0.8 : 0.7 });
     m.colorNode = a.rgb.mul(vec3(vertexColor()));
     m.roughnessNode = r.b;
     const nx = r.r.mul(2).sub(1), ny = r.g.mul(2).sub(1);
     m.normalNode = normalMap(vec3(r.r, r.g, sqrt(max(float(1).sub(nx.mul(nx)).sub(ny.mul(ny)), 0)).mul(0.5).add(0.5)));
+    if (hair) return m;
     // a soft warm fuzz at grazing angles, where light goes into skin and comes back out
     m.sheen = 1; m.sheenRoughness = 0.5; m.sheenColor = new THREE.Color().setRGB(0.16, 0.07, 0.045, THREE.LinearSRGBColorSpace);
     return m;
   }
   private skinMats = new Map<string, THREE.MeshPhysicalNodeMaterial>();
+  private hairMats = new Map<string, THREE.MeshPhysicalNodeMaterial>();
   stoolMat = new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0, color: new THREE.Color(0.05, 0.045, 0.04) });
 
   /**
@@ -428,9 +432,9 @@ export class Raster {
         if (!mesh.isMesh) return;
         const mname = (mesh.material as THREE.Material)?.name || "";
         const isInner = kind === "tee" && /inner/i.test(mname);
-        // the person: 4 skin, 5 denim, 6 eyes (the path tracer reads their colour per vertex too)
-        const pid = /jeans/i.test(mname) ? 5 : /eye/i.test(mname) ? 6 : 4;
-        mesh.material = kind === "person" ? [this.personSkin, this.personDenim, this.personEyes][pid - 4]
+        // the person: 4 skin, 5 denim, 6 eyes, 7 hair (the path tracer reads their colour per vertex too)
+        const pid = /jeans/i.test(mname) ? 5 : /eye/i.test(mname) ? 6 : /hair/i.test(mname) ? 7 : 4;
+        mesh.material = kind === "person" ? [this.personSkin, this.personDenim, this.personEyes, this.personHair][pid - 4]
           : kind === "body" ? this.skinMat : kind === "stool" ? this.stoolMat : isInner ? this.inner : this.outer!;
         const g = mesh.geometry, pa = g.attributes.position, na = g.attributes.normal, mw = mesh.matrixWorld.clone();
         const id = kind === "person" ? pid : kind === "body" ? 2 : kind === "stool" ? 3 : isInner ? 1 : 0;
@@ -444,7 +448,7 @@ export class Raster {
           for (let i = 0; i < pa.count; i++) { vv.fromBufferAttribute(pa, i).applyMatrix4(mw); pos[3 * i] = vv.x; pos[3 * i + 1] = vv.y; pos[3 * i + 2] = vv.z; }
           teeMeshes.push({ mesh, pos, idx: g.index ? g.index.array : Array.from({ length: pa.count }, (_, i) => i), plain });
         }
-        if (kind === "body" || (kind === "person" && pid !== 6)) {
+        if (kind === "body" || (kind === "person" && pid !== 6 && pid !== 7)) {
           const nm = new THREE.Matrix3().getNormalMatrix(mw);
           for (let i = 0; i < pa.count; i++) {
             vv.fromBufferAttribute(pa, i).applyMatrix4(mw); skinP.push(vv.x, vv.y, vv.z);
@@ -469,7 +473,10 @@ export class Raster {
     const clothOn = v.pose === "stand" && teeMeshes.every((t) => t.plain);
     const skinMaps = skinMapsP ? await skinMapsP : null;
     // one skin material per person, made once (a new material is a new shader to build)
-    if (skinMaps && v.person) this.personSkin = this.skinMats.get(v.person) ?? this.skinMats.set(v.person, this.skinFrom(skinMaps[0], skinMaps[1])).get(v.person)!;
+    if (skinMaps && v.person) {
+      this.personSkin = this.skinMats.get(v.person) ?? this.skinMats.set(v.person, this.skinFrom(skinMaps[0], skinMaps[1])).get(v.person)!;
+      this.personHair = this.hairMats.get(v.person) ?? this.hairMats.set(v.person, this.skinFrom(skinMaps[0], skinMaps[1], true)).get(v.person)!;
+    }
     if (bodyGltf) take(bodyGltf.scene, v.person ? "person" : "body");
     if (v.body && v.pose === "sit" && v.seat) {
       // a plain stool, its top where the simulation's seat was (Blender y forward -> three z back)
