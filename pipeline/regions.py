@@ -92,7 +92,13 @@ def mark(body, eyes, she, rig):
          [E + 0.058, E + 0.052, E + 0.036, earTop + 0.008, earTop - 0.012, stom + 0.03, stom + 0.018])
     hz = np.interp(th, A, H)
     head = (P[:, 2] > stom - 0.06) & (np.abs(P[:, 0]) < 0.13)
-    W["scalp"] = sm(hz - 0.003, hz + 0.005, P[:, 2]) * head * (ear < 0.5)
+    sc_ = sm(hz - 0.004, hz + 0.007, P[:, 2]) * head * (ear < 0.5)
+    # smoothed over the mesh (the vertices are a few millimetres apart: a raw threshold leaves a saw edge)
+    nb = [[] for _ in range(len(P))]
+    for e in bm.edges: a_, b_ = e.verts[0].index, e.verts[1].index; nb[a_].append(b_); nb[b_].append(a_)
+    for _ in range(4):
+        sc_ = np.array([0.5 * sc_[i] + 0.5 * (sc_[nb[i]].mean() if nb[i] else sc_[i]) for i in range(len(P))])
+    W["scalp"] = sc_ * (ear < 0.5)
 
     # ---------- fingernails: the fingertips are the farthest points of each hand from its wrist ----------
     nails = np.zeros(len(P))

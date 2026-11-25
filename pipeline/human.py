@@ -263,6 +263,7 @@ if HBM:
           joint("joint-l-eye"), joint("joint-r-eye"), joint("joint-mouth")), flush=True)
 HAIRF = skin.faces.layers.int.get("hair")
 FLOW = skin.verts.layers.float_vector.get("flow")
+HAIRK = skin.verts.layers.float.get("hairk")
 
 
 def pack_skin_uvs(b):
@@ -333,7 +334,7 @@ for v in skin.verts:
     i = v[SRC]
     VA[v.index, :3] = v.co; VA[v.index, 3:6] = v.normal
     if i < 0:                                           # hair (hair.py)
-        VA[v.index, 11] = 1.0; VA[v.index, 12:15] = v[FLOW]; continue
+        VA[v.index, 9] = 1.0; VA[v.index, 11] = 0.02 + 0.98 * v[HAIRK]; VA[v.index, 12:15] = v[FLOW]; continue
     VA[v.index, 6:11] = (wt(i, "lips"), wt(i, "ears"), wt(i, "fingernails"), wt(i, "scalp"),
                          max(wt(i, f"{b_}.{sd}") for b_ in HANDB for sd in ("L", "R")))
 RES = 2048

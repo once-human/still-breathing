@@ -30,6 +30,7 @@ def grow(b, SRC, wt, she, eyeL, eyeR, mouth):
     uvl = b.loops.layers.uv.active
     hl = b.faces.layers.int.get("hair") or b.faces.layers.int.new("hair")
     fl = b.verts.layers.float_vector.get("flow") or b.verts.layers.float_vector.new("flow")
+    kl = b.verts.layers.float.get("hairk") or b.verts.layers.float.new("hairk")      # 0 at the hair's edge, 1 full
     eyeZ = (eyeL.z + eyeR.z) / 2
     ears = [Vector() for _ in range(2)]; cnt = [0, 0]
     for v in b.verts:
@@ -60,6 +61,7 @@ def grow(b, SRC, wt, she, eyeL, eyeR, mouth):
         for e in v.link_edges:
             o = e.other_vert(v)
             if o in G and d + e.calc_length() < G[o]: G[o] = d + e.calc_length(); heapq.heappush(pq, (G[o], o.index, o))
+    FULL = 0.006 if she else 0.0095
     for v in sv: D[v.index] *= sm(0.0, 0.02, G[v])
     # the bun's middle (hers): low at the back of the head, at about the bottom of the ears
     if she:
@@ -81,7 +83,7 @@ def grow(b, SRC, wt, she, eyeL, eyeR, mouth):
             if v.index in vmap: continue
             d = D[v.index] - 0.0006                         # at the edge just under the skin
             nv = b.verts.new(v.co + v.normal * d); nv[SRC] = -1
-            nv[fl] = flow_at(v.co, v.normal); vmap[v.index] = nv
+            nv[fl] = flow_at(v.co, v.normal); nv[kl] = min(1.0, D[v.index] / FULL); vmap[v.index] = nv
     new = []
     for f in shell:
         nf = b.faces.new([vmap[v.index] for v in f.verts])
@@ -97,18 +99,18 @@ def grow(b, SRC, wt, she, eyeL, eyeR, mouth):
         # the bun: hair wound into a low knot, a rounded mound flattened against the head (3 cm out each side,
         # 2.6 cm up and down, 2 cm off the head), the coil showing as a groove running round it to the middle;
         # its strands wind round it, drawn in toward the middle
-        Ra, Rx, Rv, NU, NV = 0.02, 0.03, 0.026, 40, 18
+        Ra, Rx, Rv, NU, NV = 0.023, 0.034, 0.03, 40, 18
         tx = Vector((1, 0, 0)); tv = bn.cross(tx).normalized()
         def at(ph, th):
             q = bc + bn * (math.cos(th) * Ra) + (tx * (math.cos(ph) * Rx) + tv * (math.sin(ph) * Rv)) * math.sin(th)
             nrm = (bn * (math.cos(th) / Ra) + (tx * (math.cos(ph) / Rx) + tv * (math.sin(ph) / Rv)) * math.sin(th)).normalized()
-            q += nrm * (0.0016 * math.sin(2.0 * ph + 9.0 * th) + 0.0008 * noise.noise(q * 120.0))
+            q += nrm * (0.0014 * math.sin(2.0 * ph + 9.0 * th + 0.8 * noise.noise(q * 40.0)) + 0.0012 * noise.noise(q * 70.0))
             around = (tx * (-math.sin(ph) * Rx) + tv * (math.cos(ph) * Rv)).normalized()
             inward = -(bn * (-math.sin(th) * Ra) + (tx * (math.cos(ph) * Rx) + tv * (math.sin(ph) * Rv)) * math.cos(th)).normalized()
             return q, (around * math.cos(math.radians(28)) + inward * math.sin(math.radians(28))).normalized()
         Rm = (Rx + Rv) / 2
         def vert(q, f):
-            v = b.verts.new(q); v[SRC] = -1; v[fl] = f; return v
+            v = b.verts.new(q); v[SRC] = -1; v[fl] = f; v[kl] = 1.0; return v
         pole = vert(*at(0.0, 0.0))
         rows = [[vert(*at(2 * math.pi * i / NU, math.pi * 0.62 * (j + 1) / NV)) for i in range(NU)] for j in range(NV)]
         bun = []
