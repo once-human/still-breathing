@@ -23,7 +23,7 @@ on:
         description: "turntable: who wears it, comma separated label=person@fit[@trousers] (public/tee/human/<person>.glb, public/tee/fit/<fit>/stand.glb, pipeline/people/<trousers>-trousers.blend); an empty label keeps public/tee/still/<design>/"
         default: "=m170-stand@m170-M"
       views:
-        description: "turntable angles to render, comma separated (empty = all twelve); for timing a test"
+        description: "turntable angles to render, comma separated, 60 or a60 (empty = all twelve)"
         default: ""
       publish:
         description: "commit the frames to the site (off: they stay as run artifacts for a week)"
@@ -48,17 +48,19 @@ jobs:
           import json, os
           tees = [t.strip() for t in "${{ inputs.tees }}".split(",") if t.strip()]
           views = [f"a{a}" for a in range(0, 360, 30)] if "${{ inputs.kind }}" == "turntable" else ["front", "q", "back"]
-          pick = [f"a{x.strip()}" for x in "${{ inputs.views }}".split(",") if x.strip()]
+          pick = [f"a{x.strip().lstrip('a')}" for x in "${{ inputs.views }}".split(",") if x.strip()]
           if pick and "${{ inputs.kind }}" == "turntable": views = [v for v in views if v in pick]
           W = []
           for w in ("${{ inputs.wearers }}".split(",") if "${{ inputs.kind }}" == "turntable" else ["="]):
               label, _, rest = w.strip().partition("="); parts = rest.split("@") if rest else []
               W.append({"label": label, "person": parts[0] if parts else "", "fit": parts[1] if len(parts) > 1 else "", "trousers": parts[2] if len(parts) > 2 else ""})
+          if not views or not W: raise SystemExit(f"nothing to render: views {views}, wearers {W}")
           print("matrix=" + json.dumps({"include": [{"design": t.split("-")[0], "tee": t.split("-")[1], "view": v, **w} for t in tees for v in views for w in W]}))
           EOF
 
   hall:
     # stage.py's hall takes ~8 min to build (the photographed hall, the crowd): built once here, opened by every frame
+    needs: plan
     if: inputs.kind == 'turntable' && inputs.scene == 'hall'
     runs-on: ubuntu-latest
     steps:
