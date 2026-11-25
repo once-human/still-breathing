@@ -29,6 +29,7 @@ img = np.nan_to_num(np.maximum(img, 0), nan=0, posinf=0)
 
 def disc(img, R, C=3):
     """a disc blur of radius R px by FFT (C channels); it wraps round the sides, which is right for a panorama"""
+    H, W = img.shape[:2]
     r = int(R) + 2
     yy, xx = np.mgrid[-r:r + 1, -r:r + 1]
     d = np.clip(R + 0.5 - np.hypot(xx, yy), 0, 1).astype(np.float32); d /= d.sum()
@@ -53,8 +54,28 @@ if mask is not None:
     # never less than 40 px (nearly a degree): nobody is made out, only people
     RADII = [40, 56, 74, 94, 116]
     coc = np.clip(0.085 / 0.45 * np.abs(1 / 2.8 - 1 / np.maximum(z, 0.5)) * W / (4 * math.pi), RADII[0], RADII[-1]) * W / 16384
-    fill = disc(np.concatenate([img * (1 - m)[..., None], (1 - m)[..., None]], -1), 64 * W / 16384, 4)
-    fill = fill[..., :3] / np.maximum(fill[..., 3:], 1e-3)
+    # what is behind them: the room round them, from close by where there is some, from further out across a
+    # wide crowd (a single small reach left the middle of a big crowd black: dark round gaps under the blur)
+    room = np.concatenate([img * (1 - m)[..., None], (1 - m)[..., None]], -1)
+    d = disc(room, 64 * W / 16384, 4)
+    conf = np.clip(d[..., 3] / 0.25, 0, 1)
+    fill = conf[..., None] * d[..., :3] / np.maximum(d[..., 3:], 1e-4)
+    if conf.min() < 0.999:
+        # further out on a picture an eighth the size (as cheap as the near reach), brought back up smoothly
+        F = 8; hs, ws = H // F * F, W // F * F
+        small = room[:hs, :ws].reshape(hs // F, F, ws // F, F, 4).mean((1, 3))
+        sf = np.zeros(small.shape[:2] + (3,), np.float32); sc = np.zeros(small.shape[:2], np.float32)
+        for R_ in (256, 1024, 2048):
+            ds = disc(small, min(R_ * W / 16384 / F, 0.45 * small.shape[1], small.shape[0]), 4)
+            c = np.clip(ds[..., 3] / 0.25, 0, 1) * (1 - sc)
+            sf += c[..., None] * ds[..., :3] / np.maximum(ds[..., 3:], 1e-4); sc += c
+        sf = sf / np.maximum(sc, 1e-3)[..., None]
+        yi = np.clip((np.arange(H) + 0.5) / F - 0.5, 0, sf.shape[0] - 1); xi = np.clip((np.arange(W) + 0.5) / F - 0.5, 0, sf.shape[1] - 1)
+        y0 = np.floor(yi).astype(int); x0 = np.floor(xi).astype(int); y1 = np.minimum(y0 + 1, sf.shape[0] - 1); x1 = np.minimum(x0 + 1, sf.shape[1] - 1)
+        fy = (yi - y0)[:, None, None]; fx = (xi - x0)[None, :, None]
+        sx = sf[:, x0] * (1 - fx) + sf[:, x1] * fx                    # across first (small), then down
+        fill += (1 - conf)[..., None] * (sx[y0] * (1 - fy) + sx[y1] * fy); conf = np.ones_like(conf)
+    fill = fill / np.maximum(conf, 1e-3)[..., None]
     base = img * (1 - m)[..., None] + fill * m[..., None]
     acc = np.zeros_like(img); cov = np.zeros((H, W), np.float32)
     for i, R_ in enumerate(RADII):
