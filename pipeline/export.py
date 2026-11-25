@@ -66,6 +66,7 @@ def close_edges(bm, passes=8):
             if u.length < 1e-9 or w.length < 1e-9: continue
             if u.normalized().dot(w.normalized()) < -0.5: continue      # straighter than 120 degrees: leave it
             d = (a + c) / 2 - v.co
+            if d.length > 0.006: continue          # a notch is millimetres; anything bigger is not one (it walked a spike out)
             v.co += d; moved += 1
             for e in v.link_edges:
                 o = e.other_vert(v)
@@ -140,6 +141,7 @@ def close_edges(bm, passes=8):
             if u.length < 1e-9 or w.length < 1e-9: continue
             if u.normalized().dot(w.normalized()) < -0.5: continue      # straighter than 120 degrees: leave it
             d = (a + c) / 2 - v.co
+            if d.length > 0.006: continue          # a notch is millimetres; anything bigger is not one (it walked a spike out)
             v.co += d; moved += 1
             for e in v.link_edges:
                 o = e.other_vert(v)
@@ -193,7 +195,7 @@ for pose in POSES:
     for o in sc.objects:
         if o.name.startswith("tee"): o.hide_render = o is not tee
     bm = bmesh.new(); bm.from_mesh(tee.data); bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=0.0008)
-    strays(bm); close_edges(bm)
+    strays(bm); close_edges(bm); strays(bm)
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces); bm.to_mesh(tee.data); bm.free()
     if PROXY and pose == "stand":
         select_only(tee); glb(os.path.join(OUT, "proxy.glb"), export_draco_mesh_compression_enable=False)
