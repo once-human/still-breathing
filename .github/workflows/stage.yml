@@ -129,8 +129,11 @@ jobs:
             [ $A -ge $MOTION_FRAMES ] && exit 0
             export FRAMES=$A-$B; S=0; SS=1
           fi
+          # the machine's memory and disk every half minute, in the log as it goes (a runner that runs out is shut
+          # down with nothing else said)
+          ( while true; do echo "MEM used $(free -m | awk 'NR==2{print $3}') MB, free $(free -m | awk 'NR==2{print $7}') MB, disk free $(df -m . | awk 'NR==2{print $4}') MB"; sleep 30; done ) &
           CANOPY="$PWD/cloth" ~/blender/blender -b --factory-startup -P pipeline/stage.py -- ${{ matrix.place }} "$PWD/out/$N.exr" $S $SS ${{ inputs.samples }} $WIDTH \
-            | grep -E "Fra:.*Sample [0-9]+/[0-9]+$|saved|mask|Error|Traceback" | tail -8
+            | grep --line-buffered -E "Sample [0-9]*00/|Sample 1/|saved|mask|crowd|Error|Traceback|Killed|alloc"
           ls out/*.npy
       - uses: actions/upload-artifact@v4
         with:
