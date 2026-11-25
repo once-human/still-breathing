@@ -793,7 +793,7 @@ def fabric_mat():
     tp = N_.new("ShaderNodeBsdfTransparent")
     m1 = N_.new("ShaderNodeMixShader"); m1.inputs[0].default_value = 0.55
     nt.links.new(p.outputs[0], m1.inputs[1]); nt.links.new(tl.outputs[0], m1.inputs[2])
-    m2 = N_.new("ShaderNodeMixShader"); m2.inputs[0].default_value = 0.48     # how much light the weave stops
+    m2 = N_.new("ShaderNodeMixShader"); m2.inputs[0].default_value = 0.6      # how much light the weave stops
     nt.links.new(tp.outputs[0], m2.inputs[1]); nt.links.new(m1.outputs[0], m2.inputs[2])
     nt.links.new(m2.outputs[0], N_["Material Output"].inputs[0])
     # crinkles: the creases a thin synthetic keeps from being packed, a few cm across
@@ -951,7 +951,7 @@ def build_show():
     for i in range(24):                                                 # soft washes down onto the cloth: it glows
         a_ = 2 * math.pi * (i + 0.25) / 24; r = 6 + 20 * ((i * 7) % 24) / 24
         p = Vector((CX + r * math.cos(a_), CY + r * math.sin(a_), TZ - 0.5))
-        light("SPOT", p, (p.x, p.y, 0), 900, (0.86, 0.9, 1.0) if i % 3 else (0.3, 0.5, 1.0), size=0.3, spot=45, blend=0.9)
+        light("SPOT", p, (p.x, p.y, 0), 3000, (0.86, 0.9, 1.0), size=0.3, spot=70, blend=0.9)
     for side in (-1, 1):                                                # the stage's light back onto the crowd round it
         for y in (CY + 9, CY - 9):
             light("SPOT", (CX + side * (SX - 0.4), CY, SZ + 4.4), (CX + side * 3, y, 1.6), 1500, (1.0, 0.7, 0.45), size=0.1, spot=34, blend=0.7)
@@ -1042,7 +1042,7 @@ def build_show():
     print("crowd", n)
 
     hz = bpy.data.materials.new("haze"); hz.use_nodes = True; nt = hz.node_tree; nt.nodes.remove(nt.nodes["Principled BSDF"])
-    pv_ = nt.nodes.new("ShaderNodeVolumePrincipled"); pv_.inputs["Density"].default_value = float(os.environ.get("HAZE", "0.02"))
+    pv_ = nt.nodes.new("ShaderNodeVolumePrincipled"); pv_.inputs["Density"].default_value = float(os.environ.get("HAZE", "0.028"))
     pv_.inputs["Anisotropy"].default_value = 0.55
     nt.links.new(pv_.outputs[0], nt.nodes["Material Output"].inputs["Volume"])
     box(CX, CY, 8.0, 2 * HX - 0.2, 64.0, 15.9, hz)
