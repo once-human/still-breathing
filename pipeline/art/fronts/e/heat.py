@@ -112,10 +112,12 @@ def gouge(art, ctrl, w, rng=None, layer='cut', **kw):
 
 
 # ------------------------------------------------------------------ finishing
-def finish(art, order, shifts=None, spread_amt=0.16, cut='cut'):
-    """print physics on every screen (inner bands knock out outer ones), the gouges taken out of all of them"""
+def finish(art, order, shifts=None, spread_amt=0.16, cut='cut', trim=True):
+    """print physics on every screen, the gouges taken out of all of them. trim=True: inner bands are cut out of the
+    outer screens before the clean-up (separations); trim=False: the screens are stacked (one DTG image), so no
+    hairline gaps open between bands"""
     from PIL import ImageChops
-    inks = art.finish(order=order, shifts=shifts or {}, spread_amt=spread_amt)
+    inks = art.finish(order=order, shifts=shifts or {}, spread_amt=spread_amt, trim=trim)
     if cut in art.L:
         c = H.spread(art.L[cut], random.Random(5), amt=0.12)
         for k in order:
