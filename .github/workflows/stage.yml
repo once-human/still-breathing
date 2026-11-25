@@ -16,6 +16,9 @@ on:
       strips:
         description: "horizontal strips per place, one runner each"
         default: "16"
+      publish:
+        description: "commit to the site (false = preview: the developed picture is kept as a run artifact only)"
+        default: "true"
 
 permissions:
   contents: write
@@ -87,9 +90,16 @@ jobs:
             python3 pipeline/stage_post.py "$P" "public/tee/stage/$P.webp" $(ls got/$P-s*.npy | sort)
           done
           ls -la public/tee/stage
+          if [ "${{ inputs.publish }}" != "true" ]; then mkdir -p preview && for P in $(echo "${{ inputs.places }}" | tr "," " "); do cp "public/tee/stage/$P.webp" preview/; done; exit 0; fi
           git config user.name "once-human"
           git config user.email "121476278+once-human@users.noreply.github.com"
           git add public/tee/stage
           git diff --cached --quiet && { echo "nothing new"; exit 0; }
           git commit -m "Stage: ${{ inputs.places }} around the person, 360 degrees, rendered on the farm"
           git pull --rebase -q && git push
+      - uses: actions/upload-artifact@v4
+        if: inputs.publish != 'true'
+        with:
+          name: preview
+          path: preview/*.webp
+          retention-days: 7
