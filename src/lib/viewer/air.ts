@@ -14,7 +14,7 @@
 import * as THREE from "three/webgpu";
 import { texture, uv, vec2, vec3, vec4, attribute, normalMap, mix, uniform, normalWorld, max, dot } from "three/tsl";
 import { KINDS, LEAF_CELLS, type Kind } from "./things";
-import { bitmap } from "./grab";
+import { picture } from "./pic";
 
 const R = (lo: number, hi: number) => lo + (hi - lo) * Math.random();
 const TAU = Math.PI * 2;
@@ -114,14 +114,14 @@ export class Air {
   /** where the window's light comes from (world space), for leaves lit from behind */
   sunDir = uniform(new THREE.Vector3(0, 0, 1));
 
-  constructor(private aniso: number, private sun: THREE.Color) {}
+  constructor(private aniso: number, private sun: THREE.Color, private renderer: THREE.WebGPURenderer) {}
 
   /** the things' pictures: the leaf scans, and the atlas of the rest (lib/viewer/things.ts says which is which) */
   async init() {
     if (this.mats) return;
     const tx = async (name: string, srgb: boolean) => {
-      const t = new THREE.Texture(await bitmap(`/tee/table/${name}`));
-      t.flipY = false; t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace; t.anisotropy = this.aniso; t.needsUpdate = true;
+      const t = await picture(`/tee/table/${name}`, this.renderer, srgb);
+      t.anisotropy = this.aniso;
       return t;
     };
     const [lc, ln, bc] = await Promise.all([tx("leaves.webp", true), tx("leaves-n.webp", false), tx("bits.webp", true)]);

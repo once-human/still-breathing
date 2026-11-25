@@ -100,33 +100,49 @@ export class Motion {
 
   /**
    * The tee's weights from the body under it: each vertex takes those of the nearest point of the body (pos and
-   * weights in the same frame), never a forearm's or a hand's; the head only half (the collar follows the neck a little).
+   * weights in the same frame, `pos` the tee's vertices in it), never a forearm's or a hand's; the head only half (the
+   * collar follows the neck a little).
    */
-  static fromBody(g: THREE.BufferGeometry, mw: THREE.Matrix4, body: { pos: number[]; w: number[][] }) {
-    const C = 0.015, cells = new Map<string, number[]>();
-    const key = (x: number, y: number, z: number) => `${Math.floor(x / C)},${Math.floor(y / C)},${Math.floor(z / C)}`;
-    const n = body.pos.length / 3;
+  static fromBody(g: THREE.BufferGeometry, pos: Float32Array, body: { pos: Float32Array; w: Float32Array[] }) {
+    // the body's points (not forearms or hands) sorted into 1.5 cm cells of a box round them: a lookup is index sums
+    const C = 0.015, n = body.pos.length / 3, P = body.pos;
+    let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
     for (let i = 0; i < n; i++) {
-      if (body.w[3][i] > 0.3 || body.w[4][i] > 0.3) continue;
-      const k = key(body.pos[3 * i], body.pos[3 * i + 1], body.pos[3 * i + 2]);
-      let c = cells.get(k); if (!c) cells.set(k, (c = [])); c.push(i);
+      x0 = Math.min(x0, P[3 * i]); y0 = Math.min(y0, P[3 * i + 1]); z0 = Math.min(z0, P[3 * i + 2]);
+      x1 = Math.max(x1, P[3 * i]); y1 = Math.max(y1, P[3 * i + 1]); z1 = Math.max(z1, P[3 * i + 2]);
     }
-    const pa = g.attributes.position, cnt = pa.count, out = MOTION_ATTRS.map(() => new Float32Array(cnt)), v = new THREE.Vector3();
-    for (let i = 0; i < cnt; i++) {
-      v.fromBufferAttribute(pa, i).applyMatrix4(mw);
-      const cx = Math.floor(v.x / C), cy = Math.floor(v.y / C), cz = Math.floor(v.z / C);
-      let best = -1, bd = Infinity;
-      for (let R = 1; R <= 4 && best < 0; R += 3) {
-        for (let dx = -R; dx <= R; dx++) for (let dy = -R; dy <= R; dy++) for (let dz = -R; dz <= R; dz++) {
-          const c = cells.get(`${cx + dx},${cy + dy},${cz + dz}`); if (!c) continue;
-          for (const j of c) {
-            const ex = body.pos[3 * j] - v.x, ey = body.pos[3 * j + 1] - v.y, ez = body.pos[3 * j + 2] - v.z, d = ex * ex + ey * ey + ez * ez;
-            if (d < bd) { bd = d; best = j; }
-          }
-        }
+    const cnt = pos.length / 3, out = MOTION_ATTRS.map(() => new Float32Array(cnt));
+    if (n) {
+      const ox = Math.floor(x0 / C), oy = Math.floor(y0 / C), oz = Math.floor(z0 / C);
+      const NX = Math.floor(x1 / C) - ox + 1, NY = Math.floor(y1 / C) - oy + 1, NZ = Math.floor(z1 / C) - oz + 1;
+      const cellOf = new Int32Array(n).fill(-1), start = new Int32Array(NX * NY * NZ + 1);
+      for (let i = 0; i < n; i++) {
+        if (body.w[3][i] > 0.3 || body.w[4][i] > 0.3) continue;
+        const c = ((Math.floor(P[3 * i] / C) - ox) * NY + (Math.floor(P[3 * i + 1] / C) - oy)) * NZ + (Math.floor(P[3 * i + 2] / C) - oz);
+        cellOf[i] = c; start[c + 1]++;
       }
-      if (best < 0) continue;
-      out[0][i] = body.w[0][best]; out[1][i] = body.w[1][best] * 0.5; out[2][i] = body.w[2][best];
+      for (let c = 0; c < NX * NY * NZ; c++) start[c + 1] += start[c];
+      const fill = start.slice(0, -1), items = new Int32Array(start[NX * NY * NZ]);
+      for (let i = 0; i < n; i++) if (cellOf[i] >= 0) items[fill[cellOf[i]]++] = i;
+      for (let i = 0; i < cnt; i++) {
+        const vx = pos[3 * i], vy = pos[3 * i + 1], vz = pos[3 * i + 2];
+        const cx = Math.floor(vx / C) - ox, cy = Math.floor(vy / C) - oy, cz = Math.floor(vz / C) - oz;
+        let best = -1, bd = Infinity;
+        // the cells next to it; only if none of them holds a point, three cells further out
+        for (let R = 1; R <= 4 && best < 0; R += 3) {
+          for (let ix = Math.max(0, cx - R); ix <= Math.min(NX - 1, cx + R); ix++)
+            for (let iy = Math.max(0, cy - R); iy <= Math.min(NY - 1, cy + R); iy++)
+              for (let iz = Math.max(0, cz - R); iz <= Math.min(NZ - 1, cz + R); iz++) {
+                const c = (ix * NY + iy) * NZ + iz;
+                for (let q = start[c]; q < start[c + 1]; q++) {
+                  const j = items[q], ex = P[3 * j] - vx, ey = P[3 * j + 1] - vy, ez = P[3 * j + 2] - vz, d = ex * ex + ey * ey + ez * ez;
+                  if (d < bd) { bd = d; best = j; }
+                }
+              }
+        }
+        if (best < 0) continue;
+        out[0][i] = body.w[0][best]; out[1][i] = body.w[1][best] * 0.5; out[2][i] = body.w[2][best];
+      }
     }
     Motion.put(g, out);
   }

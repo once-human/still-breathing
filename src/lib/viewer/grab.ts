@@ -91,7 +91,16 @@ const half = (src, sw, sh, srgb) => {
   return { width: dw, height: dh, data: dst };
 };
 onmessage = async (e) => {
-  const { id, blob, w, h, raw, mips } = e.data, base = { colorSpaceConversion: "none", premultiplyAlpha: "none" };
+  const { id, blob, w, h, raw, mips, snap } = e.data, base = { colorSpaceConversion: "none", premultiplyAlpha: "none" };
+  if (snap) {
+    // a frame of the view, shrunk to its thumbnail and encoded here (reading it back would hold the page)
+    try {
+      const c = new OffscreenCanvas(w, h), g = c.getContext("2d");
+      g.drawImage(snap, 0, 0, w, h); snap.close();
+      postMessage({ id, blob: await c.convertToBlob({ type: "image/webp", quality: 0.82 }) });
+    } catch (err) { postMessage({ id, error: String(err) }); }
+    return;
+  }
   if (raw) {
     try {
       const r = await rgba(blob), levels = [r];
@@ -131,7 +140,14 @@ export async function rawImage(url: string, mips: "none" | "plain" | "srgb" = "n
   const blob = await grab(url);
   return (decode(blob, { raw: true, mips: mips === "srgb" ? 2 : mips === "plain" ? 1 : 0 }) as Promise<Level & { levels: Level[] }>).catch(() => null);
 }
+/** a frame (taken with createImageBitmap) as a w x h webp, encoded in the Worker */
+export async function thumbnail(frame: ImageBitmap, w: number, h: number): Promise<Blob> {
+  return ((await post({ snap: frame, w, h }, [frame])) as { blob: Blob }).blob;
+}
 function decode(blob: Blob, opt: { w?: number; h?: number; raw?: boolean; mips?: number }): Promise<unknown> {
+  return post({ blob, ...opt });
+}
+function post(msg: Record<string, unknown>, transfer: Transferable[] = []): Promise<unknown> {
   if (!decoder) {
     decoder = new Worker(URL.createObjectURL(new Blob([DECODE], { type: "text/javascript" })));
     decoder.onmessage = (e) => {
@@ -140,5 +156,5 @@ function decode(blob: Blob, opt: { w?: number; h?: number; raw?: boolean; mips?:
     };
   }
   const id = ++nextId;
-  return new Promise((ok, no) => { waiting.set(id, { ok: ok as (p: Pixels) => void, no }); decoder!.postMessage({ id, blob, ...opt }); });
+  return new Promise((ok, no) => { waiting.set(id, { ok: ok as (p: Pixels) => void, no }); decoder!.postMessage({ id, ...msg }, transfer); });
 }

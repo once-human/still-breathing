@@ -9,7 +9,7 @@ import {
   varying, smoothstep, sin, cos,
 } from "three/tsl";
 import { asset } from "@/lib/asset";
-import { bitmap } from "./grab";
+import { picture } from "./pic";
 import { Air, Wind } from "./air";
 
 /** what the tee's own material is made of, shared so the flat tee is the same cotton and ink */
@@ -63,19 +63,36 @@ const sdfs: Partial<Record<Side, Sdf>> = {};
 function sdf(side: Side): Sdf {
   const got = sdfs[side]; if (got) return got;
   const P = outline(side), n = P.length, d = new Float32Array(SD_W * SD_H);
+  // distance: past SD_MAX it's clamped anyway, so each edge only visits the texels within SD_MAX of it
+  const best = new Float64Array(SD_W * SD_H).fill(SD_MAX * SD_MAX);
+  const ix = (x: number) => (x + PW / 2) * SD_K - 0.5, iy = (y: number) => (y + PH / 2) * SD_K - 0.5;
+  for (let k = 0, m = n - 1; k < n; m = k++) {
+    const [ax, ay] = P[m], [bx, by] = P[k], ex = bx - ax, ey = by - ay, ll = ex * ex + ey * ey || 1;
+    const i0 = Math.max(0, Math.floor(ix(Math.min(ax, bx) - SD_MAX))), i1 = Math.min(SD_W - 1, Math.ceil(ix(Math.max(ax, bx) + SD_MAX)));
+    const j0 = Math.max(0, Math.floor(iy(Math.min(ay, by) - SD_MAX))), j1 = Math.min(SD_H - 1, Math.ceil(iy(Math.max(ay, by) + SD_MAX)));
+    for (let j = j0; j <= j1; j++) {
+      const y = -PH / 2 + (j + 0.5) / SD_K;
+      for (let i = i0; i <= i1; i++) {
+        const x = -PW / 2 + (i + 0.5) / SD_K, t = Math.max(0, Math.min(1, ((x - ax) * ex + (y - ay) * ey) / ll));
+        const dx = x - ax - t * ex, dy = y - ay - t * ey, q = dx * dx + dy * dy;
+        if (q < best[j * SD_W + i]) best[j * SD_W + i] = q;
+      }
+    }
+  }
+  // inside: the same crossing test, worked out once per row (where each edge crosses it)
+  const xs: number[] = [];
   for (let j = 0; j < SD_H; j++) {
     const y = -PH / 2 + (j + 0.5) / SD_K;
+    xs.length = 0;
+    for (let k = 0, m = n - 1; k < n; m = k++) {
+      const [ax, ay] = P[m], [bx, by] = P[k];
+      if ((ay > y) !== (by > y)) xs.push(((bx - ax) * (y - ay)) / (by - ay) + ax);
+    }
     for (let i = 0; i < SD_W; i++) {
       const x = -PW / 2 + (i + 0.5) / SD_K;
-      let best = 1e9, inside = false;
-      for (let k = 0, m = n - 1; k < n; m = k++) {
-        const [ax, ay] = P[m], [bx, by] = P[k];
-        if ((ay > y) !== (by > y) && x < ((bx - ax) * (y - ay)) / (by - ay) + ax) inside = !inside;
-        const ex = bx - ax, ey = by - ay, t = Math.max(0, Math.min(1, ((x - ax) * ex + (y - ay) * ey) / (ex * ex + ey * ey || 1)));
-        const dx = x - ax - t * ex, dy = y - ay - t * ey, q = dx * dx + dy * dy;
-        if (q < best) best = q;
-      }
-      d[j * SD_W + i] = Math.min(SD_MAX, Math.sqrt(best)) * (inside ? -1 : 1);
+      let inside = false;
+      for (const c of xs) if (x < c) inside = !inside;
+      d[j * SD_W + i] = Math.min(SD_MAX, Math.sqrt(best[j * SD_W + i])) * (inside ? -1 : 1);
     }
   }
   const half = new Uint16Array(d.length);
@@ -177,10 +194,34 @@ function loose(x: number, y: number) {
   const f = Math.max(hem, sl);
   return f * f;
 }
+const fixed = new Map<string, { U: Float32Array; PL: Float32Array; FL: Float32Array }>();
+/** where each point of a panel is on the print and the panel, and how loose it is: fixed for a panel, worked out once */
+function fixedOf(s: Sdf, h: number, c: number, mirror: boolean, withLoose: boolean) {
+  const fk = `${s.tex.id}|${h}|${c}|${mirror}|${withLoose}`;
+  let F = fixed.get(fk);
+  if (!F) {
+    const g = grid(s, h), n = g.X.length;
+    const U = new Float32Array(n * 2), PL = new Float32Array(n * 2), FL = new Float32Array(n * 3);
+    for (let k = 0; k < n; k++) {
+      const x = g.X[k], y = g.Y[k];
+      U[2 * k] = c + ((mirror ? -x : x) / PW) * 0.5; U[2 * k + 1] = 0.5 - y / PH;
+      PL[2 * k] = (x + PW / 2) / PW; PL[2 * k + 1] = (y + PH / 2) / PH;
+      if (withLoose) { const f = loose(x, y), e = 0.25; FL[3 * k] = f; FL[3 * k + 1] = (loose(x + e, y) - loose(x - e, y)) / (2 * e); FL[3 * k + 2] = (loose(x, y + e) - loose(x, y - e)) / (2 * e); }
+    }
+    fixed.set(fk, (F = { U, PL, FL }));
+  }
+  return F;
+}
 const smooth = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
-/** a panel as a grid (cm spacing h), only the cells near its outline kept */
+/** a panel as a grid (cm spacing h), only the cells near its outline kept; the same every time, so made once */
+const grids = new Map<string, ReturnType<typeof makeGrid>>();
 function grid(s: Sdf, h: number) {
+  const k = `${s.tex.id}|${h}`;
+  let g = grids.get(k); if (!g) grids.set(k, (g = makeGrid(s, h)));
+  return g;
+}
+function makeGrid(s: Sdf, h: number) {
   const nx = Math.round(PW / h) + 1, ny = Math.round(PH / h) + 1, x0 = -PW / 2, y0 = -PH / 2;
   const X = new Float32Array(nx * ny), Y = new Float32Array(nx * ny), D = new Float32Array(nx * ny);
   for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const k = j * nx + i; X[k] = x0 + i * h; Y[k] = y0 + j * h; D[k] = sdAt(s, X[k], Y[k]); }
@@ -190,9 +231,11 @@ function grid(s: Sdf, h: number) {
     if (Math.min(D[a], D[b], D[c], D[d]) > h * 0.75) continue;
     idx.push(a, b, d, a, d, c);
   }
-  return { nx, ny, x0, y0, h, X, Y, D, idx };
+  return { nx, ny, x0, y0, h, X, Y, D, idx: Uint32Array.from(idx) };
 }
 
+/** the panels' mesh spacing, cm */
+const GRID_H = 0.5;
 const TABLE = 4;            // m: the table runs well past any frame
 /** the table's distance from the lens, against the form's (Viewer's spots are framed for it) */
 export const FAR = 1.25;
@@ -245,7 +288,7 @@ export class FlatLay {
   private sdUnderNode = texture(new THREE.DataTexture(new Uint16Array(1), 1, 1, THREE.RedFormat, THREE.HalfFloatType));
   private sdBackNode = texture(new THREE.DataTexture(new Uint16Array(1), 1, 1, THREE.RedFormat, THREE.HalfFloatType));
 
-  constructor(private look: LookNodes, private aniso: number) {
+  constructor(private look: LookNodes, private aniso: number, private renderer: THREE.WebGPURenderer) {
     this.group.add(this.lay);
     // the window: a soft pool of daylight coming in low across the table (low enough to model every crease),
     // falling off away from where the tee lies; and the room's own light from all round, a touch cooler
@@ -264,17 +307,31 @@ export class FlatLay {
     room.position.set(0, 0, 1);
     this.group.add(room);
     sun.map = windowLight();
-    this.air = new Air(aniso, sunColour);
+    this.air = new Air(aniso, sunColour, renderer);
     this.sunL = new THREE.Vector3(IN_SIDE[0], IN_SIDE[1], IN_UP).normalize();
     this.group.add(this.air.group);
+  }
+
+  /** everything that's the same every time, got ready ahead (while the page is idle): the table, the materials,
+   *  both panels' outlines and grids */
+  async warm() {
+    await this.init();
+    // each side up (its print as printed) and under (mirrored), as place() lays them; one per idle moment
+    for (const side of ["back", "front"] as const) {
+      await this.idle(); const s = sdf(side);
+      await this.idle(); grid(s, GRID_H);
+      await this.idle(); fixedOf(s, GRID_H, side === "front" ? 0.25 : 0.75, false, true);
+      await this.idle(); fixedOf(s, GRID_H, side === "front" ? 0.25 : 0.75, true, true);
+    }
+    // and the first lay of each side
+    for (const side of ["back", "front"] as const) this.next[side] ??= this.makeLay(side, true);
   }
 
   /** the table and the materials: once */
   private init() {
     return (this.ready ??= (async () => {
       const tx = async (name: string, srgb: boolean) => {
-        const t = new THREE.Texture(await bitmap(`/tee/table/${name}`));
-        t.flipY = false; t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+        const t = await picture(`/tee/table/${name}`, this.renderer, srgb);
         t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set((TABLE * 100) / WOOD_CM, (TABLE * 100) / WOOD_CM);
         t.anisotropy = this.aniso; t.needsUpdate = true; return t;
       };
@@ -357,42 +414,70 @@ export class FlatLay {
    * Lay the tee on the table, `side` up, settled afresh (a new seed every time), framed so that side's print
    * sits where the camera looks. The group faces the camera: the photo is taken from straight above.
    */
-  async place(side: Side, cam: { pos: THREE.Vector3; target: THREE.Vector3 }, still: boolean) {
-    await this.init();
+  /**
+   * One lay of the cotton with `side` up: settled afresh (a new seed every time), as the two panels' meshes. Worked
+   * out a step per idle moment when `idle` (the next lay of each side is got ready ahead), at once when it's wanted.
+   */
+  private async makeLay(side: Side, idle: boolean) {
+    const step = () => (idle ? this.idle() : Promise.resolve());
     const st = settle((Math.random() * 2 ** 32) >>> 0);
     const other: Side = side === "back" ? "front" : "back";
-    const sTop = sdf(side), sUnder = sdf(other), sBack = sdf("back");
-    this.sdTopNode.value = sTop.tex; this.sdUnderNode.value = sUnder.tex; this.sdBackNode.value = sBack.tex;
+    const sTop = sdf(side), sUnder = sdf(other);
     // the atlas: front cell left (u 0..0.5), back cell right; the face up reads as it's printed, the one under is mirrored
     const cTop = side === "front" ? 0.25 : 0.75, cUnder = other === "front" ? 0.25 : 0.75;
     const build = (s: Sdf, h: number, c: number, mirror: boolean, z: (k: number, g: ReturnType<typeof grid>) => number, withLoose: boolean, up: (k: number, g: ReturnType<typeof grid>) => number) => {
       const g = grid(s, h), n = g.X.length;
-      const P = new Float32Array(n * 3), U = new Float32Array(n * 2), PL = new Float32Array(n * 2), FL = new Float32Array(n * 3), RI = new Float32Array(n);
-      for (let k = 0; k < n; k++) {
-        const x = g.X[k], y = g.Y[k];
-        P[3 * k] = x / 100; P[3 * k + 1] = y / 100; P[3 * k + 2] = z(k, g) / 100;
-        U[2 * k] = c + ((mirror ? -x : x) / PW) * 0.5; U[2 * k + 1] = 0.5 - y / PH;
-        PL[2 * k] = (x + PW / 2) / PW; PL[2 * k + 1] = (y + PH / 2) / PH; RI[k] = up(k, g) / 100;
-        if (withLoose) { const f = loose(x, y), e = 0.25; FL[3 * k] = f; FL[3 * k + 1] = (loose(x + e, y) - loose(x - e, y)) / (2 * e); FL[3 * k + 2] = (loose(x, y + e) - loose(x, y - e)) / (2 * e); }
-      }
+      const { U, PL, FL } = fixedOf(s, h, c, mirror, withLoose);
+      // and how this lay lifts it: new every time
+      const P = new Float32Array(n * 3), RI = new Float32Array(n);
+      for (let k = 0; k < n; k++) { P[3 * k] = g.X[k] / 100; P[3 * k + 1] = g.Y[k] / 100; P[3 * k + 2] = z(k, g) / 100; RI[k] = up(k, g) / 100; }
       const geo = new THREE.BufferGeometry();
       geo.setAttribute("position", new THREE.BufferAttribute(P, 3)); geo.setAttribute("uv", new THREE.BufferAttribute(U, 2));
       geo.setAttribute("pl", new THREE.BufferAttribute(PL, 2)); geo.setAttribute("fl", new THREE.BufferAttribute(FL, 3));
       geo.setAttribute("rise", new THREE.BufferAttribute(RI, 1));
-      geo.setIndex(g.idx); geo.computeVertexNormals();
+      geo.setIndex(new THREE.BufferAttribute(g.idx, 1)); geo.computeVertexNormals();
       return { geo, g };
     };
     // the panel underneath: flat on the table but for the air under it; the one on top: over it, with every crease,
     // rolling down to the table in the last centimetre at its edge
     // (both grids have the same layout, so a vertex index is the same point in each)
-    const h = 0.5;
-    const g0 = grid(sTop, h);
-    const swell = heights(g0.X, g0.Y, g0.nx, h, g0.x0, g0.y0, st, false);
-    const lie = heights(g0.X, g0.Y, g0.nx, h, g0.x0, g0.y0, st, true);
-    this.dispose();
+    const h = GRID_H;
+    await step(); const g0 = grid(sTop, h);
+    await step(); const swell = heights(g0.X, g0.Y, g0.nx, h, g0.x0, g0.y0, st, false);
+    await step(); const lie = heights(g0.X, g0.Y, g0.nx, h, g0.x0, g0.y0, st, true);
     // (the under panel rises and settles with the air caught under it; the top one with that and its own creases)
-    const under = build(sUnder, h, cUnder, true, (k, g) => 0.03 + swell[k] * 0.6 * smooth(0, 1.5, -g.D[k]), true, (k, g) => swell[k] * 0.6 * smooth(0, 1.5, -g.D[k]));
-    const topMesh = build(sTop, h, cTop, false, (k, g) => 0.05 + (0.1 + lie[k] - swell[k] * 0.4) * smooth(0, 1, -g.D[k]), true, (k, g) => (lie[k] - swell[k] * 0.4) * smooth(0, 1, -g.D[k]));
+    await step(); const under = build(sUnder, h, cUnder, true, (k, g) => 0.03 + swell[k] * 0.6 * smooth(0, 1.5, -g.D[k]), true, (k, g) => swell[k] * 0.6 * smooth(0, 1.5, -g.D[k]));
+    await step(); const topMesh = build(sTop, h, cTop, false, (k, g) => 0.05 + (0.1 + lie[k] - swell[k] * 0.4) * smooth(0, 1, -g.D[k]), true, (k, g) => (lie[k] - swell[k] * 0.4) * smooth(0, 1, -g.D[k]));
+    return { st, under, topMesh, lie, swell };
+  }
+  private next: Partial<Record<Side, ReturnType<FlatLay["makeLay"]>>> = {};
+  /** an idle moment; at once while a lay is wanted now (place() calls in every one waiting) */
+  private rush = false;
+  private wake: (() => void)[] = [];
+  private idle() {
+    if (this.rush) return Promise.resolve();
+    return new Promise<void>((r) => {
+      this.wake.push(r);
+      if ("requestIdleCallback" in globalThis) requestIdleCallback(() => r(), { timeout: 2000 }); else setTimeout(r, 200);
+    });
+  }
+
+  /**
+   * Lay the tee on the table, `side` up, settled afresh (a new seed every time), framed so that side's print
+   * sits where the camera looks. The group faces the camera: the photo is taken from straight above.
+   */
+  async place(side: Side, cam: { pos: THREE.Vector3; target: THREE.Vector3 }, still: boolean) {
+    await this.init();
+    const other: Side = side === "back" ? "front" : "back";
+    const sTop = sdf(side), sUnder = sdf(other), sBack = sdf("back");
+    // the lay got ready while the page was idle (hurried along if it isn't finished), or one now
+    this.rush = true; for (const f of this.wake.splice(0)) f();
+    let lay: Awaited<ReturnType<FlatLay["makeLay"]>>;
+    try { lay = await (this.next[side] ?? this.makeLay(side, false)); } finally { this.rush = false; }
+    delete this.next[side];
+    const { st, under, topMesh, lie, swell } = lay;
+    this.sdTopNode.value = sTop.tex; this.sdUnderNode.value = sUnder.tex; this.sdBackNode.value = sBack.tex;
+    this.dispose();
     const shadeGeo = new THREE.PlaneGeometry(PW / 100, PH / 100);
     const sp = shadeGeo.attributes.position, spl = new Float32Array(sp.count * 2);
     for (let k = 0; k < sp.count; k++) { spl[2 * k] = sp.getX(k) * 100 / PW + 0.5; spl[2 * k + 1] = sp.getY(k) * 100 / PH + 0.5; }
@@ -420,6 +505,8 @@ export class FlatLay {
     this.amp.value = still ? 0 : 0.0075; this.live.value = still ? 0 : 1;
     this.still = still; this.air.reset(this.wind); this.air.group.visible = !still;
     this.heightAt = this.makeHeightAt(topMesh.g, lie, swell);
+    // the next time this side goes up it settles differently again: that lay is worked out while the page is idle
+    this.next[side] = this.makeLay(side, true);
   }
 
   /** the air in the room: true while anything moves (the view has to be drawn) */

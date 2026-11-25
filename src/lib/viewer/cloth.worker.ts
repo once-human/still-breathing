@@ -11,20 +11,30 @@ const tex = out(new Float32Array(N)), slopes = [out(new Float32Array(N)), out(ne
 /** an array that is on its way to the page (or lost with a stopped tee) is replaced before it's written */
 const whole = () => { for (const t of [tex, ...slopes]) if (t.image.data.length !== N) t.image.data = new Float32Array(N); };
 const still = new M3(), at = new V3c();
+/** each tee's net, by the page's key for it (the page says when to let one go) */
+const nets = new Map<string, { net: ReturnType<typeof buildNet>; body: { pos: Float32Array; nrm: Float32Array } | null }>();
 const post = (m: unknown, t: Transferable[] = []) => (self as unknown as Worker).postMessage(m, t);
 
 self.onmessage = (e: MessageEvent) => {
   const m = e.data;
   if (m.type === "stop") { cloth = null; return; }
+  if (m.type === "forget") { nets.delete(m.key); return; }
   if (m.type === "init") {
     cloth = null; token = m.token;
     try {
-      const net = buildNet(m.meshes, 0.03, TEX_W * TEX_H, SUB_DT);
-      const skins = net.skins.map((s) => ({ I: s.I.slice(), W: s.W.slice() }));
-      post({ type: "net", token, skins }, skins.flatMap((s) => [s.I.buffer, s.W.buffer]));
+      // a tee seen before: its net (and the skin under it) are kept here; the page's meshes already carry their skin
+      let kept = nets.get(m.key);
+      if (!kept) {
+        if (!m.meshes) { post({ type: "need", token }); return; }
+        const net = buildNet(m.meshes, 0.03, TEX_W * TEX_H, SUB_DT);
+        const skins = net.skins.map((s) => ({ I: s.I.slice(), W: s.W.slice() }));
+        post({ type: "net", token, skins }, skins.flatMap((s) => [s.I.buffer, s.W.buffer]));
+        kept = { net, body: m.body && m.body.pos.length ? m.body : null };
+        nets.set(m.key, kept);
+      } else post({ type: "net", token });
       whole(); for (const t of [tex, ...slopes]) t.image.data.fill(0);
-      const c = new Cloth(net, tex as never, slopes as never);
-      if (m.body && m.body.pos.length) c.setBody(m.body.pos, m.body.nrm);
+      const c = new Cloth(kept.net, tex as never, slopes as never);
+      if (kept.body) c.setBody(kept.body.pos, kept.body.nrm);
       c.wind = m.wind;
       at.x = 0; at.y = m.lift; at.z = 0;
       cloth = c;

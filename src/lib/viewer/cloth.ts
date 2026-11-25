@@ -57,25 +57,41 @@ export class ClothLink {
     this.w.onmessage = (e) => this.got(e.data);
   }
   private onNet: ((skins: { I: Float32Array; W: Float32Array }[]) => void) | null = null;
+  private payload: (() => { meshes: Mesh[]; body: { pos: Float32Array; nrm: Float32Array } | null }) | null = null;
+  private lift = 0; private wind = true; private key = "";
+  /** tees whose net the worker holds (built once each; the page forgets one when it lets that tee go) */
+  private known = new Set<string>();
 
   /**
-   * A new tee (the last one's cloth stops). onNet gets each mesh's skin (its 4 particles and weights) once the
-   * net is built; the cloth runs from then on.
+   * A tee (the last one's cloth stops), by its key. The first time, its meshes (and the skin under it) go to the
+   * worker, which builds the net; onNet gets each mesh's skin (its 4 particles and weights) once that's done. After
+   * that only the key goes: the worker has the net, and the meshes still carry their skin.
    */
-  start(meshes: Mesh[], body: { pos: Float32Array; nrm: Float32Array } | null, lift: number, wind: boolean, onNet: (skins: { I: Float32Array; W: Float32Array }[]) => void) {
+  start(key: string, payload: () => { meshes: Mesh[]; body: { pos: Float32Array; nrm: Float32Array } | null }, lift: number, wind: boolean, onNet: (skins: { I: Float32Array; W: Float32Array }[]) => void) {
     const token = ++this.token;
-    this.ready = false; this.inFlight = false; this.owed = 0; this.moving = false; this.onNet = onNet;
-    const copies = meshes.map((m) => ({ pos: m.pos.slice(), idx: Uint32Array.from(m.idx) }));
-    const send: Transferable[] = copies.flatMap((c) => [c.pos.buffer, c.idx.buffer]);
-    if (body) send.push(body.pos.buffer, body.nrm.buffer);
-    this.w.postMessage({ type: "init", token, meshes: copies, body, lift, wind }, send);
+    this.ready = false; this.inFlight = false; this.owed = 0; this.moving = false;
+    this.onNet = onNet; this.payload = payload; this.lift = lift; this.wind = wind; this.key = key;
+    if (this.known.has(key)) { this.w.postMessage({ type: "init", token, key, lift, wind }); return; }
+    this.send(token);
   }
+  /** the meshes go over as they are (handed over, not copied: the page has no more use for them once the net is built) */
+  private send(token: number) {
+    const { meshes, body } = this.payload!();
+    if (meshes.some((m) => !m.pos.length)) { console.info("cloth off: this tee's net was let go"); return; }
+    const tr: Transferable[] = meshes.flatMap((c) => [c.pos.buffer, c.idx.buffer]);
+    if (body) tr.push(body.pos.buffer, body.nrm.buffer);
+    this.known.add(this.key);
+    this.w.postMessage({ type: "init", token, key: this.key, meshes, body, lift: this.lift, wind: this.wind }, [...new Set(tr)]);
+  }
+  /** a tee let go: its net can go too */
+  forget(key: string) { if (this.known.delete(key)) this.w.postMessage({ type: "forget", key }); }
   stop() { ++this.token; this.ready = false; this.inFlight = false; this.moving = false; this.w.postMessage({ type: "stop" }); }
 
   private got(m: { type: string; token: number; skins?: { I: Float32Array; W: Float32Array }[]; frame?: Frame; moving?: boolean; error?: string }) {
     if (m.token !== this.token) { if (m.frame) this.frame = m.frame; return; }
     if (m.type === "error") { console.info("cloth off", m.error); return; }
-    if (m.type === "net") { this.onNet?.(m.skins!); this.ready = true; return; }
+    if (m.type === "need") { this.known.delete(this.key); this.send(m.token); return; }
+    if (m.type === "net") { if (m.skins) this.onNet?.(m.skins); this.ready = true; return; }
     if (m.type === "frame") {
       const f = m.frame!, t = this.tex.image.data as Float32Array;
       t.set(f.off); this.tex.needsUpdate = true;

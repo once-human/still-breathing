@@ -5,7 +5,7 @@ import { COLOURS, DESIGNS, type Colour, type Design } from "@/content/tee";
 import type { Format, Look, PhotoJob } from "@/lib/viewer/photo";
 import type { Variant } from "@/lib/viewer/raster";
 import { pickTier, handheld } from "@/lib/viewer/tier";
-import { prefetchTee, bitmap, grab, pixels } from "@/lib/viewer/grab";
+import { prefetchTee, bitmap, grab, pixels, thumbnail } from "@/lib/viewer/grab";
 import { printBackURL, printFrontURL } from "@/lib/viewer/print";
 import { asset } from "@/lib/asset";
 import { word, type WordKind } from "@/lib/words";
@@ -210,6 +210,9 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       const st = stage.current, tc = traceCv.current;
       const raster = new Raster(rasterCv.current);
       await raster.init();
+      // each view's tee (and person) stays loaded once seen: the shop tee and the person, enough to go back and forth
+      raster.keep = 2;
+      raster.onRedraw = () => { s.dirty = true; };
       // the place picked, and the scene the current shot uses there (fit mode keeps the paper sweep)
       let place = SCENES.find((x) => x.id === sceneRef.current) ?? SCENES[0];
       // the paper studio for the views of the tee on its own
@@ -298,19 +301,31 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       // and their light measured once, then kept, so a place seen before comes back with only a pointer swap. A
       // phone gets the picture at half size: on its screen it is still magnified less than a desktop's full one.
       const envs = new Map<string, Promise<Env>>();
+      // with the sharp band the camera sees (scene.ts BAND): that is what stands behind the person, so it comes
+      // at screen sharpness on every device (half size on a phone); the whole picture only lights and fills in
+      const bandURL = (url: string) => bandOf(url, handheld() || ((navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8) <= 4);
+      const decodeEnv = (url: string, band: boolean): Promise<Env> =>
+        Promise.all([pixels(url, lite ? [2048, 1024] : undefined), band ? pixels(bandURL(url)).catch(() => undefined) : undefined])
+          .then(([px, b]) => ({ url, px, band: b }));
+      // Got ready ahead is the whole picture only (32 MB on the card); a place's band (over 100 MB) goes up when that
+      // place is first shown, and sharpens it a moment later. Once a picture is on the card its pixels are let go
+      // here (on most laptops the card's memory is the same memory, so keeping them would hold every picture twice):
+      // the path tracer decodes its own when it starts.
+      const NONE = new Uint8Array(0), bandAsked = new Set<string>();
       const envOf = (url: string) => {
         let p = envs.get(url);
         if (!p) {
-          // with the sharp band the camera sees (scene.ts BAND): that is what stands behind the person, so it comes
-          // at screen sharpness on every device (half size on a phone); the whole picture only lights and fills in
-          const lo = handheld() || ((navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8) <= 4;
-          p = Promise.all([pixels(url, lite ? [2048, 1024] : undefined), pixels(bandOf(url, lo)).catch(() => undefined)])
-            .then(([px, band]) => ({ url, px, band }));
+          p = decodeEnv(url, false).then((e) => {
+            void raster.prepareEnv(e).catch(() => {}).finally(() => { e.px = { ...e.px, data: NONE }; });
+            return e;
+          });
           p.catch(() => envs.delete(url));
           envs.set(url, p);
         }
         return p;
       };
+      /** the path tracer's own copy of a place's pixels */
+      const tracerEnv = (p: PathTracer, url: string) => decodeEnv(url, true).then((f) => { if (envNow?.url === url) p.setEnv(f.px, f.band); }).catch(() => {});
       let envNow: Env | null = null, envUrl = "";
       const loadEnv = async () => {
         const url = scene.env;
@@ -320,7 +335,10 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         try { e = await envOf(url); } catch { if (envUrl === url) envUrl = ""; return; }   // not there: the dark room
         // another place was picked while this one came in: that one is shown instead
         if (dead || envUrl !== url) return;
-        envNow = e; raster.setEnv(e); pt?.setEnv(e.px, e.band);
+        await raster.setEnv(e);
+        if (dead || envUrl !== url) return;
+        envNow = e; if (pt) void tracerEnv(pt, url);
+        if (!bandAsked.has(url)) { bandAsked.add(url); void pixels(bandURL(url)).then((b) => { if (!dead) raster.setBand(url, b); }).catch(() => bandAsked.delete(url)); }
         s.dirty = true; lastSig = "";
       };
       /** n display frames from now: whatever was just set up has been drawn */
@@ -328,13 +346,15 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       // a picture of the view for the strip: taken right after a frame is drawn, in the same task (the canvas is
       // only readable until the frame is handed to the screen)
       let snapCb: ((u: string) => void) | null = null;
-      const snapCv = document.createElement("canvas"); snapCv.width = snapCv.height = 144;
       const takeSnap = () => {
         const cb = snapCb; if (!cb) return; snapCb = null;
         const cv = rasterCv.current!, W = cv.width, H = cv.height, side = Math.min(W, H);
-        const g = snapCv.getContext("2d"); if (!g) return;
-        g.drawImage(cv, (W - side) / 2, (H - side) / 2, side, side, 0, 0, 144, 144);
-        try { cb(snapCv.toDataURL("image/webp", 0.82)); } catch { /* unreadable: the strip keeps its stand-in */ }
+        // the frame taken as it is, then shrunk and encoded in the decoder's worker: reading a 3D canvas back on
+        // the page (toDataURL, convertToBlob) holds it until the graphics card has finished everything it was
+        // given, seconds on a busy machine
+        createImageBitmap(cv, (W - side) / 2, (H - side) / 2, side, side)
+          .then(async (b) => cb(URL.createObjectURL(await thumbnail(b, 144, 144))))
+          .catch(() => { /* unreadable: the strip keeps its stand-in */ });
       };
       await loadVariant(s.variant);
       if (dead) return;
@@ -465,7 +485,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         const PT = await import("@/lib/viewer/pathtracer");
         if (dead || !PT.PathTracer.supported()) return;
         const p = new PT.PathTracer();
-        try { await p.init(tc); size(); p.resize(tc.width, tc.height); await ptLoad(p, s.variant); if (envNow) p.setEnv(envNow.px, envNow.band); } catch (e) { console.warn("path tracer off", e); setCanPhoto(false); return; }
+        try { await p.init(tc); size(); p.resize(tc.width, tc.height); await ptLoad(p, s.variant); if (envNow) await tracerEnv(p, envNow.url); } catch (e) { console.warn("path tracer off", e); setCanPhoto(false); return; }
         if (dead) { p.device.destroy(); return; }
         pt = p; lastSig = "";
       })());
@@ -540,19 +560,25 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
               setMode("3d"); setStatus("");
               // then, in a quiet moment, the back print at full resolution: close in it's sharp straight away
               if (!lite) ("requestIdleCallback" in window ? requestIdleCallback : (f: () => void) => setTimeout(f, 1500))(() => { if (!dead) void sharpen(); });
-              // then, when the page is idle, the likely next things: the worn view's person and each place's picture
-              // (smallest first), decoded and on the graphics card, one per idle moment
+              // then, when the page is idle, the likely next things: the other views and each place's picture,
+              // decoded and on the graphics card, one per idle moment
               void (async () => {
                 const idle = () => new Promise<void>((r) => ("requestIdleCallback" in window ? requestIdleCallback(() => r(), { timeout: 3000 }) : setTimeout(r, 800)));
                 const calm = async () => { do await idle(); while (!dead && !quiet(performance.now())); };
                 await calm(); if (dead) return;
                 prefetchTee(variantRef.current, s.design, s.tee);
+                // the other views, loaded and their shaders built: the person (or the shop tee, if worn came first),
+                // then the table
+                await calm(); if (dead) return;
+                await raster.prepare(shotRef.current.who === "worn" ? ALONE : variantRef.current).catch(() => {});
+                await calm(); if (dead) return;
+                await raster.prepareFlat().catch(() => {});
                 for (const id of ["show", "studio", "window"]) {
                   const url = SCENES.find((x) => x.id === id)?.env; if (!url) continue;
                   await calm(); if (dead) return;
                   const e = await envOf(url).catch(() => null);
                   await calm(); if (dead) return;
-                  if (e) raster.prepareEnv(e);
+                  if (e) await raster.prepareEnv(e).catch(() => {});
                 }
               })();
             }));
@@ -691,7 +717,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
     const e = engine.current, sh = shotRef.current, d = lookRef.current.design;
     if (!e || (sh.spots && spotRef.current > 0)) return;
     const url = await e.snap();
-    if (lookRef.current.design === d && shotRef.current === sh) setThumbs((t) => ({ ...t, [`${d}-${sh.id}`]: url }));
+    if (lookRef.current.design !== d || shotRef.current !== sh) { URL.revokeObjectURL(url); return; }
+    setThumbs((t) => { const k = `${d}-${sh.id}`; if (t[k]) URL.revokeObjectURL(t[k]); return { ...t, [k]: url }; });
   };
   useEffect(() => {
     lookRef.current = { design, tee };

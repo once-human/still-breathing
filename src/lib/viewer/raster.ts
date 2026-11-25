@@ -9,12 +9,8 @@ import { RectAreaLightTexturesLib } from "three/addons/lights/RectAreaLightTextu
 import { CAMERA, VFOV, ASPECT, SWEEP, FLOOR, KNIT_REPEAT, SCENES, BAND, lightFrame, radiance, type Camera, type Scene, type V3 } from "./scene";
 import { ENV_W, projectEnv, turnSH } from "./sh";
 import type { TeeGeometry } from "./pathtracer";
-import { grab, bitmap, rawImage, type Pixels, type Level } from "./grab";
-
-/** a moment for the page between slices of an upload (a message, which a hidden tab doesn't hold back like a timer) */
-const breathe = () => new Promise<void>((r) => { const c = new MessageChannel(); c.port1.onmessage = () => { c.port1.close(); r(); }; c.port2.postMessage(0); });
-/** bytes written to the graphics card per slice: a few milliseconds of the page's time each */
-const SLICE = 2 << 20;
+import { grab, bitmap, type Pixels } from "./grab";
+import { picture, gpuDevice, streamTexture } from "./pic";
 import { ClothLink, offsetTexture, slopeTextures, clothNodes } from "./cloth";
 import { Motion, MOTION_ATTRS } from "./motion";
 import type { FlatLay, LookNodes, Side } from "./flat";
@@ -33,6 +29,23 @@ function srgbToLinear(hex: number): V3 {
   const c = new THREE.Color().setHex(hex, THREE.SRGBColorSpace);
   return [c.r, c.g, c.b];
 }
+
+/** a loaded tee (and body or person), ready to go back on the stand */
+type Worn = {
+  roots: THREE.Object3D[];
+  parts: { mesh: THREE.Mesh; mw: THREE.Matrix4; id: number; person: boolean }[];
+  /** each tee mesh in the garment's frame, and its cloth skin attributes */
+  tee: { pos: Float32Array; idx: Uint32Array; skin: [THREE.BufferAttribute, THREE.BufferAttribute] }[];
+  /** the skin under the tee, for the cloth to rest on */
+  body: { pos: Float32Array; nrm: Float32Array } | null;
+  joints: Record<string, [number, number, number]> | null;
+  skinMaps: [ImageBitmap, ImageBitmap] | null;
+  /** the hair cards' strands, for the path tracer */
+  hair?: ImageBitmap;
+  lift: number; clothOn: boolean; tris: number; built: TeeGeometry | null;
+};
+const wornKey = (v: Variant) => JSON.stringify([v.dir, v.pose, v.person ?? "", !!v.body, v.seat ?? 0]);
+const concat = (a: Float32Array[]) => { const o = new Float32Array(a.reduce((n, x) => n + x.length, 0)); let k = 0; for (const x of a) { o.set(x, k); k += x.length; } return o; };
 
 /** a place's picture, ready to draw: the full picture, and its 64 x 32 linear version for the light probe */
 /** a place's whole picture, and the sharp band of it the camera sees (scene.ts BAND), where there is one */
@@ -118,7 +131,7 @@ export class Raster {
   private envSH: Float64Array | null = null;
   private turnedSH = new Float64Array(27);
   /** each place's picture, uploaded once and kept: going back to a place is only a pointer swap */
-  private envTex = new Map<string, { tex: THREE.Texture; sh: Float64Array; band: THREE.Texture | null }>();
+  private envTex = new Map<string, Promise<{ tex: THREE.Texture; sh: Float64Array }>>();
   private envLight = 0;
   private world: V3 = [0, 0, 0];
   private probeYaw = NaN;
@@ -215,10 +228,17 @@ export class Raster {
    * same way the path tracer does: u = 0.5 - atan2(x, z) / 2pi (the stage, +z, in the middle), v = 0 straight up.
    * It turns with the person, as the lights do (a game camera walking round a place that stays put).
    */
-  setEnv(env: Env | null) {
-    this.probeYaw = NaN;
-    if (!env) { this.envSH = null; this.env = null; this.bandOn = false; this.showEnv(); return; }
-    const { tex: t, sh, band } = this.prepareEnv(env);
+  async setEnv(env: Env | null) {
+    const turn = ++this.envTurn;
+    if (!env) { this.probeYaw = NaN; this.envSH = null; this.env = null; this.envUrl = ""; this.bandOn = false; this.showEnv(); return; }
+    const { tex: t, sh } = await this.prepareEnv(env);
+    // another place was picked while this one went up: that one is shown instead
+    if (turn !== this.envTurn) return;
+    this.probeYaw = NaN; this.envUrl = env.url;
+    // the sharp band (a big picture, setBand) if it's on the card; until it is, the whole picture stands in
+    const bandP = this.bands.get(env.url);
+    const band = bandP ? await Promise.race([bandP, Promise.resolve(undefined)]) : null;
+    if (band === undefined) void bandP!.then((b) => this.showBand(env.url, b));
     this.envSH = sh; this.bandOn = !!band;
     if (this.env) { this.env.value = t; if (band) this.band!.value = band; this.showEnv(); return; }
     const d = normalize(normalWorldGeometry);
@@ -236,29 +256,48 @@ export class Raster {
     this.bg = mix(envN, bandN, step(0, vb).mul(step(vb, 1)));
     this.showEnv();
   }
+  private envTurn = 0;
+  private envUrl = "";
+  /** each place's sharp band (scene.ts BAND), once it's been asked for: sent to the card when that place is shown */
+  private bands = new Map<string, Promise<THREE.Texture | null>>();
+  hasBand(url: string) { return this.bands.has(url); }
+  /** the band of a place, sent up and drawn the moment it's in (if that place is still the one shown) */
+  setBand(url: string, px: { data: Uint8Array; width: number; height: number }) {
+    if (this.bands.has(url)) return;
+    // drawn about one texel to a screen pixel, so no mips; every tile row clamps on its own
+    const p = this.upEnv(px, THREE.ClampToEdgeWrapping).catch(() => null);
+    this.bands.set(url, p);
+    void p.then((b) => this.showBand(url, b));
+  }
+  private showBand(url: string, b: THREE.Texture | null) {
+    if (url !== this.envUrl || !b || !this.band || !this.env) return;
+    this.band.value = b; this.bandOn = true; this.showEnv(); this.onRedraw?.();
+  }
+  /** a place's picture (or band) on the card: written a slice at a time (or, off WebGPU, as one plain buffer copy) */
+  private async upEnv(px: { data: Uint8Array; width: number; height: number }, wrapS: THREE.Wrapping) {
+    const dev = this.device();
+    let t: THREE.Texture;
+    if (dev) t = await streamTexture(dev, [px], true);
+    else { t = new THREE.DataTexture(px.data, px.width, px.height, THREE.RGBAFormat, THREE.UnsignedByteType); t.needsUpdate = true; }
+    t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.wrapS = wrapS; t.wrapT = THREE.ClampToEdgeWrapping;
+    // no mips: the picture is only ever magnified, and mips would draw a seam where u wraps round
+    t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter;
+    if (!dev) this.renderer.initTexture(t);
+    return t;
+  }
+  /** something changed on its own (a picture finished going up): the page draws a frame */
+  onRedraw: (() => void) | null = null;
   /**
    * A place's picture on the graphics card, ahead of being shown (done once per place, when the page is idle): the
-   * switch to that place then only points the background at it. Same filters for every place, so the background's
-   * shader never changes either.
+   * switch to that place then only points the background at it. Written a slice at a time between frames (it's
+   * 32 MB: in one go that holds the page for seconds when the graphics card is busy). Same filters for every place,
+   * so the background's shader never changes either.
    */
   prepareEnv(env: Env) {
     let e = this.envTex.get(env.url);
     if (!e) {
-      // raw bytes decoded in a worker: uploaded as a plain buffer copy (an image upload can stall on the graphics process)
-      const t = new THREE.DataTexture(env.px.data, env.px.width, env.px.height, THREE.RGBAFormat, THREE.UnsignedByteType);
-      t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.ClampToEdgeWrapping;
-      // no mips: the picture is only ever magnified, and mips would draw a seam where u wraps round
-      t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter; t.needsUpdate = true;
-      this.renderer.initTexture(t);
-      let b: THREE.Texture | null = null;
-      if (env.band) {
-        // the sharp band: drawn about one texel to a screen pixel, so no mips; every tile row clamps on its own
-        b = new THREE.DataTexture(env.band.data, env.band.width, env.band.height, THREE.RGBAFormat, THREE.UnsignedByteType);
-        b.flipY = false; b.colorSpace = THREE.SRGBColorSpace; b.wrapS = b.wrapT = THREE.ClampToEdgeWrapping;
-        b.generateMipmaps = false; b.minFilter = THREE.LinearFilter; b.magFilter = THREE.LinearFilter; b.needsUpdate = true;
-        this.renderer.initTexture(b);
-      }
-      e = { tex: t, sh: projectEnv(env.px.texels, ENV_W, ENV_W / 2), band: b };
+      e = this.upEnv(env.px, THREE.RepeatWrapping).then((tex) => ({ tex, sh: projectEnv(env.px.texels, ENV_W, ENV_W / 2) }));
+      e.catch(() => this.envTex.delete(env.url));
       this.envTex.set(env.url, e);
     }
     return e;
@@ -269,55 +308,14 @@ export class Raster {
     this.ambient();
   }
 
-  /**
-   * A picture as a texture, every texel exactly as the file stores it. Decoded in a Worker into raw bytes, with its
-   * mip chain (made there too, box-filtered as light), then written to the graphics card a slice at a time between
-   * frames: no single moment on the page's thread, however big the picture. The texture is handed back only once
-   * every level is in, so what's drawn is never part-written. Where the renderer isn't WebGPU it's a plain data
-   * texture (the GPU makes its mips), and the ordinary image path where the browser can't decode to bytes.
-   * Same filters every way, so swapping one print for another never changes a shader.
-   */
+  /** a picture as a texture, exactly as stored and never holding the page (pic.ts) */
   private async picture(url: string, srgb: boolean, mips = true) {
-    const dev = this.device();
-    const raw = await rawImage(url, dev && mips ? (srgb ? "srgb" : "plain") : "none");
-    let t: THREE.Texture;
-    if (!raw) t = new THREE.Texture(await bitmap(url));
-    else if (dev) t = await this.stream(dev, mips ? raw.levels : [raw.levels[0]], srgb);
-    else t = new THREE.DataTexture(raw.data, raw.width, raw.height, THREE.RGBAFormat, THREE.UnsignedByteType);
-    t.flipY = false; t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
-    t.magFilter = THREE.LinearFilter; t.minFilter = mips ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
-    t.generateMipmaps = mips && !(t as THREE.ExternalTexture).isExternalTexture;
+    const t = await picture(url, this.renderer, srgb, mips);
     // the print stays crisp across the cloth as it turns away: full anisotropic filtering
     t.anisotropy = mips ? this.maxAniso : 1;
-    // set once, before anything draws with it (a texture of the card's own is never re-uploaded)
-    t.needsUpdate = true;
     return t;
   }
-  private device(): GPUDevice | null {
-    return this.isWebGPU ? (this.renderer.backend as unknown as { device?: GPUDevice }).device ?? null : null;
-  }
-  /** levels (largest first) into a texture of the card's own, smallest first, SLICE bytes per task */
-  private async stream(dev: GPUDevice, levels: Level[], srgb: boolean) {
-    const g = dev.createTexture({
-      size: [levels[0].width, levels[0].height], mipLevelCount: levels.length,
-      format: srgb ? "rgba8unorm-srgb" : "rgba8unorm", usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-    });
-    let sent = 0;
-    try {
-      for (let m = levels.length - 1; m >= 0; m--) {
-        const { data, width, height } = levels[m], row = width * 4, rows = Math.max(1, Math.floor(SLICE / row));
-        for (let y = 0; y < height; y += rows) {
-          const h = Math.min(rows, height - y);
-          dev.queue.writeTexture({ texture: g, mipLevel: m, origin: [0, y] }, data as Uint8Array<ArrayBuffer>, { offset: y * row, bytesPerRow: row, rowsPerImage: h }, [width, h]);
-          if ((sent += h * row) >= SLICE) { sent = 0; await breathe(); }
-        }
-      }
-    } catch (e) { g.destroy(); throw e; }
-    const t = new THREE.ExternalTexture(g);
-    // three never frees a texture it didn't make: this one goes when the texture is disposed
-    t.addEventListener("dispose", () => g.destroy());
-    return t;
-  }
+  private device() { return gpuDevice(this.renderer); }
   private async tx(name: string, srgb: boolean) { return this.picture(ASSET + name, srgb); }
   /** the back and chest prints for one design in one colourway, at print resolution, loaded once */
   private async look(design: string, t: "black" | "cream") {
@@ -434,15 +432,13 @@ export class Raster {
    * and the body itself in fit mode; hands back the triangle soup for the path tracer.
    */
   async load(design: string, tee: "black" | "cream", v: Variant): Promise<() => TeeGeometry> {
-    this.gl ??= new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath("/draco/"));
-    const gl = this.gl;
-    const glb = async (f: string) => gl.parseAsync(await (await grab(ASSET + f)).arrayBuffer(), ASSET + v.dir + "/");
     // everything at once (most of it is already downloading: the viewer started it before this code arrived)
-    // the person's skin maps sit beside its GLB: <name>-skin.webp (colour), <name>-skin-n.webp (relief, roughness)
-    const skinMapsP = v.person ? Promise.all([bitmap(v.person.replace(/\.glb$/, "-skin.webp")), bitmap(v.person.replace(/\.glb$/, "-skin-n.webp"))]).catch(() => null) : null;
-    const [gltf, bodyGltf, [c0, o0], normalP, knitT] = await Promise.all([
-      glb(`${v.dir}/${v.pose}.glb`),
-      v.person ? grab(v.person).then(async (b) => gl.parseAsync(await b.arrayBuffer(), ASSET)) : v.body ? glb(`${v.dir}/body-${v.pose}.glb`) : Promise.resolve(null),
+    // a tee (and person) seen before, or got ready while the page was idle, is still here, on the graphics card,
+    // cloth net and all: nothing to fetch or build
+    const key = wornKey(v);
+    const kept = this.worn.get(key) ?? (await this.pending.get(key)?.catch(() => null)) ?? null;
+    const [parts, [c0, o0], normalP, knitT] = await Promise.all([
+      kept ? Promise.resolve(null) : this.fetchParts(v),
       this.look(design, tee),
       this.normals[v.size] ? Promise.resolve(this.normals[v.size]) : this.tx(`tex/normal-${v.size}.png`, false),
       this.nodes ? Promise.resolve(null) : this.tx("tex/knit-normal.png", false),
@@ -490,25 +486,108 @@ export class Raster {
     this.inner.color.setRGB(...FABRIC[tee], THREE.LinearSRGBColorSpace);
     if (v.skin) this.skinMat.color.setRGB(...v.skin, THREE.LinearSRGBColorSpace);
 
-    // swap out the previous tee/body
-    for (const o of this.loaded) {
-      this.pivot.remove(o);
-      o.traverse((x) => { const mm = x as THREE.Mesh; if (mm.isMesh) mm.geometry.dispose(); });
-    }
+    // the last tee/body off the stand (kept, for the next time that view is picked)
+    for (const o of this.loaded) this.pivot.remove(o);
     this.loaded = [];
-    const lift = v.body || v.person ? FLOOR : 0;
-    this.pivot.position.y = lift;
+    const w = kept ?? this.take(v, parts!.tee, parts!.body, parts!.skinMaps, parts!.hair);
+    this.shown = key;
+    if (kept && v.person) {
+      this.personSkin = this.skinMats.get(v.person) ?? this.personSkin;
+      this.personHair = this.hairMats.get(v.person) ?? this.personHair;
+    }
+    this.worn.delete(key); this.worn.set(key, w); this.trim();
+    for (const r of w.roots) this.pivot.add(r);
+    this.loaded = w.roots;
+    this.pivot.position.y = w.lift;
+    this.motion.setJoints(w.joints);
+    this.tris = w.tris;
+    // the cloth: on the shop form and on a standing body (raised arms and sitting stay as simulated).
+    // The tee goes on screen at once, at rest; the net is built in a worker (once per tee) and takes over when it's ready.
+    this.cloth?.stop();
+    (this.offsets.image.data as Float32Array).fill(0); this.offsets.needsUpdate = true;
+    for (const t of this.slopes) { (t.image.data as Float32Array).fill(0); t.needsUpdate = true; }
+    if (w.clothOn) {
+      this.cloth ??= new ClothLink(this.offsets, this.slopes);
+      this.cloth.start(key, () => ({ meshes: w.tee.map((t) => ({ pos: t.pos, idx: t.idx })), body: w.body }), w.lift,
+        !matchMedia("(prefers-reduced-motion: reduce)").matches, (sk) => sk.forEach((x, i) => {
+          const [I, W] = w.tee[i].skin;
+          (I.array as Float32Array).set(x.I); (W.array as Float32Array).set(x.W); I.needsUpdate = true; W.needsUpdate = true;
+        }));
+    }
+    return () => (w.built ??= soupOf(w.parts, w.lift, w.skinMaps ? { albedo: w.skinMaps[0], rn: w.skinMaps[1], hair: w.hair } : undefined));
+  }
 
+  /** each tee (and person) loaded, by what it is: kept on the graphics card so going back to a view costs nothing */
+  private worn = new Map<string, Worn>();
+  private pending = new Map<string, Promise<Worn>>();
+  private shown = "";
+  /** most recently used last; the oldest goes once more are kept than the machine should hold (never the one shown) */
+  private trim() {
+    for (const [k, old] of this.worn) {
+      if (this.worn.size <= this.keep) break;
+      if (k === this.shown) continue;
+      this.worn.delete(k); this.cloth?.forget(k);
+      for (const r of old.roots) r.traverse((x) => { const mm = x as THREE.Mesh; if (mm.isMesh) mm.geometry.dispose(); });
+    }
+  }
+  /** a tee's GLB (and its body or person, and the person's skin maps), fetched and parsed */
+  private async fetchParts(v: Variant) {
+    this.gl ??= new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath("/draco/"));
+    const gl = this.gl;
+    const glb = async (f: string) => gl.parseAsync(await (await grab(ASSET + f)).arrayBuffer(), ASSET + v.dir + "/");
+    // the person's skin maps sit beside its GLB: <name>-skin.webp (colour), <name>-skin-n.webp (relief, roughness)
+    const [tee, body, skinMaps] = await Promise.all([
+      glb(`${v.dir}/${v.pose}.glb`),
+      v.person ? grab(v.person).then(async (b) => gl.parseAsync(await b.arrayBuffer(), ASSET)) : v.body ? glb(`${v.dir}/body-${v.pose}.glb`) : Promise.resolve(null),
+      v.person ? Promise.all([bitmap(v.person.replace(/\.glb$/, "-skin.webp")), bitmap(v.person.replace(/\.glb$/, "-skin-n.webp"))]).catch(() => null) : Promise.resolve(null),
+    ]);
+    // the hair cards' strands sit beside the person's GLB too (<name>-hair.webp), only for a person who has cards
+    let hair: ImageBitmap | null = null;
+    if (body && v.person && !this.cardMats.has(v.person)) {
+      let has = false;
+      body.scene.traverse((o) => { if ((o as THREE.Mesh).isMesh && /haircard/i.test(((o as THREE.Mesh).material as THREE.Material)?.name || "")) has = true; });
+      if (has) hair = await bitmap(v.person.replace(/\.glb$/, "-hair.webp")).catch(() => null);
+    }
+    return { tee: tee.scene, body: body?.scene ?? null, skinMaps: skinMaps as [ImageBitmap, ImageBitmap] | null, hair };
+  }
+  /**
+   * A view's tee (and person) loaded and its shaders built while the page is idle, kept off the stand: picking
+   * that view then only puts it there. Needs the tee's material (made with the first tee).
+   */
+  async prepare(v: Variant) {
+    const key = wornKey(v);
+    if (!this.outer || this.worn.has(key) || this.pending.has(key)) return;
+    const p = this.fetchParts(v).then((parts) => this.take(v, parts.tee, parts.body, parts.skinMaps, parts.hair));
+    this.pending.set(key, p);
+    try {
+      const w = await p;
+      if (!this.worn.has(key)) { this.worn.set(key, w); this.trim(); }
+      const g = new THREE.Group(); for (const r of w.roots) g.add(r);
+      await this.renderer.compileAsync(g, this.camera, this.scene).catch(() => {});
+      for (const r of w.roots) g.remove(r);
+    } finally { this.pending.delete(key); }
+  }
+  /** how many are kept: the shop tee and a person or two on a desktop, less on a small device */
+  keep = 3;
+
+  /**
+   * A freshly loaded tee (and body or person) made ready to show: materials on, the cloth's skin attributes, the
+   * tee's motion weights from the body under it, and what the cloth and the path tracer need from it. Done once per
+   * tee; walks every vertex, so it's all typed arrays and no strings.
+   */
+  private take(v: Variant, teeRoot: THREE.Object3D, bodyRoot: THREE.Object3D | null, skinMaps: [ImageBitmap, ImageBitmap] | null, hair: ImageBitmap | null): Worn {
+    const lift = v.body || v.person ? FLOOR : 0;
     // The path tracer wants the whole scene as one triangle soup; it is only built when it asks (a photo), from
     // what each mesh was when taken: a load only walks what the cloth needs (the tee, the skin under it).
-    const parts: { mesh: THREE.Mesh; mw: THREE.Matrix4; id: number; person: boolean }[] = [];
-    const teeMeshes: { mesh: THREE.Mesh; pos: Float32Array; idx: ArrayLike<number>; plain: boolean }[] = [];
+    const parts: Worn["parts"] = [];
+    const teeMeshes: { mesh: THREE.Mesh; pos: Float32Array; idx: Uint32Array; plain: boolean }[] = [];
     // the body inside the tee, for the cloth to rest on (garment frame: no lift); not the eyes
-    const skinP: number[] = [], skinN: number[] = [];
+    const skinP: Float32Array[] = [], skinN: Float32Array[] = [];
     let triCount = 0;
-    const motionBody = { pos: [] as number[], w: MOTION_ATTRS.map(() => [] as number[]) };
+    const motionPos: Float32Array[] = [], motionW: Float32Array[][] = MOTION_ATTRS.map(() => []);
     let joints: Record<string, [number, number, number]> | null = null;
-    const take = (root: THREE.Object3D, kind: "tee" | "body" | "stool" | "person") => {
+    const roots: THREE.Object3D[] = [];
+    const one = (root: THREE.Object3D, kind: "tee" | "body" | "stool" | "person") => {
       root.updateMatrixWorld(true);
       root.traverse((o) => {
         const mesh = o as THREE.Mesh;
@@ -531,90 +610,71 @@ export class Raster {
         const id = kind === "person" ? pid : kind === "body" ? 2 : kind === "stool" ? 3 : isInner ? 1 : 0;
         parts.push({ mesh, mw, id, person: kind === "person" });
         if (kind === "tee" || kind === "person") Motion.ensure(g);
-        if (kind === "person" && pid !== 6 && pid !== 7) {
-          // the body under the tee, with how it moves, for the tee's own weights
-          const vv2 = new THREE.Vector3(), att = MOTION_ATTRS.map((nm) => g.getAttribute(nm));
-          for (let i = 0; i < pa.count; i++) {
-            vv2.fromBufferAttribute(pa, i).applyMatrix4(mw); motionBody.pos.push(vv2.x, vv2.y, vv2.z);
-            att.forEach((a, k) => motionBody.w[k].push(a.getX(i)));
-          }
-          if (typeof mesh.userData.motion === "string") joints = JSON.parse(mesh.userData.motion);
-        }
         triCount += (g.index ? g.index.count : pa.count) / 3;
-        const vv = new THREE.Vector3();
+        const skinOf = kind === "body" || (kind === "person" && pid !== 6 && pid !== 7);
+        if (kind !== "tee" && !skinOf) return;
+        // every vertex in the garment's frame (and for the skin its outward normal)
+        const P = new Float32Array(pa.count * 3), e = mw.elements;
+        for (let i = 0; i < pa.count; i++) {
+          const x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i);
+          P[3 * i] = e[0] * x + e[4] * y + e[8] * z + e[12]; P[3 * i + 1] = e[1] * x + e[5] * y + e[9] * z + e[13]; P[3 * i + 2] = e[2] * x + e[6] * y + e[10] * z + e[14];
+        }
         if (kind === "tee") {
           // the cloth works in the pivot's frame; it needs the mesh's own frame to be that frame turned by nothing
-          const e = mw.elements, plain = Math.abs(e[0] - 1) + Math.abs(e[5] - 1) + Math.abs(e[10] - 1) + Math.abs(e[1]) + Math.abs(e[2]) + Math.abs(e[4]) + Math.abs(e[6]) + Math.abs(e[8]) + Math.abs(e[9]) < 1e-4;
-          const pos = new Float32Array(pa.count * 3);
-          for (let i = 0; i < pa.count; i++) { vv.fromBufferAttribute(pa, i).applyMatrix4(mw); pos[3 * i] = vv.x; pos[3 * i + 1] = vv.y; pos[3 * i + 2] = vv.z; }
-          teeMeshes.push({ mesh, pos, idx: g.index ? g.index.array : Array.from({ length: pa.count }, (_, i) => i), plain });
+          const plain = Math.abs(e[0] - 1) + Math.abs(e[5] - 1) + Math.abs(e[10] - 1) + Math.abs(e[1]) + Math.abs(e[2]) + Math.abs(e[4]) + Math.abs(e[6]) + Math.abs(e[8]) + Math.abs(e[9]) < 1e-4;
+          const idx = g.index ? Uint32Array.from(g.index.array) : Uint32Array.from({ length: pa.count }, (_, i) => i);
+          teeMeshes.push({ mesh, pos: P, idx, plain });
+          return;
         }
-        if (kind === "body" || (kind === "person" && pid !== 6 && pid !== 7)) {
-          const nm = new THREE.Matrix3().getNormalMatrix(mw);
-          for (let i = 0; i < pa.count; i++) {
-            vv.fromBufferAttribute(pa, i).applyMatrix4(mw); skinP.push(vv.x, vv.y, vv.z);
-            vv.fromBufferAttribute(na, i).applyMatrix3(nm).normalize(); skinN.push(vv.x, vv.y, vv.z);
-          }
+        const nm = new THREE.Matrix3().getNormalMatrix(mw).elements, N = new Float32Array(pa.count * 3);
+        for (let i = 0; i < pa.count; i++) {
+          const x = na.getX(i), y = na.getY(i), z = na.getZ(i);
+          const a = nm[0] * x + nm[3] * y + nm[6] * z, b = nm[1] * x + nm[4] * y + nm[7] * z, c = nm[2] * x + nm[5] * y + nm[8] * z, l = Math.hypot(a, b, c) || 1;
+          N[3 * i] = a / l; N[3 * i + 1] = b / l; N[3 * i + 2] = c / l;
+        }
+        skinP.push(P); skinN.push(N);
+        if (kind === "person") {
+          // the body under the tee, with how it moves, for the tee's own weights
+          motionPos.push(P);
+          MOTION_ATTRS.forEach((nmA, k) => { const at = g.getAttribute(nmA); const W = new Float32Array(pa.count); for (let i = 0; i < pa.count; i++) W[i] = at.getX(i); motionW[k].push(W); });
+          if (typeof mesh.userData.motion === "string") joints = JSON.parse(mesh.userData.motion);
         }
       });
-      this.pivot.add(root); this.loaded.push(root);
+      roots.push(root);
     };
-    take(gltf.scene, "tee");
-    // the cloth: on the shop form and on a standing body (raised arms and sitting stay as simulated).
-    // The tee goes on screen at once, at rest; the net is built in a worker and takes over when it's ready.
-    this.cloth?.stop();
-    const skins: THREE.BufferAttribute[][] = [];
-    for (const t of teeMeshes) {
-      const g = t.mesh.geometry, nv = t.pos.length / 3;
-      const I = new THREE.BufferAttribute(new Float32Array(4 * nv), 4), W = new THREE.BufferAttribute(new Float32Array(4 * nv), 4);
-      g.setAttribute("sbI", I); g.setAttribute("sbW", W); skins.push([I, W]);
-    }
-    (this.offsets.image.data as Float32Array).fill(0); this.offsets.needsUpdate = true;
-    for (const t of this.slopes) { (t.image.data as Float32Array).fill(0); t.needsUpdate = true; }
-    const clothOn = v.pose === "stand" && teeMeshes.every((t) => t.plain);
-    const skinMaps = skinMapsP ? await skinMapsP : null;
+    one(teeRoot, "tee");
     // one skin material per person, made once (a new material is a new shader to build)
     if (skinMaps && v.person) {
       this.personSkin = this.skinMats.get(v.person) ?? this.skinMats.set(v.person, this.skinFrom(skinMaps[0], skinMaps[1])).get(v.person)!;
       this.personHair = this.hairMats.get(v.person) ?? this.hairMats.set(v.person, this.skinFrom(skinMaps[0], skinMaps[1], true)).get(v.person)!;
     }
-    // the hair cards' strands sit beside the person's GLB too (<name>-hair.webp), only for a person who has cards
-    let cards: { m: THREE.MeshPhysicalNodeMaterial; b: ImageBitmap } | null = null;
-    if (bodyGltf && v.person) {
-      let has = false;
-      bodyGltf.scene.traverse((o) => { if ((o as THREE.Mesh).isMesh && /haircard/i.test(((o as THREE.Mesh).material as THREE.Material)?.name || "")) has = true; });
-      if (has) {
-        cards = this.cardMats.get(v.person) ?? null;
-        if (!cards) {
-          const b = await bitmap(v.person.replace(/\.glb$/, "-hair.webp")).catch(() => null);
-          if (b) this.cardMats.set(v.person, (cards = { m: this.cardsFrom(b), b }));
-        }
-      }
-    }
-    if (bodyGltf) take(bodyGltf.scene, v.person ? "person" : "body");
+    // the hair cards: their material made once per person, from the strands fetched beside its GLB (fetchParts)
+    let cards = v.person ? this.cardMats.get(v.person) ?? null : null;
+    if (!cards && v.person && hair) this.cardMats.set(v.person, (cards = { m: this.cardsFrom(hair), b: hair }));
+    if (bodyRoot) one(bodyRoot, v.person ? "person" : "body");
     // the person moves (if their GLB says how), and the tee with them
-    this.motion.setJoints(joints);
-    if (joints) for (const t of teeMeshes) Motion.fromBody(t.mesh.geometry, t.mesh.matrixWorld, motionBody);
+    if (joints) {
+      const body = { pos: concat(motionPos), w: motionW.map(concat) };
+      for (const t of teeMeshes) Motion.fromBody(t.mesh.geometry, t.pos, body);
+    }
     if (v.body && v.pose === "sit" && v.seat) {
       // a plain stool, its top where the simulation's seat was (Blender y forward -> three z back)
       const box = new THREE.Mesh(new THREE.BoxGeometry(0.46, v.seat, 0.42));
       box.position.set(0, v.seat / 2, -0.04);
-      const grp = new THREE.Group(); grp.add(box); take(grp, "stool");
+      const grp = new THREE.Group(); grp.add(box); one(grp, "stool");
     }
-    // the net and the cloth on their own thread, once the skin under the tee is known (the tee is on screen and
-    // turning meanwhile, at rest; the cloth takes over when the net is ready)
-    if (clothOn) {
-      this.cloth ??= new ClothLink(this.offsets, this.slopes);
-      this.cloth.start(teeMeshes.map((t) => ({ pos: t.pos, idx: Uint32Array.from(t.idx) })), skinP.length ? { pos: new Float32Array(skinP), nrm: new Float32Array(skinN) } : null,
-        lift, !matchMedia("(prefers-reduced-motion: reduce)").matches, (sk) => sk.forEach((x, i) => {
-          const [I, W] = skins[i];
-          (I.array as Float32Array).set(x.I); (W.array as Float32Array).set(x.W); I.needsUpdate = true; W.needsUpdate = true;
-        }));
-    }
-    this.tris = triCount;
-    let built: TeeGeometry | null = null;
-    const hairB = (cards as { b: ImageBitmap } | null)?.b;
-    return () => (built ??= soupOf(parts, lift, skinMaps ? { albedo: skinMaps[0], rn: skinMaps[1], hair: hairB } : undefined));
+    // each tee vertex's 4 particles and weights: zero (at rest) until the cloth's net is built
+    const tee = teeMeshes.map((t) => {
+      const g = t.mesh.geometry, nv = t.pos.length / 3;
+      const I = new THREE.BufferAttribute(new Float32Array(4 * nv), 4), W = new THREE.BufferAttribute(new Float32Array(4 * nv), 4);
+      g.setAttribute("sbI", I); g.setAttribute("sbW", W);
+      return { pos: t.pos, idx: t.idx, skin: [I, W] as [THREE.BufferAttribute, THREE.BufferAttribute] };
+    });
+    const clothOn = v.pose === "stand" && teeMeshes.every((t) => t.plain);
+    return {
+      roots, parts, tee, body: skinP.length ? { pos: concat(skinP), nrm: concat(skinN) } : null,
+      joints, skinMaps, hair: (cards as { b: ImageBitmap } | null)?.b, lift, clothOn, tris: triCount, built: null,
+    };
   }
 
   setCamera(c: Camera) {
@@ -662,22 +722,30 @@ export class Raster {
   private sweepOn = true;
   async setFlat(side: Side | null) {
     if (side && this.lookNodes) {
-      if (!this.flat) {
-        const { FlatLay } = await import("./flat");
-        this.flat = new FlatLay(this.lookNodes, this.maxAniso);
-        this.scene.add(this.flat.group);
+      const flat = await this.flatLay();
+      if (!flat.group.parent) {
+        this.scene.add(flat.group);
         // only the window over the table casts shadows (the studio's softboxes don't), so this costs nothing elsewhere
-        this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFShadowMap;
       }
-      await this.flat.place(side, { pos: this.camera.position, target: this.target }, matchMedia("(prefers-reduced-motion: reduce)").matches);
-      this.flat.group.visible = true;
+      await flat.place(side, { pos: this.camera.position, target: this.target }, matchMedia("(prefers-reduced-motion: reduce)").matches);
+      flat.group.visible = true;
     } else if (this.flat) { this.flat.side = null; this.flat.group.visible = false; }
     const on = !!this.flat?.side;
     this.pivot.visible = this.rig.visible = this.hemi.visible = !on;
     this.sweep.visible = this.sweepOn && !on;
-    if (on) await this.renderer.compileAsync(this.scene, this.camera).catch(() => {});
+    if (on) {
+      this.held++;
+      try { await this.renderer.compileAsync(this.scene, this.camera).catch(() => {}); } finally { this.held--; }
+    }
   }
   private target = new THREE.Vector3(...CAMERA.target);
+  private async flatLay() {
+    if (!this.flat) { const { FlatLay } = await import("./flat"); this.flat ??= new FlatLay(this.lookNodes!, this.maxAniso, this.renderer); }
+    return this.flat;
+  }
+  /** the table got ready while the page is idle (its pictures decoded and sent, the tee's outline worked out) */
+  async prepareFlat() { if (this.lookNodes) await (await this.flatLay()).warm(); }
 
   setKnit(on: boolean) { this.knit.value = on ? 0.55 : 0; }
 
@@ -686,5 +754,7 @@ export class Raster {
     this.renderer.setSize(w, h, false);
   }
 
-  render() { this.renderer.render(this.scene, this.camera); }
+  /** while shaders are being built off the page's thread nothing is drawn (a frame then would build them on it) */
+  private held = 0;
+  render() { if (!this.held) this.renderer.render(this.scene, this.camera); }
 }

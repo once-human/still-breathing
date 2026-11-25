@@ -29,6 +29,10 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 - The cloth is simulated on its own thread, so turning, scrolling and switching stay smooth on slower machines; the light from the place turns with the view at a tiny fraction of the cost.
 - The photo renderer only loads when a photo is asked for, and the rendered frames under the 3D are dropped once it's up.
 - The first switch to each shirt no longer holds the page: the print is decoded, scaled down for distance and sent to the graphics card a little at a time between frames, every pixel exactly as the artwork file has it. The shirt's render stays up until the whole print is in, so it's never shown softer or half loaded.
+- Switching views (the tee, worn, on the table) no longer holds the page, the first time or after: each view's tee and person stay loaded once seen, cloth and all, and the other views are got ready while the page is idle. The table works out the tee's outline in a fraction of the time, and its wood, the leaves and each place's picture go to the graphics card a little at a time.
+- The view's picture for the strip is taken without making the page wait for the graphics card.
+- The site holds much less memory, which on most laptops is the graphics card's memory too: a place's picture is let go on the page once it's on the card, only the shop tee and the person stay loaded, and each place's sharp band is fetched when that place is first shown (it sharpens a moment after the place appears) instead of all of them up front.
+- Pictures go to the graphics card only as fast as it takes them in, so a busy machine is never held up by a big one.
 
 ## 0.18.1 — 2026-11-25
 Cleaner shoulders and collar in the try-on, and clips that open on the tee.
