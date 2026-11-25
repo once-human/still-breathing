@@ -196,11 +196,11 @@ jobs:
             # every frame developed as the band is (same exposure, people blurred), then made into the loop's video
             sudo apt-get -qq update && sudo apt-get -qq install -y ffmpeg > /dev/null
             mkdir -p frames
+            git pull -q --rebase   # the newest develop (stage_post.py) and the newest sharp band, which the still parts are taken from
             for F in $(seq 0 $(( MOTION_FRAMES - 1 ))); do
               G=$(printf "%03d" $F)
               BAND=1 ROWS=$MOTION_ROWS python3 pipeline/stage_post.py show "frames/f$G.png" $(ls got/show-s*-f$G.npy) | grep -E "people|saved"
             done
-            git pull -q --rebase   # the newest sharp band, which the still parts are taken from
             python3 pipeline/motion_post.py frames public/tee/stage/show-motion.mp4 public/tee/stage/show-band.webp
             cp frames/f000.png frames/f060.png preview/ ; X=-motion
           else
