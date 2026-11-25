@@ -1,23 +1,39 @@
-# python3 motion_post.py <frames dir of f000.png ...> <out.mp4>      (numpy, pillow, ffmpeg)
+# python3 motion_post.py <frames dir of f000.png ...> <out.mp4> [band.webp]      (numpy, pillow, ffmpeg)
 # The canopy's breathing loop (stage.yml motion: the rows of the show where the cloth is, every frame developed by
 # stage_post.py into the band's four stacked tiles) made into the video the viewer plays behind the person.
 # Only what moves is taken from each frame: everywhere else (the hall, the crowd, the lamps) every frame is the
-# average of the whole loop, so nothing that stands still flickers with the render's own noise from frame to frame.
+# sharp band itself (its same rows; or the loop's average without it), so nothing that stands still flickers with
+# the render's own noise, and it is as sharp as the band. Frames rendered at half the band's width are scaled up.
 # The loop is then filled out to 24 frames a second along the cloth's own motion (its end runs into its start), and
 # written at full size and at half (<out>-lo.mp4) for phones.
-import glob, os, subprocess, sys, tempfile
+import glob, os, shutil, subprocess, sys, tempfile
 import numpy as np
 from PIL import Image
 
 SRC, OUT = sys.argv[1], sys.argv[2]
+BAND = sys.argv[3] if len(sys.argv) > 3 else None
+TILES = 4
 files = sorted(glob.glob(os.path.join(SRC, "f*.png")))
 n = len(files); print("frames", n)
-first = np.asarray(Image.open(files[0]).convert("RGB")); H, W, _ = first.shape
+
+
+def load(f):
+    """a frame, at the band's own size (4096 across, four tiles stacked)"""
+    im = Image.open(f).convert("RGB")
+    if im.width < 4096: im = im.resize((4096, im.height * 4096 // im.width), Image.LANCZOS)
+    return np.asarray(im)
+
+
+first = load(files[0]); H, W, _ = first.shape
 s1 = np.zeros((H, W, 3), np.float64); s2 = np.zeros((H, W, 3), np.float64)
 for f in files:
-    a = np.asarray(Image.open(f).convert("RGB")).astype(np.float64); s1 += a; s2 += a * a
+    a = load(f).astype(np.float64); s1 += a; s2 += a * a
 mean = s1 / n; std = np.sqrt(np.maximum(s2 / n - mean * mean, 0)).max(-1)
 del s1, s2
+if BAND:   # the band's same rows: the top H / TILES of each of its tiles
+    b = np.asarray(Image.open(BAND).convert("RGB")); th, h = b.shape[0] // TILES, H // TILES
+    mean = np.concatenate([b[i * th:i * th + h] for i in range(TILES)], 0).astype(np.float64)
+    print("still parts from", BAND)
 
 
 def soften(x, r):
@@ -34,7 +50,7 @@ move = np.clip(soften(soften(move, 4) * 2.0, 4), 0, 1)[..., None].astype(np.floa
 print("moving", round(float((move > 0.5).mean()), 3), "of the picture")
 tmp = tempfile.mkdtemp()
 for i, f in enumerate(files):
-    a = np.asarray(Image.open(f).convert("RGB")).astype(np.float32)
+    a = load(f).astype(np.float32)
     o = a * move + mean.astype(np.float32) * (1 - move)
     Image.fromarray(np.clip(np.round(o), 0, 255).astype(np.uint8)).save(os.path.join(tmp, f"g{i:03d}.png"), compress_level=1)
 for j in range(3):   # the loop's start again after its end, to fill toward
@@ -48,3 +64,4 @@ for out, scale in ((OUT, None), (OUT.replace(".mp4", "-lo.mp4"), (W // 2, H // 2
                     "-vf", vf, "-frames:v", str(n * fps // src_fps), "-c:v", "libx264", "-preset", "slow", "-crf", "19",
                     "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", out], check=True)
     print("saved", out, os.path.getsize(out) // 1024, "KB")
+shutil.rmtree(tmp)

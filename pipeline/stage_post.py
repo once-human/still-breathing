@@ -93,7 +93,8 @@ img = np.clip(img, 0, 1)
 srgb = np.where(img <= 0.0031308, img * 12.92, 1.055 * np.power(img, 1 / 2.4) - 0.055)
 q = np.clip(np.floor(srgb * 255 + np.random.default_rng(7).uniform(0, 1, srgb.shape)), 0, 255).astype(np.uint8)
 if BAND:
-    assert (W, H) == (BAND_W, BAND_ROWS[1] - BAND_ROWS[0]), (W, H)
+    # the band itself at 16384 across; the canopy's moving rows may come at half that (stage.yml motion)
+    assert W in (BAND_W, BAND_W // 2) and H == (BAND_ROWS[1] - BAND_ROWS[0]) * W // BAND_W, (W, H)
     q = np.concatenate([q[:, i * (W // TILES):(i + 1) * (W // TILES)] for i in range(TILES)], axis=0)
     im = Image.fromarray(q, "RGB")
     if OUT.endswith(".png"): im.save(OUT, compress_level=1)   # a frame of the motion: lossless, the video squeezes it

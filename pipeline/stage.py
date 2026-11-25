@@ -938,7 +938,12 @@ def build_show():
     for cn in bands:
         for i in range(Nn):
             if f"s{i}_v" not in cn: break
-            vv, ff = cn[f"s{i}_v"], cn[f"s{i}_f"]
+            vv, ff = cn[f"s{i}_v"].astype(np.float32), cn[f"s{i}_f"]
+            # the loop closed: what the cloth still drifts over one loop (it settles slowly) is spread evenly
+            # through it, so its last frame runs into its first; the first frame (the stills') stays as it hung
+            if len(vv) > 2:
+                gap = vv[0] - (2 * vv[-1] - vv[-2])
+                vv = (vv + (np.arange(len(vv), dtype=np.float32) / len(vv))[:, None, None] * gap[None]).astype(np.float16)
             fr_ = min(FRAME, len(vv) - 1)
             me = bpy.data.meshes.new("swag"); me.from_pydata(vv[fr_].astype(np.float32).tolist(), [], ff.tolist())
             me.shade_smooth(); me.materials.append(fab); SWAGS.append((me, vv))

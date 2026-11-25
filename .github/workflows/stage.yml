@@ -122,8 +122,9 @@ jobs:
           S=${{ matrix.strip }}; SS=${{ inputs.strips }}; WIDTH=${{ inputs.width }}
           if [ "${{ inputs.band }}" = "true" ]; then export ROWS=3368,5008 MASK=1; WIDTH=16384; fi
           if [ "${{ inputs.motion }}" = "true" ]; then
-            # the canopy's rows, every frame of its loop: this runner's share of the frames, all the rows
-            export ROWS=$MOTION_ROWS MASK=1; WIDTH=16384
+            # the canopy's rows, every frame of its loop: this runner's share of the frames, all the rows, at half
+            # the band's width (the cloth is soft; everything that stands still is taken from the sharp band)
+            export ROWS=$(echo $MOTION_ROWS | awk -F, '{print $1/2 "," $2/2}') MASK=1; WIDTH=8192
             PER=$(( (MOTION_FRAMES + SS - 1) / SS )); A=$(( S * PER )); B=$(( A + PER - 1 )); [ $B -ge $MOTION_FRAMES ] && B=$(( MOTION_FRAMES - 1 ))
             [ $A -ge $MOTION_FRAMES ] && exit 0
             export FRAMES=$A-$B; S=0; SS=1
@@ -196,7 +197,8 @@ jobs:
               G=$(printf "%03d" $F)
               BAND=1 ROWS=$MOTION_ROWS python3 pipeline/stage_post.py show "frames/f$G.png" $(ls got/show-s*-f$G.npy) | grep -E "people|saved"
             done
-            python3 pipeline/motion_post.py frames public/tee/stage/show-motion.mp4
+            git pull -q --rebase   # the newest sharp band, which the still parts are taken from
+            python3 pipeline/motion_post.py frames public/tee/stage/show-motion.mp4 public/tee/stage/show-band.webp
             cp frames/f000.png frames/f060.png preview/ ; X=-motion
           else
             for P in $(echo "${{ inputs.places }}" | tr ',' ' '); do
