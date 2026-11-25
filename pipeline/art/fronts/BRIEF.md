@@ -8,8 +8,7 @@ front design or like just towards the left chest... at least 8 different front d
 and then pair it with the back designs of the t-shirts that we have already, so that not every t-shirt has like
 the same again script."
 
-One session per shirt makes **eight front versions** for that shirt. He is asleep and said: don't ask questions,
-decide.
+One session per shirt makes **eight front versions** for that shirt. Don't ask the owner questions: decide.
 
 ## The method: art-agent, made lighter
 
@@ -43,21 +42,41 @@ No Workflow tool, no second critic, no extra rounds. Spend the effort on the ide
 Every placement must look deliberate and contemporary, never random. The flat shirt (size M) is 56 cm across and
 74 cm long.
 
-## What goes on the front: the ideas
+## What goes on the front: its own design
 
-- The front **pairs with the back**. It can be a detail lifted out of the back, the moment before or after it, the
-  other side of the same scene (the back is the crowd from behind, the front the stage's view of it), a zoom, a quiet
-  footnote, or the back's world seen from somewhere else. It must also stand on its own when someone sees only the
-  front.
-- again.. may appear (one script or all four, set as lettering, or worked into a drawing), but **in no more than three
-  of the eight**, and never as the old stacked block again. At least four of the eight carry no words.
-- Never write "fred again" or any brand name. No generic merch (tracklists, slogans, icons, a lone brush-lettered
-  word): LESSONS.md says why.
-- Real things, real facts: the venue, the city, the night, the weather. Check anything you draw that can be checked.
-- The audience: the shows' crowd in Mumbai and Bengaluru (and Delhi NCR). Sophisticated, international, many not from
+**Read this twice: the first round got it wrong.** It made every front out of the back's picture: one person lifted
+out of the crowd, the crowd seen from the stage, a hand from the heat picture, the map's key, the train from the map.
+The owner threw all of it out: "Front, not as in that particular exact same design in the front side... the front
+side of the t-shirt should have like a different design itself, right? Which would go well with what we have."
+
+So:
+
+- **The front is a new design of its own**, made for the front of this shirt. It is NOT a piece, a zoom, a crop, a
+  reverse view, "the other side", the moment before or after, or a retelling of the back's picture. Don't reuse the
+  back's people, places, objects or notes as the subject.
+- **It goes well with the back.** Someone who turns the shirt round should feel the two belong together: the same
+  world (the December shows, the night, the cities), the same hand and medium family, the same inks and palette, the
+  same spirit. But the front has its own idea and its own image. Think of a great record sleeve's front and back, or
+  a print studio's tour shirt, where the front mark and the back piece are a designed set.
+- **What a front can be** (a menu to brainstorm from and go beyond):
+  - an emblem or seal built from hand-drawn things, like a mark you'd remember the shirt by
+  - a composed graphic of sound and light: beams, rings, a waveform, carved or drawn by hand
+  - a still life or object piece about the night itself, not about the back's scene
+  - a symbol of the shirt's own idea (the crowd: being together; i am a party: warmth, body heat; a map: finding
+    your way, the place)
+  - weather, sky and time: the December night, the moon, the hour, the cool air, drawn as art
+  - lettering made into an artwork: the shirt's name, or again.. in one or more of its scripts, drawn and composed as
+    a graphic, never the old stacked block and never generic brush lettering
+  - a figure, portrait or gesture that is not lifted from the back
+  - a bold abstract or typographic-graphic piece that works with the back as a set
+- again.. may appear in at most three of the eight. At least four of the eight carry no words.
+- Never write "fred again" or any brand name. No generic merch (tracklists, slogans, icons dropped in, a lone
+  brush-lettered word): LESSONS.md says why. It must be art someone would want on their chest.
+- Real things, real facts wherever something can be checked.
+- The audience: the shows' crowd in Mumbai, Bengaluru and Delhi NCR. Sophisticated, international, many not from
   the city; they love the night, the lights, the people they went with.
-- Variety across the eight: different sizes, densities and mediums (ink line, riso, linocut, printmaker), from one
-  quiet mark to a full-front drawing. The eight should feel like eight different, genuinely good options.
+- Variety across the eight: different sizes, densities and mediums, from one quiet mark to a full-front piece.
+  The eight should feel like eight different, genuinely good options for the front of this shirt.
 
 ## Print limits
 
