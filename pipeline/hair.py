@@ -4,9 +4,8 @@
 #     runs to nothing at its edge (just under the skin there, so the painted hairline carries on past it)
 #   - him: a textured quiff: longer on top, swept up off the forehead and back (cards.py lifts it), the sides
 #     and back faded to the skin (skin.py's painted fade)
-#   - her: sleek, pulled back from the hairline into a high ponytail at the back of the crown (hair about 6 mm
-#     deep on the head); the ponytail gathered tight where it's tied, full just after, falling over the back of
-#     the head and tapering to its ends above the nape, its strands running down it
+#   - her: a bob, open: parted in the middle, over the head with some body, falling straight from the head's
+#     widest to just under the jaw (a little longer toward the face), the ends turned under, framing the face
 #   the depth eases in over 2 cm from the hair's edge (measured over the head), so it rises out of the painted
 #   hairline with no step
 # Each vertex of the hair carries the way its strands lie ("flow", along the surface) for skin.py.
@@ -50,7 +49,8 @@ def grow(b, SRC, wt, she, eyeL, eyeR, mouth):
         return d * (1 + 0.15 * noise.noise(p * 70.0) + 0.07 * noise.noise(p * 160.0))   # loose tufts
 
     D = {v.index: depth(v) for v in head}
-    shell = [f for f in b.faces if all(D.get(v.index, 0.0) > 0.0 for v in f.verts)]
+    # (hers is a bob, built below on its own: no shell)
+    shell = [] if she else [f for f in b.faces if all(D.get(v.index, 0.0) > 0.0 for v in f.verts)]
     # eased in from the edge over the surface (2 cm), so it rises out of the painted hairline with no step
     inshell = set(shell); sv = {v for f in shell for v in f.verts}
     edge = {v for f in shell for e in f.edges if sum(1 for g in e.link_faces if g in inshell) == 1 for v in e.verts}
@@ -64,16 +64,9 @@ def grow(b, SRC, wt, she, eyeL, eyeR, mouth):
             if o in G and d + e.calc_length() < G[o]: G[o] = d + e.calc_length(); heapq.heappush(pq, (G[o], o.index, o))
     FULL = 0.006 if she else 0.011
     for v in sv: D[v.index] *= sm(0.0, 0.02, G[v])
-    # where her ponytail is tied: high at the back of the crown
-    if she:
-        zb = eyeZ + 0.07
-        back = max((v for v in head if abs(v.co.z - zb) < 0.01 and abs(v.co.x) < 0.02), key=lambda v: v.co.y)
-        bn = Vector((0.0, back.normal.y, back.normal.z)).normalized()   # straight back from the middle of the head
-        bc = Vector((0.0, back.co.y, back.co.z)) + bn * 0.004
     crown = top + Vector((0, 0.035, -0.012))
 
     def flow_at(p, n):
-        if she: return along_surface(bc - p, n)
         # up off the forehead and back over the top, opening out a little to the sides
         return along_surface(Vector((p.x * 1.5, 1.0, 0.35)), n)
 
@@ -97,66 +90,89 @@ def grow(b, SRC, wt, she, eyeL, eyeR, mouth):
     bmesh.ops.delete(b, geom=loose, context="VERTS")
 
     if she:
-        # the ponytail: a tube of hair from the tie, out and a little up, then falling under its weight over the
-        # back of the head (kept off it), 20 cm long; tight at the tie, full 3 cm on, tapering to its ends
+        # her bob: open hair, parted in the middle, over the head and falling straight from its widest to just
+        # under the jaw (a little longer toward the face), the ends turned under; it frames the face, and over the
+        # forehead it comes down to the skin at the hairline. Built from the head itself: rays in to the head from
+        # all round, the hair standing off it by its body, and below the head's widest it hangs (never in nearer).
         from mathutils.bvhtree import BVHTree
         bvh = BVHTree.FromBMesh(b)
-        tl = b.verts.layers.float.get("tail") or b.verts.layers.float.new("tail")
-        L, NS_, NU = 0.22, 44, 20
-        def rad(s_):
-            if s_ < 0.035: return 0.01 + 0.016 * sm(0.0, 0.035, s_)
-            return 0.004 + 0.022 * (1 - (s_ - 0.035) / (L - 0.035)) ** 0.75
-        # out and up from the tie, arcing over, then hanging; it stays in the middle (any push off the head is
-        # straight back or down, never sideways)
-        pts = [bc.copy()]; d = (bn + Vector((0, 0, 0.7))).normalized()
-        for k in range(1, NS_ + 1):
-            s_ = L * k / NS_
-            d = (d + Vector((0, 0, -1)) * (0.2 if s_ < 0.07 else 0.12)).normalized()
-            q = pts[-1] + d * (L / NS_)
-            for _ in range(4):                                 # rests on the back of the head, never in it
-                hit = bvh.find_nearest(q)
-                if hit[0] is None: break
-                gap = rad(s_) * 0.9 + 0.003
-                off = q - hit[0]
-                if off.length < gap:
-                    push = Vector((0.0, max(off.y, 0.0) + 1e-4, off.z)).normalized()
-                    q = q + push * (gap - off.length)
-            q.x *= 0.3
-            d = (q - pts[-1]).normalized(); pts.append(q)
-        side = Vector((1, 0, 0))
-        rings = []
-        for k, c in enumerate(pts):
-            s_ = L * k / NS_
-            T = (pts[min(k + 1, NS_)] - pts[max(k - 1, 0)]).normalized()
-            side = (side - T * side.dot(T)).normalized(); up = T.cross(side)
-            r = rad(s_); row = []
-            for i_ in range(NU):
-                a = 2 * math.pi * i_ / NU
-                q = c + (side * math.cos(a) + up * math.sin(a) * 0.85) * r
-                q += (q - c).normalized() * 0.0012 * noise.noise(q * 60.0) * min(1.0, s_ / 0.02)
-                v = b.verts.new(q); v[SRC] = -1; v[fl] = T.copy(); v[kl] = 1.0; v[tl] = 1.0; row.append(v)
-            rings.append(row)
-        tip = b.verts.new(pts[-1] + (pts[-1] - pts[-2]).normalized() * 0.004)
-        tip[SRC] = -1; tip[fl] = (pts[-1] - pts[-2]).normalized(); tip[kl] = 1.0; tip[tl] = 1.0
-        pony = []
-        circ = 2 * math.pi * 0.015
+        tl = b.verts.layers.float.get("tail") or b.verts.layers.float.new("tail")     # 1: the hanging part
+        earZ = (ears[0].z + ears[1].z) / 2
+        C = Vector((0.0, (ears[0].y + ears[1].y) / 2 + 0.006, earZ + 0.012))
+        OFF = 0.012
+        def inward(o, d):
+            hit = bvh.ray_cast(o + d * 0.3, -d, 0.3)
+            return hit[0]
+        NPHI, NA = 80, 24
+        A_ = [math.radians(6 + 84 * k / (NA - 1)) for k in range(NA)]          # from near the top down to level
+        rows = {}
+        hz_ = lambda ph: eyeZ + 0.05 - 0.022 * sm(math.radians(18), math.radians(62), abs(ph))
+        face_w = lambda ph: sm(math.radians(66), math.radians(52), abs(ph))  # 1 over the face
+        cols = []
+        for jj in range(NPHI):
+            ph = -math.pi + 2 * math.pi * jj / NPHI                            # 0: the front (-y)
+            hd = Vector((math.sin(ph), -math.cos(ph), 0.0))
+            w_ = face_w(ph); hz = hz_(ph)
+            col = []
+            # the dome
+            for a in A_:
+                d = (Vector((0, 0, 1)) * math.cos(a) + hd * math.sin(a)).normalized()
+                q = inward(C, d)
+                if q is None: col.append(None); continue
+                off = OFF * (1 - w_ * (1 - sm(hz, hz + 0.028, q.z)))
+                if w_ > 0.5 and q.z < hz - 0.002: col.append(None); continue   # the face: the hair stops at the hairline
+                col.append((q + d * max(off, 0.0007), d, q.z))
+            # below the head's widest it hangs straight, to just under the jaw (longer toward the face), ends under
+            if w_ < 0.5 and col and col[-1] is not None:
+                p_last = col[-1][0]; R = (p_last - Vector((0, C.y, p_last.z))).xy.length
+                zend = mouth.z - 0.018 - 0.026 * (0.5 + 0.5 * math.cos(ph))
+                z = p_last.z; NC = 12
+                for k in range(1, NC + 1):
+                    zk = p_last.z + (zend - p_last.z) * k / NC
+                    q = inward(Vector((0, C.y, zk)), hd)
+                    if q is not None:
+                        R = max(R, (q - Vector((0, C.y, zk))).xy.length + OFF * 0.75)
+                    tuck = 0.007 * sm(0.75, 1.0, k / NC)
+                    pk = Vector((0, C.y, zk)) + hd * (R - tuck)
+                    col.append((pk, hd, -1.0))
+            cols.append(col)
+        top_q = inward(C, Vector((0, 0, 1)))
+        pole = b.verts.new(top_q + Vector((0, 0, OFF))); pole[SRC] = -1; pole[fl] = Vector((1, 0, 0)); pole[kl] = 1.0; pole[tl] = 0.0
+        V = []
+        for jj, col in enumerate(cols):
+            ph = -math.pi + 2 * math.pi * jj / NPHI; hz = hz_(ph)
+            vs = []
+            for i_, c in enumerate(col):
+                if c is None: vs.append(None); continue
+                pt, d, zs = c
+                v = b.verts.new(pt); v[SRC] = -1
+                hang = zs < -0.5
+                sx = 1.0 if pt.x >= 0 else -1.0
+                front = max(0.0, -d.y)
+                v[fl] = Vector((0, 0, -1)) if hang else along_surface(Vector((sx * (0.35 + 0.9 * front), 0.0, -1.0)), d)
+                v[kl] = 1.0 if hang else (sm(hz - 0.002, hz + 0.02, zs) if face_w(ph) > 0.01 else 1.0)
+                v[tl] = 1.0 if hang else 0.0
+                vs.append(v)
+            V.append(vs)
+        bobf = []
+        L_ = lambda jj: 0.09 * 2 * math.pi * jj / NPHI
         def face(vs, uvs):
             nf = b.faces.new(vs)
             for l, (u_, w_) in zip(nf.loops, uvs): l[uvl].uv = (u_ + 3.0, w_ + 3.0)
-            nf[hl] = 1; nf.smooth = True; pony.append(nf)
-        for k in range(NS_):
-            for i_ in range(NU):
-                i2 = (i_ + 1) % NU
-                u0, u1 = circ * i_ / NU, circ * (i_ + 1) / NU; w0, w1 = L * k / NS_, L * (k + 1) / NS_
-                face([rings[k][i_], rings[k][i2], rings[k + 1][i2], rings[k + 1][i_]], [(u0, w0), (u1, w0), (u1, w1), (u0, w1)])
-        for i_ in range(NU):
-            i2 = (i_ + 1) % NU
-            face([rings[NS_][i_], rings[NS_][i2], tip], [(circ * i_ / NU, L), (circ * (i_ + 1) / NU, L), (circ * (i_ + 0.5) / NU, L + 0.004)])
-        # every face's front out from the tube's middle
-        for f in pony:
+            nf[hl] = 1; nf.smooth = True; bobf.append(nf)
+        for jj in range(NPHI):
+            j2 = (jj + 1) % NPHI
+            a, c_ = V[jj], V[j2]
+            if a and c_ and a[0] is not None and c_[0] is not None:
+                face([pole, a[0], c_[0]], [(L_(jj + 0.5), 0.0), (L_(jj), 0.01), (L_(jj + 1), 0.01)])
+            for i_ in range(min(len(a), len(c_)) - 1):
+                q4 = [a[i_], a[i_ + 1], c_[i_ + 1], c_[i_]]
+                if any(x is None for x in q4): continue
+                face(q4, [(L_(jj), 0.01 * (i_ + 1)), (L_(jj), 0.01 * (i_ + 2)), (L_(jj + 1), 0.01 * (i_ + 2)), (L_(jj + 1), 0.01 * (i_ + 1))])
+        for f in bobf:                                   # every face's front away from the head
             f.normal_update()
-            c_ = f.calc_center_median(); k = min(range(len(pts)), key=lambda j: (pts[j] - c_).length)
-            if f.normal.dot(c_ - pts[k]) < 0: f.normal_flip()
-        new += pony
+            c0 = f.calc_center_median()
+            if f.normal.dot(Vector((c0.x, c0.y - C.y, 0.0 if c0.z < C.z else c0.z - C.z))) < 0: f.normal_flip()
+        new += bobf
     b.normal_update()
     return len(new), len(under)

@@ -120,12 +120,19 @@ def shade(P, N, lips, ears, nails, scalp, handw, hairw=None, flow=None):
     mous = (1 - sm(0.024, 0.032, np.abs(d[:, 0]) - edge)) * sm(0.005, 0.009, d[:, 2]) * (1 - sm(0.018, 0.024, d[:, 2] + edge)) * (dy < 0.03)
     beard = np.maximum(beard, mous) * (1 - sm(0.08, 0.35, lips)) * isHead * (0.0 if SHE else 1.0)
     beard *= 1 - 0.4 * sm(mouth[2] + 0.005, mouth[2] + 0.035, z) * sm(0.025, 0.05, np.abs(d[:, 0]))   # thinner high on the cheek
-    # hair grows down the face: strands a few millimetres long
-    dn = np.tile(np.array([0.0, 0.0, 1.0]), (n, 1))
-    dens_b = np.clip(beard * (0.8 + 0.12 * vnoise(along(P * 900.0, dn, 5.0))), 0, 1)
-    C = C * (1 - dens_b[:, None]) + HAIR * dens_b[:, None]
-    R = R * (1 - dens_b) + 0.72 * dens_b
-    H += 0.00006 * dens_b * vnoise(along(P * 700.0, dn, 4.0))
+    # a short beard is hairs, not a shade: each a few millimetres long, lying down the face (out and down on the
+    # cheeks, straight down on the chin and jaw, down and out from the middle on the moustache), skin showing
+    # between them, thicker in patches; every hair raised a little so the light picks them out
+    sxs = np.sign(x)[:, None]
+    dn = np.concatenate([0.35 * sxs * (1 - sm(0.0, 0.02, np.abs(d[:, 2:3] + 0.01))), np.zeros((n, 1)), -np.ones((n, 1))], 1)
+    dn /= np.linalg.norm(dn, axis=1, keepdims=True)
+    hairs = vnoise(along(P * 2600.0, dn, 7.0))                       # single hairs, about 0.4 mm apart
+    clumps = vnoise(along(P * 900.0, dn, 3.0))                       # where they grow thicker or thinner
+    patch = fbm(P * 90.0, 2)                                          # a beard is never even
+    dens_b = np.clip(beard * (0.5 + 0.38 * sm(-0.35, 0.45, hairs) + 0.12 * clumps + 0.12 * patch), 0, 1)
+    C = C * (1 - dens_b[:, None]) + HAIR * (0.85 + 0.3 * sm(-0.2, 0.6, hairs))[:, None] * dens_b[:, None]
+    R = R * (1 - dens_b) + (0.62 + 0.12 * hairs) * dens_b
+    H += dens_b * (0.00016 * sm(-0.3, 0.6, hairs) + 0.00006 * clumps)
     dens_h = np.clip(hairv * ((0.94 if HBM else 0.9) + 0.05 * vnoise(P * 700.0)), 0, 1)
     if HBM and not SHE:      # his fade: the sides and back shorter toward the bottom, more skin showing through
         dens_h *= 0.1 + 0.85 * sm(eyeL[2] - 0.03, eyeL[2] + 0.075, z + 0.15 * edge) ** 1.3

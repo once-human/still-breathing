@@ -4,9 +4,9 @@
 # the hair it follows the flow over the surface for its length, conforming to the head as it goes, a little above
 # it (each card a layer: the pile builds up), its sides wrapped round the head. The strands' own edges break up the
 # silhouette and the hairline, and the light runs along them.
-#   - her: long sleek cards (4 to 8 cm) lying almost flat, combed back to the ponytail's tie; sparse cards at
-#     the hairline (single strands coming out of the skin), a few loose hairs over the top; down the ponytail long
-#     cards (8 to 16 cm) in layers round it, the outer ones standing off it a little for its body
+#   - her bob: long cards (7 to 13 cm) from the parting over the head and on down, lying close; sparse cards at
+#     the hairline (single strands coming out of the skin), a few loose hairs over the top; layered cards down the
+#     hanging part to its ends
 #   - him: a quiff: at the front long cards (up to 5.5 cm) rising steeply off the forehead and curling back,
 #     shorter and flatter toward the crown, shorter and sparser toward the faded sides
 # The cards' normals are the head's (so the pile shades as one mass, not as so many flat strips); their front faces
@@ -95,12 +95,12 @@ def grow(hb, she, colour, seed=1618):
         k0 = r0[3]
         wisp = she and c < 25                                    # her loose hairs over the top
         tail = r0[5] > 0.5
-        if she and tail:
-            L = rnd.uniform(0.08, 0.16); W = rnd.uniform(0.007, 0.011); K = 12
-            sparse = rnd.random() < 0.2
-            h0 = rnd.uniform(0.0005, 0.005); lift = 0.0
-        elif she:
-            L = rnd.uniform(0.04, 0.08); W = rnd.uniform(0.006, 0.01); K = 8
+        if she and tail:                                       # her bob's hanging part: down to its ends
+            L = rnd.uniform(0.06, 0.12); W = rnd.uniform(0.007, 0.011); K = 10
+            sparse = rnd.random() < 0.15
+            h0 = rnd.uniform(0.0004, 0.003); lift = 0.0
+        elif she:                                              # from the parting over the head, on down
+            L = rnd.uniform(0.07, 0.13); W = rnd.uniform(0.006, 0.01); K = 10
             sparse = wisp or k0 < 0.45
             h0 = 0.0015 + rnd.uniform(0, 0.001) if wisp else (0.0007 if k0 < 0.45 else rnd.uniform(0.0004, 0.0013))
             lift = 0.0

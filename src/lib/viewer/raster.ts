@@ -379,7 +379,7 @@ export class Raster {
   personDenim = this.painted({ roughness: 0.85, spec: 0.5, sheen: 1, sheenColor: [0.035, 0.035, 0.04] });
   personEyes = this.painted({ roughness: 0.12, spec: 0.75 });
   // hair (pipeline/hair.py): the skin's maps paint its strands; it shines, with no warm glow through it
-  personHair: THREE.MeshPhysicalNodeMaterial = this.painted({ roughness: 0.7, spec: 0.35 });
+  personHair: THREE.MeshPhysicalNodeMaterial = Object.assign(this.painted({ roughness: 0.7, spec: 0.35 }), { side: THREE.DoubleSide });
   /**
    * The person's skin from its two maps (pipeline/skin.py): colour, and relief + roughness (normal in R, G,
    * roughness in B). The vertex colour, white on the skin, tints it.
@@ -397,7 +397,8 @@ export class Raster {
     m.roughnessNode = r.b;
     const nx = r.r.mul(2).sub(1), ny = r.g.mul(2).sub(1);
     m.normalNode = normalMap(vec3(r.r, r.g, sqrt(max(float(1).sub(nx.mul(nx)).sub(ny.mul(ny)), 0)).mul(0.5).add(0.5)));
-    if (hair) return m;
+    // the hair is seen from inside too (a bob falling beside the face)
+    if (hair) { m.side = THREE.DoubleSide; return m; }
     // a soft warm fuzz at grazing angles, where light goes into skin and comes back out
     m.sheen = 1; m.sheenRoughness = 0.5; m.sheenColor = new THREE.Color().setRGB(0.1, 0.05, 0.037, THREE.LinearSRGBColorSpace);
     return m;
