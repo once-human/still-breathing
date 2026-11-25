@@ -103,7 +103,7 @@ if PERSON:
                 mul = NN.new("ShaderNodeMix"); mul.data_type = "RGBA"; mul.blend_type = "MULTIPLY"; mul.inputs[0].default_value = 1.0
                 LL.new(vc.outputs["Color"], mul.inputs[6]); LL.new(br.outputs[0], mul.inputs[7]); LL.new(mul.outputs[2], pb.inputs["Base Color"])
                 LL.new(ti.outputs["Alpha"], pb.inputs["Alpha"])
-                pb.inputs["Roughness"].default_value = 0.5; pb.inputs["Specular IOR Level"].default_value = 0.3
+                pb.inputs["Roughness"].default_value = 0.55; pb.inputs["Specular IOR Level"].default_value = 0.22
                 pb.inputs["Anisotropic"].default_value = 0.5
                 tg = NN.new("ShaderNodeTangent"); tg.direction_type = "UV_MAP"; tg.uv_map = uvn.uv_map
                 LL.new(tg.outputs[0], pb.inputs["Tangent"])
