@@ -106,21 +106,35 @@ def grow(b, SRC, wt, she, eyeL, eyeR, mouth):
         NPHI, NA = 80, 24
         A_ = [math.radians(6 + 84 * k / (NA - 1)) for k in range(NA)]          # from near the top down to level
         rows = {}
-        hz_ = lambda ph: eyeZ + 0.05 - 0.022 * sm(math.radians(18), math.radians(62), abs(ph))
+        # the hairline: a rounded arch over the forehead, lower toward the temples, never a ruled line (it wanders
+        # a few millimetres)
+        hz_ = lambda ph: (eyeZ + 0.056 - 0.026 * sm(0.0, math.radians(64), abs(ph))
+                          + 0.0022 * math.sin(7.0 * ph + 0.4) + 0.0013 * math.sin(17.0 * ph + 2.1) + 0.0007 * math.sin(31.0 * ph))
         face_w = lambda ph: sm(math.radians(66), math.radians(52), abs(ph))  # 1 over the face
         cols = []
         for jj in range(NPHI):
             ph = -math.pi + 2 * math.pi * jj / NPHI                            # 0: the front (-y)
             hd = Vector((math.sin(ph), -math.cos(ph), 0.0))
             w_ = face_w(ph); hz = hz_(ph)
-            col = []
+            col = []; edge_done = False
             # the dome
             for a in A_:
                 d = (Vector((0, 0, 1)) * math.cos(a) + hd * math.sin(a)).normalized()
                 q = inward(C, d)
                 if q is None: col.append(None); continue
                 off = OFF * (1 - w_ * (1 - sm(hz, hz + 0.028, q.z)))
-                if w_ > 0.5 and q.z < hz - 0.002: col.append(None); continue   # the face: the hair stops at the hairline
+                if w_ > 0.5 and q.z < hz - 0.002:              # the face: the hair stops at the hairline, exactly
+                    if col and col[-1] is not None and col[-1][2] > hz and not edge_done:
+                        lo, hi = A_[len(col) - 1], a
+                        for _ in range(12):                     # the ray that meets the head on the hairline
+                            mid = 0.5 * (lo + hi)
+                            dm = (Vector((0, 0, 1)) * math.cos(mid) + hd * math.sin(mid)).normalized()
+                            qm = inward(C, dm)
+                            if qm is None or qm.z < hz: hi = mid
+                            else: lo = mid
+                        dm = (Vector((0, 0, 1)) * math.cos(lo) + hd * math.sin(lo)).normalized(); qm = inward(C, dm)
+                        if qm is not None: col.append((qm + dm * 0.0007, dm, qm.z)); edge_done = True; continue
+                    col.append(None); continue
                 col.append((q + d * max(off, 0.0007), d, q.z))
             # below the head's widest it hangs straight, to just under the jaw (longer toward the face), ends under
             if w_ < 0.5 and col and col[-1] is not None:
@@ -167,8 +181,11 @@ def grow(b, SRC, wt, she, eyeL, eyeR, mouth):
                 face([pole, a[0], c_[0]], [(L_(jj + 0.5), 0.0), (L_(jj), 0.01), (L_(jj + 1), 0.01)])
             for i_ in range(min(len(a), len(c_)) - 1):
                 q4 = [a[i_], a[i_ + 1], c_[i_ + 1], c_[i_]]
-                if any(x is None for x in q4): continue
-                face(q4, [(L_(jj), 0.01 * (i_ + 1)), (L_(jj), 0.01 * (i_ + 2)), (L_(jj + 1), 0.01 * (i_ + 2)), (L_(jj + 1), 0.01 * (i_ + 1))])
+                uv4 = [(L_(jj), 0.01 * (i_ + 1)), (L_(jj), 0.01 * (i_ + 2)), (L_(jj + 1), 0.01 * (i_ + 2)), (L_(jj + 1), 0.01 * (i_ + 1))]
+                miss = [k for k, x in enumerate(q4) if x is None]
+                if not miss: face(q4, uv4)
+                elif len(miss) == 1:                     # where the hairline steps a row: a triangle, no notch
+                    face([x for x in q4 if x is not None], [u for x, u in zip(q4, uv4) if x is not None])
         for f in bobf:                                   # every face's front away from the head
             f.normal_update()
             c0 = f.calc_center_median()
