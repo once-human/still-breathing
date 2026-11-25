@@ -2,6 +2,14 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.16.0 — 2026-11-25
+02 is called envelops me now, after a Fred again.. song, the way Still Breathing is.
+
+### Shirts
+- Its back is lettered again over the same heat picture: envelops me / india . 12 . 2026 in the crowd's hand, the title's dark edge between the two earlier tries, the date's thinner.
+- The notes: bengaluru, 16° at night and mumbai, 20° at night where they were; the warmest place in the city over the crowd; the nose stays cold with a small arrow; hands up for the drop; his first fred show.
+- New try-on textures and prints to match.
+
 ## 0.15.0 — 2026-11-25
 Breath belongs to the whole tour now.
 

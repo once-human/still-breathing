@@ -9,7 +9,9 @@ from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__)); F = os.path.join(HERE, "..", "..", "fonts")
 NOTES = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "notes.json")
-OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.join(HERE, "..", "..", "overlays", "ov-back-E-black-hi.png")
+# The shipped lettering (envelops me, 0.16.0) is drawn in the Figma file and exported to overlays/ov-back-E-black-hi.png;
+# this sketch writes beside it, never over it
+OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.join(HERE, "..", "..", "overlays", "ov-back-E-black-sketch.png")
 W, H = 4500, 6000                     # 15 x 20 in at 300 dpi: 11.8 px a millimetre
 SS = 2                                # drawn at twice the size, then area-averaged: clean edges, one pixel of antialias
 INK = (241, 231, 208, 255)            # the tour crowd's cream
