@@ -15,8 +15,9 @@ a = sys.argv[sys.argv.index("--") + 1:]
 OUT = a[0]; TEST = len(a) > 1 and a[1] == "test"
 N = 16                                           # rigging lines round the decks
 # pick-up rings round the deck centre: (radius m, height m). High over the decks, a trough round the stage
-# where the swags hang lowest, rising again over the crowd to the outer rigging
-RINGS = [(3.5, 8.0), (7.0, 6.0), (11.0, 4.9), (15.0, 5.0), (20.0, 5.6), (26.0, 6.6), (33.0, 8.0)]
+# where the swags hang lowest, rising again over the crowd to the outer rigging; low enough that from in the
+# crowd the swags across the hall hang just over the heads, as they did
+RINGS = [(3.5, 8.0), (7.0, 6.0), (11.0, 4.3), (15.0, 4.4), (20.0, 4.8), (26.0, 5.6), (33.0, 6.6)]
 VARIANTS = 2
 CELL = 0.09                                      # cloth grid spacing at rest, m
 END = 30 if TEST else 110                        # frames: gathered by 30, settled by the end

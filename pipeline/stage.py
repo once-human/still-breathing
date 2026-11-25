@@ -791,16 +791,16 @@ def fabric_mat():
     p.inputs["Sheen Weight"].default_value = 0.35; p.inputs["Sheen Roughness"].default_value = 0.4
     tl = N_.new("ShaderNodeBsdfTranslucent"); tl.inputs[0].default_value = (0.82, 0.84, 0.86, 1)
     tp = N_.new("ShaderNodeBsdfTransparent")
-    m1 = N_.new("ShaderNodeMixShader"); m1.inputs[0].default_value = 0.42
+    m1 = N_.new("ShaderNodeMixShader"); m1.inputs[0].default_value = 0.55
     nt.links.new(p.outputs[0], m1.inputs[1]); nt.links.new(tl.outputs[0], m1.inputs[2])
-    m2 = N_.new("ShaderNodeMixShader"); m2.inputs[0].default_value = 0.7      # how much light the weave stops
+    m2 = N_.new("ShaderNodeMixShader"); m2.inputs[0].default_value = 0.6      # how much light the weave stops
     nt.links.new(tp.outputs[0], m2.inputs[1]); nt.links.new(m1.outputs[0], m2.inputs[2])
     nt.links.new(m2.outputs[0], N_["Material Output"].inputs[0])
     # crinkles: the creases a thin synthetic keeps from being packed, a few cm across
     tc = N_.new("ShaderNodeTexCoord"); nz = N_.new("ShaderNodeTexNoise")
-    nz.inputs["Scale"].default_value = 7.0; nz.inputs["Detail"].default_value = 9.0; nz.inputs["Roughness"].default_value = 0.62
+    nz.inputs["Scale"].default_value = 5.0; nz.inputs["Detail"].default_value = 6.0; nz.inputs["Roughness"].default_value = 0.62
     nt.links.new(tc.outputs["Object"], nz.inputs["Vector"])
-    bp = N_.new("ShaderNodeBump"); bp.inputs["Strength"].default_value = 0.22; bp.inputs["Distance"].default_value = 0.015
+    bp = N_.new("ShaderNodeBump"); bp.inputs["Strength"].default_value = 0.07; bp.inputs["Distance"].default_value = 0.01
     nt.links.new(nz.outputs["Fac"], bp.inputs["Height"])
     nt.links.new(bp.outputs[0], p.inputs["Normal"]); nt.links.new(bp.outputs[0], tl.inputs["Normal"])
     return m
@@ -830,7 +830,7 @@ def build_show():
     The person stands in the crowd, the decks 6.5 m ahead; the hard front lights they are lit by hang on a bar
     over the front of the stage."""
     global ZC
-    M_STAGE = mat("stage", (0.018, 0.018, 0.018), 0.55)
+    M_STAGE = mat("stage", (0.012, 0.012, 0.012), 0.95)          # black stage cloth
     M_CASE = mat("case", (0.022, 0.022, 0.023), 0.45)
     M_ALU = mat("alu", (0.6, 0.6, 0.62), 0.35, metal=1.0)
     M_TRUSS = mat("truss", (0.5, 0.5, 0.52), 0.35, metal=1.0)
@@ -850,7 +850,7 @@ def build_show():
     vault = lambda x: ZV + math.sqrt(max(RV * RV - x * x, 0.0))
     ZC = CROWN
     M_WALL = mat("hall walls", (0.3, 0.24, 0.21), 0.85)
-    M_FLOOR = mat("hall floor", (0.035, 0.028, 0.022), 0.42)
+    M_FLOOR = mat("hall floor", (0.035, 0.028, 0.022), 0.62)
     M_ROOF = mat("hall roof", (0.05, 0.05, 0.055), 0.6, metal=0.2)
     surf(lambda u, v: Vector((-HX + 2 * HX * u, Y0 + (Y1 - Y0) * v, 0)), 1, 1, M_FLOOR, False)
     for x in (-HX, HX):
@@ -910,8 +910,8 @@ def build_show():
         for k, dy in enumerate((-0.9, -0.3, 0.3, 0.9)):
             p = Vector((tx, CY + dy, SZ + 4.2))
             cyl(p, p + Vector((0, 0, 0.3)), 0.12, M_CASE, 12)
-            out_ = Vector((CX + side * 16, CY + (dy * 9), 5.2))       # up into the canopy's trough
-            light("SPOT", p, out_, 2400, (0.82, 0.88, 1.0) if k % 2 else (0.35, 0.55, 1.0), size=0.1, spot=34, blend=0.7)
+            out_ = Vector((CX + side * 13, CY + (dy * 9), 4.0))       # up into the canopy's trough
+            light("SPOT", p, out_, 4000, (0.82, 0.88, 1.0) if k % 2 else (0.35, 0.55, 1.0), size=0.1, spot=34, blend=0.7)
         light("SPOT", (tx, CY, SZ + 4.0), (CX, CY, SZ + 1.4), 900, (1.0, 0.58, 0.28), size=0.1, spot=40, blend=0.7)
     # hangs of speakers either side of the stage
     for side in (-1, 1):
@@ -948,7 +948,13 @@ def build_show():
             cyl(p + Vector((0, 0, 0.35)), p, 0.14, M_CASE, 12)
             aa = a_ + rnd.uniform(-0.6, 0.6); far = t + rnd.uniform(-5, 7)
             light("SPOT", p, (CX + far * math.cos(aa), CY + far * math.sin(aa), 0), 4500, (0.88, 0.92, 1.0) if t % 2 else (0.5, 0.65, 1.0), size=0.04, spot=3.5, blend=0.25)
-    cyl((CX - 9, CY - 9, TZ), (CX + 9, CY - 9, TZ), 0.04, M_TRUSS, 6)
+    for i in range(24):                                                 # soft washes down onto the cloth: it glows
+        a_ = 2 * math.pi * (i + 0.25) / 24; r = 6 + 20 * ((i * 7) % 24) / 24
+        p = Vector((CX + r * math.cos(a_), CY + r * math.sin(a_), TZ - 0.5))
+        light("SPOT", p, (p.x, p.y, 0), 3000, (0.86, 0.9, 1.0), size=0.3, spot=70, blend=0.9)
+    for side in (-1, 1):                                                # the stage's light back onto the crowd round it
+        for y in (CY + 9, CY - 9):
+            light("SPOT", (CX + side * (SX - 0.4), CY, SZ + 4.4), (CX + side * 3, y, 1.6), 1500, (1.0, 0.7, 0.45), size=0.1, spot=34, blend=0.7)
     for i in range(10):                                                 # blue washes up onto the cloth from the floor
         a_ = 2 * math.pi * (i + 0.5) / 10; r = 17.5
         p = Vector((CX + r * math.cos(a_), CY + r * math.sin(a_), 0.4))
@@ -977,7 +983,7 @@ def build_show():
     s2 = Vector((FX + 1.6, FY + 0.6, 3.9))
     cyl(s2 + Vector((0, 0.3, 0)), s2 + Vector((0, -0.25, -0.02)), 0.36, M_CASE, 32)
     cyl(s2 + Vector((0, -0.25, -0.02)), s2 + Vector((0, -0.27, -0.02)), 0.32, emission("search lens 2", (1.0, 0.94, 0.85), 30), 32)
-    light("SPOT", s2 + Vector((0, -0.3, -0.02)), (CX - 1, CY, 4.0), 6000, (1.0, 0.94, 0.85), size=0.25, spot=8, blend=0.4)
+    light("SPOT", s2 + Vector((0, -0.3, -0.02)), (CX - 1, CY - 1.2, SZ + 2.4), 4500, (1.0, 0.94, 0.85), size=0.25, spot=8, blend=0.4)
     for x in (-6.5, -2.2, 2.2, 6.5):                                  # back truss: light on the crowd from behind
         cyl((x, 12.0, 4.9), (x, 11.7, 4.6), 0.14, M_CASE, 16)
         light("SPOT", (x, 11.7, 4.55), (x * 0.5, rnd.uniform(-1, 6), 1.3), 1400, (1.0, 0.84, 0.66), size=0.08, spot=16, blend=0.5)
