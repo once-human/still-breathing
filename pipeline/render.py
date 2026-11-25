@@ -17,6 +17,8 @@ GLB = os.environ.get("GLB")
 PERSON = os.environ.get("PERSON"); SHOW = os.environ.get("SCENE") == "show"; HALL = os.environ.get("SCENE") == "hall"
 FLOOR = 0.35   # scene.ts FLOOR: the person stands on the floor the fit pipeline's bodies stand on
 LIFT = 0.0 if HALL else FLOOR   # stage.py's hall has its floor at z = 0
+BACK = 0.6 if HALL else 0.0     # in the hall the person stands 0.6 m back from stage.py's spot: the barrier is 2.6 m ahead of
+                                # it and the camera walks a 2.85 m ring, so from the front it shot through the barrier
 if HALL and os.environ.get("HALL_BLEND"):
     # the hall built once for the whole turntable (HALL_SAVE below), opened here
     bpy.ops.wm.open_mainfile(filepath=os.environ["HALL_BLEND"])
@@ -36,11 +38,11 @@ if HALL:
     # (the people only: stage.py's empties that instance a body, and the phone a few of them hold up)
     gone = 0
     for o in list(bpy.data.objects):
-        if o.type == "EMPTY" and o.instance_type == "COLLECTION" and o.name.startswith("p") and o.location.xy.length < 3.6:
+        if o.type == "EMPTY" and o.instance_type == "COLLECTION" and o.name.startswith("p") and (o.location.xy - Vector((0, BACK))).length < 3.6:
             bpy.data.objects.remove(o); gone += 1
     for o in [o for o in bpy.data.objects if o.type == "MESH" and any(m and m.name.startswith("phone") for m in o.data.materials)]:
         b_ = bmesh.new(); b_.from_mesh(o.data)
-        bmesh.ops.delete(b_, geom=[f for f in b_.faces if (o.matrix_world @ f.calc_center_median()).xy.length < 3.6], context="FACES")
+        bmesh.ops.delete(b_, geom=[f for f in b_.faces if ((o.matrix_world @ f.calc_center_median()).xy - Vector((0, BACK))).length < 3.6], context="FACES")
         b_.to_mesh(o.data); b_.free()
     print("cleared round the person", gone, flush=True)
 ROOT = os.path.dirname(os.path.abspath(__file__)) if GLB else os.path.dirname(bpy.data.filepath)   # textures
@@ -114,8 +116,8 @@ if PERSON:
                 pb.inputs["Subsurface Radius"].default_value = (1.0, 0.35, 0.2)
                 pb.inputs["Subsurface Scale"].default_value = 0.004
             po.data.materials[i] = pm
-        po.location.z += LIFT
-    tee.location.z += LIFT
+        po.location.z += LIFT; po.location.y += BACK
+    tee.location.z += LIFT; tee.location.y += BACK
 # ---- TROUSERS=<blend> (trousers.py): the draped trousers in place of the person's own, in real denim: photographed
 # denim from Poly Haven (CC0, pipeline/denim, 27 cm of cloth per image): a dark raw indigo under the off-white tee,
 # a lighter blue wash under the black one
@@ -124,7 +126,7 @@ if PERSON and os.environ.get("TROUSERS"):
         if "jean" in po.name.lower(): po.hide_render = True
     with bpy.data.libraries.load(os.environ["TROUSERS"]) as (src, dst):
         dst.objects = ["trousers"]
-    trz = dst.objects[0]; sc.collection.objects.link(trz); trz.location.z += LIFT
+    trz = dst.objects[0]; sc.collection.objects.link(trz); trz.location.z += LIFT; trz.location.y += BACK
     so_ = trz.modifiers.new("thick", "SOLIDIFY"); so_.thickness = 0.0022; so_.offset = 1
     sd_ = trz.modifiers.new("sub", "SUBSURF"); sd_.levels = sd_.render_levels = 1
     dn = os.path.join(os.path.dirname(os.path.abspath(__file__)), "denim", "denim_fabric_03" if tee_col == "cream" else "denim_fabric_04")
@@ -231,8 +233,8 @@ if PERSON:
     # WEAR_CAMERA in scene.ts, lifted with the person; the person stands still and the camera walks round them
     # (the viewer turns person and place together in front of a fixed camera: the same picture)
     a = math.radians(-ANG); x, y = 0.2, -2.85
-    cam.location = (x * math.cos(a) - y * math.sin(a), x * math.sin(a) + y * math.cos(a), LIFT + 1.1)
-    aim = Vector((0, 0, LIFT + 0.99)); cam.data.dof.focus_distance = 2.8
+    cam.location = (x * math.cos(a) - y * math.sin(a), x * math.sin(a) + y * math.cos(a) + BACK, LIFT + 1.1)
+    aim = Vector((0, BACK, LIFT + 0.99)); cam.data.dof.focus_distance = 2.8
 else:
     tee.rotation_mode = "XYZ"   # the glTF importer leaves objects in quaternion mode, which ignores rotation_euler
     tee.rotation_euler[2] = math.radians(ANG)
