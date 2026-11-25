@@ -25,6 +25,9 @@ on:
       photos:
         description: "photo places to make as bands too (pipeline/photo_place.py, 16k photos), comma separated: studio,window"
         default: ""
+      motion:
+        description: "true: the show's canopy breathing, its rows (sharp, as the band) rendered every frame of its loop and made into show-motion.mp4; strips = runners, frames shared out among them"
+        default: "false"
       develop:
         description: "exposure,black point,glow start given (stage_post.py; the band takes the whole picture's, so they meet unseen); empty: measured"
         default: ""
@@ -34,6 +37,8 @@ permissions:
 
 env:
   BLENDER: "5.3.0"
+  MOTION_ROWS: "3368,3816"   # the rows of the 16384 x 8192 show the canopy moves in, as the viewer's camera sees it (scene.ts MOTION)
+  MOTION_FRAMES: "120"       # canopy.py: a 10 s loop at 12 frames a second
 
 jobs:
   plan:
@@ -50,8 +55,13 @@ jobs:
           echo "photos=[$Q]" >> "$GITHUB_OUTPUT"
 
   canopy:
-    # the show's fabric canopy, simulated once as cloth (pipeline/canopy.py), shared with every strip
+    # the show's fabric canopy, simulated as moving cloth (pipeline/canopy.py), one band of it per runner, shared
+    # with every strip
     runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      matrix:
+        band: [0, 1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -62,7 +72,7 @@ jobs:
         id: cloth
         with:
           path: ~/.cache/stage
-          key: canopy-${{ hashFiles('pipeline/canopy.py') }}
+          key: canopy-${{ matrix.band }}-${{ hashFiles('pipeline/canopy.py') }}
       - name: Blender ${{ env.BLENDER }}
         if: steps.cloth.outputs.cache-hit != 'true'
         run: |
@@ -71,16 +81,16 @@ jobs:
             curl -sSL "https://download.blender.org/release/Blender${BLENDER%.*}/blender-${BLENDER}-linux-x64.tar.xz" | tar -xJ -C ~/blender --strip-components=1
           fi
           sudo apt-get -qq update && sudo apt-get -qq install -y libxi6 libxxf86vm1 libxfixes3 libxrender1 libgl1 libxkbcommon0 libsm6 > /dev/null
-      - name: Hang the canopy
+      - name: Hang band ${{ matrix.band }} of the canopy
         if: steps.cloth.outputs.cache-hit != 'true'
         run: |
           mkdir -p ~/.cache/stage
-          ~/blender/blender -b --factory-startup -P pipeline/canopy.py -- ~/.cache/stage/canopy.npz | grep -E "band|saved|Error|Traceback"
-      - run: mkdir -p cloth && cp ~/.cache/stage/canopy.npz cloth/
+          BAND=${{ matrix.band }} ~/blender/blender -b --factory-startup -P pipeline/canopy.py -- ~/.cache/stage/band${{ matrix.band }}.npz | grep -E "band|saved|frame [0-9]*0 |Error|Traceback"
+      - run: mkdir -p cloth && cp ~/.cache/stage/band${{ matrix.band }}.npz cloth/
       - uses: actions/upload-artifact@v4
         with:
-          name: canopy
-          path: cloth/canopy.npz
+          name: canopy-${{ matrix.band }}
+          path: cloth/*.npz
           retention-days: 7
 
   strip:
@@ -105,14 +115,22 @@ jobs:
           fi
           sudo apt-get -qq update && sudo apt-get -qq install -y libxi6 libxxf86vm1 libxfixes3 libxrender1 libgl1 libxkbcommon0 libsm6 > /dev/null
       - uses: actions/download-artifact@v4
-        with: { name: canopy, path: cloth }
+        with: { pattern: canopy-*, path: cloth, merge-multiple: true }
       - name: Render ${{ matrix.place }} strip ${{ matrix.strip }}
         run: |
           mkdir -p out; N=$(printf "${{ matrix.place }}-s%02d" ${{ matrix.strip }})
-          if [ "${{ inputs.band }}" = "true" ]; then export ROWS=3368,5008; WIDTH=16384; else WIDTH=${{ inputs.width }}; fi
-          CANOPY="$PWD/cloth/canopy.npz" ~/blender/blender -b --factory-startup -P pipeline/stage.py -- ${{ matrix.place }} "$PWD/out/$N.exr" ${{ matrix.strip }} ${{ inputs.strips }} ${{ inputs.samples }} $WIDTH \
-            | grep -E "Fra:.*Sample [0-9]+/[0-9]+$|saved|Error|Traceback" | tail -5
-          test -s "out/$N.npy"
+          S=${{ matrix.strip }}; SS=${{ inputs.strips }}; WIDTH=${{ inputs.width }}
+          if [ "${{ inputs.band }}" = "true" ]; then export ROWS=3368,5008 MASK=1; WIDTH=16384; fi
+          if [ "${{ inputs.motion }}" = "true" ]; then
+            # the canopy's rows, every frame of its loop: this runner's share of the frames, all the rows
+            export ROWS=$MOTION_ROWS MASK=1; WIDTH=16384
+            PER=$(( (MOTION_FRAMES + SS - 1) / SS )); A=$(( S * PER )); B=$(( A + PER - 1 )); [ $B -ge $MOTION_FRAMES ] && B=$(( MOTION_FRAMES - 1 ))
+            [ $A -ge $MOTION_FRAMES ] && exit 0
+            export FRAMES=$A-$B; S=0; SS=1
+          fi
+          CANOPY="$PWD/cloth" ~/blender/blender -b --factory-startup -P pipeline/stage.py -- ${{ matrix.place }} "$PWD/out/$N.exr" $S $SS ${{ inputs.samples }} $WIDTH \
+            | grep -E "Fra:.*Sample [0-9]+/[0-9]+$|saved|mask|Error|Traceback" | tail -8
+          ls out/*.npy
       - uses: actions/upload-artifact@v4
         with:
           name: strip-${{ matrix.place }}-${{ matrix.strip }}
@@ -170,21 +188,33 @@ jobs:
           IFS=, read -r EXPOSE BLACK HOT <<< "${{ inputs.develop }}"; export EXPOSE BLACK HOT
           mkdir -p public/tee/stage preview
           if [ "${{ inputs.band }}" = "true" ]; then export BAND=1; X=-band; else X=; fi
-          for P in $(echo "${{ inputs.places }}" | tr ',' ' '); do
-            ls got/$P-s*.npy > /dev/null 2>&1 || continue
-            python3 pipeline/stage_post.py "$P" "public/tee/stage/$P$X.webp" $(ls got/$P-s*.npy | sort)
-          done
+          if [ "${{ inputs.motion }}" = "true" ]; then
+            # every frame developed as the band is (same exposure, people blurred), then made into the loop's video
+            sudo apt-get -qq update && sudo apt-get -qq install -y ffmpeg > /dev/null
+            mkdir -p frames
+            for F in $(seq 0 $(( MOTION_FRAMES - 1 ))); do
+              G=$(printf "%03d" $F)
+              BAND=1 ROWS=$MOTION_ROWS python3 pipeline/stage_post.py show "frames/f$G.png" $(ls got/show-s*-f$G.npy) | grep -E "people|saved"
+            done
+            python3 pipeline/motion_post.py frames public/tee/stage/show-motion.mp4
+            cp frames/f000.png frames/f060.png preview/ ; X=-motion
+          else
+            for P in $(echo "${{ inputs.places }}" | tr ',' ' '); do
+              ls got/$P-s??.npy > /dev/null 2>&1 || continue
+              python3 pipeline/stage_post.py "$P" "public/tee/stage/$P$X.webp" $(ls got/$P-s??.npy | sort)
+            done
+          fi
           ls -la public/tee/stage
-          if [ "${{ inputs.publish }}" != "true" ]; then cp public/tee/stage/*-band*.webp preview/ 2>/dev/null; for P in $(echo "${{ inputs.places }}" | tr "," " "); do cp "public/tee/stage/$P$X"*.webp preview/ 2>/dev/null; done; exit 0; fi
+          if [ "${{ inputs.publish }}" != "true" ]; then cp public/tee/stage/*-band*.webp public/tee/stage/*.mp4 preview/ 2>/dev/null; for P in $(echo "${{ inputs.places }}" | tr "," " "); do cp "public/tee/stage/$P$X"*.webp preview/ 2>/dev/null; done; exit 0; fi
           git config user.name "once-human"
           git config user.email "121476278+once-human@users.noreply.github.com"
           git add public/tee/stage
           git diff --cached --quiet && { echo "nothing new"; exit 0; }
-          git commit -m "Stage: ${{ inputs.places }} around the person, 360 degrees, rendered on the farm"
+          git commit -m "Stage: ${{ inputs.places }}$X around the person, rendered on the farm"
           git pull --rebase -q && git push
       - uses: actions/upload-artifact@v4
         if: inputs.publish != 'true'
         with:
           name: preview
-          path: preview/*.webp
+          path: preview/*
           retention-days: 7

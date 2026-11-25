@@ -73,10 +73,30 @@ jobs:
         with:
           path: ~/.cache/polyhaven
           key: polyhaven-hall-v1
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4   # the canopy's band 0, as stage.yml hung it
         with:
           path: ~/.cache/stage
-          key: canopy-${{ hashFiles('pipeline/canopy.py') }}
+          key: canopy-0-${{ hashFiles('pipeline/canopy.py') }}
+      - uses: actions/cache/restore@v4   # the canopy's band 1, as stage.yml hung it
+        with:
+          path: ~/.cache/stage
+          key: canopy-1-${{ hashFiles('pipeline/canopy.py') }}
+      - uses: actions/cache/restore@v4   # the canopy's band 2, as stage.yml hung it
+        with:
+          path: ~/.cache/stage
+          key: canopy-2-${{ hashFiles('pipeline/canopy.py') }}
+      - uses: actions/cache/restore@v4   # the canopy's band 3, as stage.yml hung it
+        with:
+          path: ~/.cache/stage
+          key: canopy-3-${{ hashFiles('pipeline/canopy.py') }}
+      - uses: actions/cache/restore@v4   # the canopy's band 4, as stage.yml hung it
+        with:
+          path: ~/.cache/stage
+          key: canopy-4-${{ hashFiles('pipeline/canopy.py') }}
+      - uses: actions/cache/restore@v4   # the canopy's band 5, as stage.yml hung it
+        with:
+          path: ~/.cache/stage
+          key: canopy-5-${{ hashFiles('pipeline/canopy.py') }}
       - name: Blender ${{ env.BLENDER }}
         run: |
           if [ ! -x ~/blender/blender ]; then
@@ -87,12 +107,13 @@ jobs:
           pip install -q numpy pillow
       - name: Build the hall
         run: |
-          # the show's fabric canopy (pipeline/canopy.py), simulated once and cached as stage.yml does
-          if [ ! -s ~/.cache/stage/canopy.npz ]; then
-            mkdir -p ~/.cache/stage
-            ~/blender/blender -b --factory-startup -P pipeline/canopy.py -- ~/.cache/stage/canopy.npz | grep -E "band|saved|Error|Traceback"
-          fi
-          CANOPY=~/.cache/stage/canopy.npz SCENE=hall HALL_SAVE="$PWD/hall.blend" ~/blender/blender -b --factory-startup -P pipeline/render.py -- C black a0 "$PWD/x.png" \
+          # the show's moving canopy (pipeline/canopy.py), its bands hung by stage.yml (run it first); any missing is
+          # hung here (slow: a band takes a while). The stills show it at the loop's first frame, as the band does
+          mkdir -p ~/.cache/stage
+          for K in 0 1 2 3 4 5; do
+            [ -s ~/.cache/stage/band$K.npz ] || BAND=$K ~/blender/blender -b --factory-startup -P pipeline/canopy.py -- ~/.cache/stage/band$K.npz | grep -E "saved|Error|Traceback"
+          done
+          CANOPY=~/.cache/stage SCENE=hall HALL_SAVE="$PWD/hall.blend" ~/blender/blender -b --factory-startup -P pipeline/render.py -- C black a0 "$PWD/x.png" \
             | grep -E "crowd|hall saved|Error|Traceback"
           test -s hall.blend && ls -la hall.blend
       - uses: actions/upload-artifact@v4

@@ -15,6 +15,7 @@
 # match; the studio and the room are developed at exposure 1 in the viewer's units (stage_post.py).
 # One horizontal strip per call, so the farm can split the frame across runners; stage_post.py stitches them.
 import bpy, bmesh, sys, os, math, random
+import numpy as np
 from mathutils import Vector, Matrix
 
 a = sys.argv[sys.argv.index("--") + 1:]
@@ -755,12 +756,13 @@ def crowd_kinds():
                     k.objects.link(bpy.data.objects.new("hair", hm))
                 for o in new:
                     if o.type != "MESH": bpy.data.objects.remove(o)
+            for o in k.objects: o.pass_index = 1   # a person: blurred in the developed picture (MASK, stage_post.py)
             kinds[pose].append(k)
     return kinds
 
 
 def instance(k, x, y, rot, s=1.0, z=0.0):
-    e = bpy.data.objects.new("p", None); e.instance_type = "COLLECTION"; e.instance_collection = k
+    e = bpy.data.objects.new("p", None); e.instance_type = "COLLECTION"; e.instance_collection = k; e.pass_index = 1
     e.location = (x, y, z); e.rotation_euler = (0, 0, rot); e.scale = (s, s, s); col.objects.link(e); return e
 
 
@@ -769,21 +771,26 @@ def facing(x, y, tx, ty):
     return math.atan2(tx - x, -(ty - y))
 
 
-CANOPY = os.environ.get("CANOPY") or os.path.expanduser("~/.cache/stage/canopy.npz")
-
-
-SWAGS = []   # (band, variant, mesh) of the canopy, for the breathing frames (FRAMES)
+# the canopy's cloth (canopy.py, one band<k>.npz per band): made on the farm before the strips (stage.yml), or here
+CANOPY = os.environ.get("CANOPY") or os.path.expanduser("~/.cache/stage/canopy")
+FRAME = int(os.environ.get("FRAME", "0"))   # the moment of the canopy's breathing loop the stills are drawn at
+SWAGS = []    # (mesh, (frames, n, 3) vertices) of every swag, for the breathing frames (FRAMES)
+LINES = []    # (mesh, vertex indices at the bottom, ring height, (frames,) lift) of every rigging line
 
 
 def canopy_cloth():
-    """the canopy's settled cloth (canopy.py): made on the farm before the strips (stage.yml), or here if missing"""
-    if not os.path.exists(CANOPY):
-        import subprocess
-        os.makedirs(os.path.dirname(CANOPY), exist_ok=True)
-        subprocess.run([bpy.app.binary_path, "-b", "--factory-startup", "-P",
-                        os.path.join(os.path.dirname(os.path.abspath(__file__)), "canopy.py"), "--", CANOPY], check=True)
-    import numpy as np
-    return dict(np.load(CANOPY))
+    """the canopy's bands, every swag moving through the loop"""
+    out = []
+    for k in range(6):
+        f = os.path.join(CANOPY, f"band{k}.npz")
+        if not os.path.exists(f):
+            import subprocess
+            os.makedirs(CANOPY, exist_ok=True)
+            subprocess.run([bpy.app.binary_path, "-b", "--factory-startup", "-P",
+                            os.path.join(os.path.dirname(os.path.abspath(__file__)), "canopy.py"), "--", f],
+                           check=True, env={**os.environ, "BAND": str(k)})
+        out.append(dict(np.load(f)))
+    return out
 
 
 def fabric_mat():
@@ -926,23 +933,34 @@ def build_show():
             cyl((x, y, 8.8), (x, y, 16.0), 0.012, M_CABLE, 4)
 
     # ---------- the canopy: rings of sheer swags round the decks, every pick-up hung on a line to the trusses ----------
-    cn = canopy_cloth(); Nn = int(cn["N"]); rings = [tuple(r) for r in cn["RINGS"]]
+    bands = canopy_cloth(); Nn = int(bands[0]["N"]); rings = [tuple(r) for r in bands[0]["RINGS"]]
     fab = fabric_mat()
-    for k in range(len(rings) - 1):
-        meshes = []
-        for j in range(4):
-            if f"b{k}v{j}_v" not in cn: break
-            vv, ff = cn[f"b{k}v{j}_v"], cn[f"b{k}v{j}_f"]
-            me = bpy.data.meshes.new(f"swag{k}{j}"); me.from_pydata(vv.tolist(), [], ff.tolist())
-            me.shade_smooth(); me.materials.append(fab); meshes.append(me); SWAGS.append((k, j, me))
-        for i in range(Nn if meshes else 0):
-            o = bpy.data.objects.new("swag", meshes[(i + k) % len(meshes)]); col.objects.link(o)
-            o.location = (CX, CY, 0); o.rotation_euler = (0, 0, 2 * math.pi * i / Nn)
+    for cn in bands:
+        for i in range(Nn):
+            if f"s{i}_v" not in cn: break
+            vv, ff = cn[f"s{i}_v"], cn[f"s{i}_f"]
+            fr_ = min(FRAME, len(vv) - 1)
+            me = bpy.data.meshes.new("swag"); me.from_pydata(vv[fr_].astype(np.float32).tolist(), [], ff.tolist())
+            me.shade_smooth(); me.materials.append(fab); SWAGS.append((me, vv))
+            o = bpy.data.objects.new("swag", me); col.objects.link(o); o.location = (CX, CY, 0)
+            o.modifiers.new("smooth", "SUBSURF").levels = 1   # the sim's grid rounded once more: soft folds, no facets
     TZ = 16.0                                                           # the trusses over the canopy
-    for r, z in rings:
+    # the rigging lines, each from its pick-up up to the truss; the pick-up's end moves with the winch (FRAMES)
+    lv, lf = [], []
+    for ri, (r, z) in enumerate(rings):
+        cn = bands[min(ri, len(bands) - 1)]; P = cn["P"][:, 0 if ri < len(bands) else 1]   # (frames, N)
         for i in range(Nn):
             a_ = math.pi / 2 + 2 * math.pi * (i + 0.5) / Nn
-            cyl((CX + r * math.cos(a_), CY + r * math.sin(a_), z), (CX + r * math.cos(a_), CY + r * math.sin(a_), TZ), 0.006, M_CABLE, 4)
+            x_, y_ = CX + r * math.cos(a_), CY + r * math.sin(a_)
+            lift_ = P[:, (i + 1) % Nn]; z0_ = z + float(lift_[min(FRAME, len(lift_) - 1)])
+            b0 = len(lv)
+            for q in range(4):
+                c_, s_ = 0.006 * math.cos(q * math.pi / 2), 0.006 * math.sin(q * math.pi / 2)
+                lv += [(x_ + c_, y_ + s_, z0_), (x_ + c_, y_ + s_, TZ)]
+            lf += [(b0 + 2 * q, b0 + 2 * ((q + 1) % 4), b0 + 2 * ((q + 1) % 4) + 1, b0 + 2 * q + 1) for q in range(4)]
+            LINES.append((b0, z, lift_))
+    lm = bpy.data.meshes.new("lines"); lm.from_pydata(lv, [], lf); lm.materials.append(M_CABLE)
+    col.objects.link(bpy.data.objects.new("lines", lm)); LINES[:] = [(lm,) + l for l in LINES]
     for i in range(4):                                                  # four trusses crossing over the decks
         a_ = math.pi / 4 + i * math.pi / 2
         truss((CX + 1.0 * math.cos(a_), CY + 1.0 * math.sin(a_), TZ), (CX + 34 * math.cos(a_), CY + 34 * math.sin(a_), TZ), M_TRUSS)
@@ -1199,26 +1217,77 @@ r.threads_mode = "AUTO"
 import numpy as np
 
 
-def render_to(out):
-    r.filepath = out; bpy.ops.render.render(write_still=True)
+def read_exr(out):
     im = bpy.data.images.load(out); w, h = im.size
     px = np.empty(w * h * 4, np.float32); im.pixels.foreach_get(px); bpy.data.images.remove(im)
-    np.save(out.rsplit(".", 1)[0] + ".npy", px.reshape(h, w, 4)[::-1, :, :3].astype(np.float16))
+    return px.reshape(h, w, 4)[::-1, :, :3], w, h
+
+
+# MASK=1: where the people are, and how far: a second, quick render of the same rows with every surface black but the
+# people (Object Index 1), who glow 1 with their distance in green. stage_post.py blurs the people by it, as a lens
+# would blur them, and leaves everything else sharp. Haze and lights are off for it; the cloth stays, so a person
+# behind it is behind it.
+MASK = os.environ.get("MASK") == "1"
+if MASK:
+    mk = bpy.data.materials.new("mask"); mk.use_nodes = True; nt_ = mk.node_tree; N_ = nt_.nodes
+    for n_ in list(N_):
+        if n_.type != "OUTPUT_MATERIAL": N_.remove(n_)
+    oi = N_.new("ShaderNodeObjectInfo"); lp = N_.new("ShaderNodeLightPath")
+    gt = N_.new("ShaderNodeMath"); gt.operation = "GREATER_THAN"; gt.inputs[1].default_value = 0.5
+    nt_.links.new(oi.outputs["Object Index"], gt.inputs[0])
+    dz = N_.new("ShaderNodeMath"); dz.operation = "MULTIPLY"; nt_.links.new(gt.outputs[0], dz.inputs[0])
+    dz2 = N_.new("ShaderNodeMath"); dz2.operation = "MULTIPLY"; dz2.inputs[1].default_value = 0.01   # metres / 100
+    nt_.links.new(lp.outputs["Ray Length"], dz2.inputs[0]); nt_.links.new(dz2.outputs[0], dz.inputs[1])
+    cc = N_.new("ShaderNodeCombineXYZ"); nt_.links.new(gt.outputs[0], cc.inputs[0]); nt_.links.new(dz.outputs[0], cc.inputs[1])
+    em_ = N_.new("ShaderNodeEmission"); nt_.links.new(cc.outputs[0], em_.inputs["Color"])
+    nt_.links.new(em_.outputs[0], N_["Material Output"].inputs["Surface"])
+    MASK_OFF = [o for o in sc.objects if o.type == "LIGHT" or any(s_.material and s_.material.name.startswith("haze") for s_ in getattr(o, "material_slots", []))]
+
+
+def render_mask(out):
+    """the people's mask and distance for the strip just drawn: <out>-mask.npy (h, w, 2) float16"""
+    keep_ = dict(world=sc.world, samples=cy.samples, dn=cy.use_denoising, ad=cy.use_adaptive_sampling, mb=cy.max_bounces,
+                 ov=bpy.context.view_layer.material_override, hide=[o.hide_render for o in MASK_OFF])
+    w_ = bpy.data.worlds.new("black"); sc.world = w_
+    cy.samples = 16; cy.use_denoising = False; cy.use_adaptive_sampling = False; cy.max_bounces = 0
+    bpy.context.view_layer.material_override = mk
+    for o in MASK_OFF: o.hide_render = True
+    mo = out.rsplit(".", 1)[0] + "-mask.exr"
+    r.filepath = mo; bpy.ops.render.render(write_still=True)
+    px, w, h = read_exr(mo)
+    np.save(mo.rsplit(".", 1)[0] + ".npy", px[..., :2].astype(np.float16))
+    sc.world = keep_["world"]; cy.samples = keep_["samples"]; cy.use_denoising = keep_["dn"]
+    cy.use_adaptive_sampling = keep_["ad"]; cy.max_bounces = keep_["mb"]; bpy.context.view_layer.material_override = keep_["ov"]
+    for o, h_ in zip(MASK_OFF, keep_["hide"]): o.hide_render = h_
+    print("mask", mo, "people", round(float((px[..., 0] > 0.5).mean()), 3), flush=True)
+
+
+def render_to(out):
+    r.filepath = out; bpy.ops.render.render(write_still=True)
+    px, w, h = read_exr(out)
+    np.save(out.rsplit(".", 1)[0] + ".npy", px.astype(np.float16))
     print("saved", PLACE, out, "strip", STRIP, "of", STRIPS, w, "x", h, flush=True)
+    if MASK: render_mask(out)
 
 
-# FRAMES=a-b CANOPY_ANIM=<dir of band<k>.npz from canopy.py MOTION=1>: the canopy breathing, frames a..b of its loop,
-# the scene built once and only the cloth moved between frames (the same noise seed every frame, so what stands
-# still stays still); each frame saved as <out>-fNNN.npy
+def set_frame(f):
+    """the canopy at frame f of its breathing loop: every swag's cloth, every rigging line's end"""
+    for me, vv in SWAGS:
+        me.vertices.foreach_set("co", vv[f % len(vv)].astype(np.float32).ravel()); me.update()
+    if LINES:
+        lm = LINES[0][0]; co = np.empty(len(lm.vertices) * 3, np.float32); lm.vertices.foreach_get("co", co); co = co.reshape(-1, 3)
+        for _, b0, z, lift_ in LINES:
+            co[b0:b0 + 8:2, 2] = z + float(lift_[f % len(lift_)])
+        lm.vertices.foreach_set("co", co.ravel()); lm.update()
+
+
+# FRAMES=a-b: the canopy breathing, frames a..b of its loop (canopy.py), the scene built once and only the cloth moved
+# between frames (the same noise seed every frame, so what stands still stays still); each saved as <out>-fNNN.npy
 FRAMES = os.environ.get("FRAMES")
 if FRAMES:
     fa, fb = (int(x) for x in FRAMES.split("-"))
-    anim = {}
-    for k, j, me in SWAGS:
-        if k not in anim: anim[k] = dict(np.load(os.path.join(os.environ["CANOPY_ANIM"], f"band{k}.npz")))
     for f in range(fa, fb + 1):
-        for k, j, me in SWAGS:
-            me.vertices.foreach_set("co", anim[k][f"b{k}v{j}_anim"][f].astype(np.float32).ravel()); me.update()
+        set_frame(f)
         render_to(OUT.rsplit(".", 1)[0] + f"-f{f:03d}.exr")
 else:
     render_to(OUT)

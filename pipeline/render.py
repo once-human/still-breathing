@@ -257,7 +257,8 @@ if PERSON:
     # (the viewer turns person and place together in front of a fixed camera: the same picture)
     a = math.radians(-ANG); x, y = 0.2, -2.85
     cam.location = (x * math.cos(a) - y * math.sin(a), x * math.sin(a) + y * math.cos(a) + BACK, LIFT + 1.1)
-    aim = Vector((0, BACK, LIFT + 0.99)); cam.data.dof.focus_distance = 2.8
+    # at the show it looks up a little (scene.ts SHOW_CAMERA: aimed 1.25 m up, 3 degrees over level) at the canopy
+    aim = Vector((0, BACK, LIFT + (1.25 if SHOW or HALL else 0.99))); cam.data.dof.focus_distance = 2.8
 else:
     tee.rotation_mode = "XYZ"   # the glTF importer leaves objects in quaternion mode, which ignores rotation_euler
     tee.rotation_euler[2] = math.radians(ANG)
