@@ -24,6 +24,7 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 - Switching shirts shows the new shirt at once: its studio render (the tee view) or its render in the hall (worn at the show) covers the view at that angle, and the live tee takes over from exactly there and turns on. Elsewhere the last frame stays up and fades into the new one, never a dark gap. A shirt you point at is got ready before you pick it.
 - The cloth is simulated on its own thread, so turning, scrolling and switching stay smooth on slower machines; the light from the place turns with the view at a tiny fraction of the cost.
 - The photo renderer only loads when a photo is asked for, and the rendered frames under the 3D are dropped once it's up.
+- The first switch to each shirt no longer holds the page: the print is decoded, scaled down for distance and sent to the graphics card a little at a time between frames, every pixel exactly as the artwork file has it. The shirt's render stays up until the whole print is in, so it's never shown softer or half loaded.
 
 ## 0.18.0 — 2026-11-25
 ### New

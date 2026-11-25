@@ -53,10 +53,52 @@ const rgba = async (blob) => {
     return { width, height, data };
   } finally { dec.close(); }
 };
+// The mip chain, each level a box filter of the one above at WebGPU's sizes (half, rounded down). sRGB pictures are
+// averaged as light (decoded, averaged, encoded: what the GPU's own mip pass does with an sRGB texture); the rest,
+// and alpha, as stored. Where a size is odd a texel covers a texel and a half, weighted by how much of it it covers.
+const S2L = new Float32Array(256), L2S = new Uint8Array(65537);
+for (let i = 0; i < 256; i++) { const v = i / 255; S2L[i] = v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
+for (let i = 0; i <= 65536; i++) { const v = i / 65536; L2S[i] = Math.round(255 * (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055)); }
+const taps = (n, m) => {
+  const k = n / m, K = Math.ceil(k) + (k % 1 ? 1 : 0), at = new Int32Array(m * K), w = new Float32Array(m * K);
+  for (let i = 0; i < m; i++) {
+    const lo = i * k, hi = lo + k;
+    for (let j = Math.floor(lo), t = 0; j < hi && t < K; j++, t++) { at[i * K + t] = Math.min(j, n - 1); w[i * K + t] = (Math.min(hi, j + 1) - Math.max(lo, j)) / k; }
+  }
+  return { K, at, w };
+};
+const half = (src, sw, sh, srgb) => {
+  const dw = Math.max(1, sw >> 1), dh = Math.max(1, sh >> 1), dst = new Uint8Array(dw * dh * 4);
+  const X = taps(sw, dw), Y = taps(sh, dh);
+  for (let y = 0; y < dh; y++) for (let x = 0; x < dw; x++) {
+    let r = 0, g = 0, b = 0, a = 0;
+    for (let ty = 0; ty < Y.K; ty++) {
+      const wy = Y.w[y * Y.K + ty]; if (!wy) continue;
+      const row = Y.at[y * Y.K + ty] * sw;
+      for (let tx = 0; tx < X.K; tx++) {
+        const wx = X.w[x * X.K + tx]; if (!wx) continue;
+        const ww = wx * wy, o = (row + X.at[x * X.K + tx]) * 4;
+        if (srgb) { r += S2L[src[o]] * ww; g += S2L[src[o + 1]] * ww; b += S2L[src[o + 2]] * ww; }
+        else { r += src[o] * ww; g += src[o + 1] * ww; b += src[o + 2] * ww; }
+        a += src[o + 3] * ww;
+      }
+    }
+    const o = (y * dw + x) * 4;
+    if (srgb) { dst[o] = L2S[Math.round(Math.min(1, r) * 65536)]; dst[o + 1] = L2S[Math.round(Math.min(1, g) * 65536)]; dst[o + 2] = L2S[Math.round(Math.min(1, b) * 65536)]; }
+    else { dst[o] = Math.round(r); dst[o + 1] = Math.round(g); dst[o + 2] = Math.round(b); }
+    dst[o + 3] = Math.round(a);
+  }
+  return { width: dw, height: dh, data: dst };
+};
 onmessage = async (e) => {
-  const { id, blob, w, h, raw } = e.data, base = { colorSpaceConversion: "none", premultiplyAlpha: "none" };
+  const { id, blob, w, h, raw, mips } = e.data, base = { colorSpaceConversion: "none", premultiplyAlpha: "none" };
   if (raw) {
-    try { const r = await rgba(blob); postMessage({ id, ...r }, [r.data.buffer]); } catch (err) { postMessage({ id, error: String(err) }); }
+    try {
+      const r = await rgba(blob), levels = [r];
+      // mips: 0 none, 1 as stored, 2 sRGB
+      if (mips) for (let l = r; l.width > 1 || l.height > 1;) { l = half(l.data, l.width, l.height, mips === 2); levels.push(l); }
+      postMessage({ id, ...r, levels }, levels.map((l) => l.data.buffer));
+    } catch (err) { postMessage({ id, error: String(err) }); }
     return;
   }
   try {
@@ -79,15 +121,17 @@ export async function pixels(url: string, size?: [number, number]): Promise<Pixe
   return decode(await grab(url), { w: size?.[0], h: size?.[1] }) as Promise<Pixels>;
 }
 /**
- * Any picture (alpha included, exactly as stored) as raw RGBA bytes, decoded in the Worker; null where the browser
- * can't (no WebCodecs image decoder): the caller then takes the ordinary image path.
+ * Any picture (alpha included, exactly as stored) as raw RGBA bytes, decoded in the Worker, with its mip chain made
+ * there too if asked; null where the browser can't (no WebCodecs image decoder): the caller then takes the ordinary
+ * image path.
  */
-export async function rawImage(url: string): Promise<{ data: Uint8Array; width: number; height: number } | null> {
+export type Level = { data: Uint8Array; width: number; height: number };
+export async function rawImage(url: string, mips: "none" | "plain" | "srgb" = "none"): Promise<Level & { levels: Level[] } | null> {
   if (typeof ImageDecoder === "undefined") return null;
   const blob = await grab(url);
-  return (decode(blob, { raw: true }) as Promise<{ data: Uint8Array; width: number; height: number }>).catch(() => null);
+  return (decode(blob, { raw: true, mips: mips === "srgb" ? 2 : mips === "plain" ? 1 : 0 }) as Promise<Level & { levels: Level[] }>).catch(() => null);
 }
-function decode(blob: Blob, opt: { w?: number; h?: number; raw?: boolean }): Promise<unknown> {
+function decode(blob: Blob, opt: { w?: number; h?: number; raw?: boolean; mips?: number }): Promise<unknown> {
   if (!decoder) {
     decoder = new Worker(URL.createObjectURL(new Blob([DECODE], { type: "text/javascript" })));
     decoder.onmessage = (e) => {

@@ -9,7 +9,12 @@ import { RectAreaLightTexturesLib } from "three/addons/lights/RectAreaLightTextu
 import { CAMERA, VFOV, ASPECT, SWEEP, FLOOR, KNIT_REPEAT, SCENES, lightFrame, radiance, type Camera, type Scene, type V3 } from "./scene";
 import { ENV_W, projectEnv, turnSH } from "./sh";
 import type { TeeGeometry } from "./pathtracer";
-import { grab, bitmap, rawImage, type Pixels } from "./grab";
+import { grab, bitmap, rawImage, type Pixels, type Level } from "./grab";
+
+/** a moment for the page between slices of an upload (a message, which a hidden tab doesn't hold back like a timer) */
+const breathe = () => new Promise<void>((r) => { const c = new MessageChannel(); c.port1.onmessage = () => { c.port1.close(); r(); }; c.port2.postMessage(0); });
+/** bytes written to the graphics card per slice: a few milliseconds of the page's time each */
+const SLICE = 2 << 20;
 import { ClothLink, offsetTexture, slopeTextures, clothNodes } from "./cloth";
 import type { FlatLay, LookNodes, Side } from "./flat";
 
@@ -239,23 +244,55 @@ export class Raster {
   }
 
   /**
-   * A picture as a texture, decoded in a Worker into raw bytes and uploaded as a plain buffer copy (an image upload
-   * can hold the page while the graphics process converts it); the ordinary image path where the browser can't.
-   * Same filters either way (the default mipmapped ones), so swapping one for another never changes a shader.
+   * A picture as a texture, every texel exactly as the file stores it. Decoded in a Worker into raw bytes, with its
+   * mip chain (made there too, box-filtered as light), then written to the graphics card a slice at a time between
+   * frames: no single moment on the page's thread, however big the picture. The texture is handed back only once
+   * every level is in, so what's drawn is never part-written. Where the renderer isn't WebGPU it's a plain data
+   * texture (the GPU makes its mips), and the ordinary image path where the browser can't decode to bytes.
+   * Same filters every way, so swapping one print for another never changes a shader.
    */
-  private async picture(url: string) {
-    const raw = await rawImage(url);
-    if (!raw) return new THREE.Texture(await bitmap(url));
-    const t = new THREE.DataTexture(raw.data, raw.width, raw.height, THREE.RGBAFormat, THREE.UnsignedByteType);
-    t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
+  private async picture(url: string, srgb: boolean, mips = true) {
+    const dev = this.device();
+    const raw = await rawImage(url, dev && mips ? (srgb ? "srgb" : "plain") : "none");
+    let t: THREE.Texture;
+    if (!raw) t = new THREE.Texture(await bitmap(url));
+    else if (dev) t = await this.stream(dev, mips ? raw.levels : [raw.levels[0]], srgb);
+    else t = new THREE.DataTexture(raw.data, raw.width, raw.height, THREE.RGBAFormat, THREE.UnsignedByteType);
+    t.flipY = false; t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+    t.magFilter = THREE.LinearFilter; t.minFilter = mips ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
+    t.generateMipmaps = mips && !(t as THREE.ExternalTexture).isExternalTexture;
+    // the print stays crisp across the cloth as it turns away: full anisotropic filtering
+    t.anisotropy = mips ? this.maxAniso : 1;
+    // set once, before anything draws with it (a texture of the card's own is never re-uploaded)
+    t.needsUpdate = true;
     return t;
   }
-  private async tx(name: string, srgb: boolean) {
-    const t = await this.picture(ASSET + name);
-    t.flipY = false; t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
-    // the print stays crisp across the cloth as it turns away: full anisotropic filtering
-    t.anisotropy = this.maxAniso; t.needsUpdate = true; return t;
+  private device(): GPUDevice | null {
+    return this.isWebGPU ? (this.renderer.backend as unknown as { device?: GPUDevice }).device ?? null : null;
   }
+  /** levels (largest first) into a texture of the card's own, smallest first, SLICE bytes per task */
+  private async stream(dev: GPUDevice, levels: Level[], srgb: boolean) {
+    const g = dev.createTexture({
+      size: [levels[0].width, levels[0].height], mipLevelCount: levels.length,
+      format: srgb ? "rgba8unorm-srgb" : "rgba8unorm", usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+    let sent = 0;
+    try {
+      for (let m = levels.length - 1; m >= 0; m--) {
+        const { data, width, height } = levels[m], row = width * 4, rows = Math.max(1, Math.floor(SLICE / row));
+        for (let y = 0; y < height; y += rows) {
+          const h = Math.min(rows, height - y);
+          dev.queue.writeTexture({ texture: g, mipLevel: m, origin: [0, y] }, data as Uint8Array<ArrayBuffer>, { offset: y * row, bytesPerRow: row, rowsPerImage: h }, [width, h]);
+          if ((sent += h * row) >= SLICE) { sent = 0; await breathe(); }
+        }
+      }
+    } catch (e) { g.destroy(); throw e; }
+    const t = new THREE.ExternalTexture(g);
+    // three never frees a texture it didn't make: this one goes when the texture is disposed
+    t.addEventListener("dispose", () => g.destroy());
+    return t;
+  }
+  private async tx(name: string, srgb: boolean) { return this.picture(ASSET + name, srgb); }
   /** the back and chest prints for one design in one colourway, at print resolution, loaded once */
   private async look(design: string, t: "black" | "cream") {
     const key = `${design}-${t}`;
@@ -296,14 +333,7 @@ export class Raster {
     if (want && this.nodes.back.value !== want) this.nodes.back.value = want;
   }
   current = "";
-  async printTexture(url: string, mips: boolean) {
-    const t = await this.picture(url);
-    t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.magFilter = THREE.LinearFilter;
-    if (mips) { t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.anisotropy = this.maxAniso; }
-    else { t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.anisotropy = 1; }
-    t.needsUpdate = true;
-    return t;
-  }
+  async printTexture(url: string, mips: boolean) { return this.picture(url, true, mips); }
 
   private nodes: { back: ReturnType<typeof texture>; front: ReturnType<typeof texture>; normal: ReturnType<typeof texture> } | null = null;
   private normals: Record<string, THREE.Texture> = {};
