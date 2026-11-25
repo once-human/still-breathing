@@ -948,7 +948,7 @@ def build_show():
             me = bpy.data.meshes.new("swag"); me.from_pydata(vv[fr_].astype(np.float32).tolist(), [], ff.tolist())
             me.shade_smooth(); me.materials.append(fab); SWAGS.append((me, vv))
             o = bpy.data.objects.new("swag", me); col.objects.link(o); o.location = (CX, CY, 0)
-            o.modifiers.new("smooth", "SUBSURF").levels = 1   # the sim's grid rounded once more: soft folds, no facets
+            sm_ = o.modifiers.new("smooth", "SUBSURF"); sm_.levels = sm_.render_levels = 1   # the sim's grid rounded once more: soft folds, no facets
     TZ = 16.0                                                           # the trusses over the canopy
     # the rigging lines, each from its pick-up up to the truss; the pick-up's end moves with the winch (FRAMES)
     lv, lf = [], []
@@ -1224,57 +1224,48 @@ r.threads_mode = "AUTO"
 import numpy as np
 
 
-def read_exr(out):
-    im = bpy.data.images.load(out); w, h = im.size
-    px = np.empty(w * h * 4, np.float32); im.pixels.foreach_get(px); bpy.data.images.remove(im)
-    return px.reshape(h, w, 4)[::-1, :, :3], w, h
-
-
-# MASK=1: where the people are, and how far: a second, quick render of the same rows with every surface black but the
-# people (Object Index 1), who glow 1 with their distance in green. stage_post.py blurs the people by it, as a lens
-# would blur them, and leaves everything else sharp. Haze and lights are off for it; the cloth stays, so a person
-# behind it is behind it.
 MASK = os.environ.get("MASK") == "1"
-if MASK:
-    mk = bpy.data.materials.new("mask"); mk.use_nodes = True; nt_ = mk.node_tree; N_ = nt_.nodes
-    for n_ in list(N_):
-        if n_.type != "OUTPUT_MATERIAL": N_.remove(n_)
-    oi = N_.new("ShaderNodeObjectInfo"); lp = N_.new("ShaderNodeLightPath")
-    gt = N_.new("ShaderNodeMath"); gt.operation = "GREATER_THAN"; gt.inputs[1].default_value = 0.5
-    nt_.links.new(oi.outputs["Object Index"], gt.inputs[0])
-    dz = N_.new("ShaderNodeMath"); dz.operation = "MULTIPLY"; nt_.links.new(gt.outputs[0], dz.inputs[0])
-    dz2 = N_.new("ShaderNodeMath"); dz2.operation = "MULTIPLY"; dz2.inputs[1].default_value = 0.01   # metres / 100
-    nt_.links.new(lp.outputs["Ray Length"], dz2.inputs[0]); nt_.links.new(dz2.outputs[0], dz.inputs[1])
-    cc = N_.new("ShaderNodeCombineXYZ"); nt_.links.new(gt.outputs[0], cc.inputs[0]); nt_.links.new(dz.outputs[0], cc.inputs[1])
-    em_ = N_.new("ShaderNodeEmission"); nt_.links.new(cc.outputs[0], em_.inputs["Color"])
-    nt_.links.new(em_.outputs[0], N_["Material Output"].inputs["Surface"])
-    MASK_OFF = [o for o in sc.objects if o.type == "LIGHT" or any(s_.material and s_.material.name.startswith("haze") for s_ in getattr(o, "material_slots", []))]
+if MASK:   # the people's mask comes with the picture: its object index and depth passes, in the same file
+    vl_ = sc.view_layers[0]; vl_.use_pass_object_index = True; vl_.use_pass_z = True
+    r.use_compositing = False; r.image_settings.media_type = "MULTI_LAYER_IMAGE"
+    r.image_settings.file_format = "OPEN_EXR_MULTILAYER"; r.image_settings.color_depth = "16"
 
 
-def render_mask(out):
-    """the people's mask and distance for the strip just drawn: <out>-mask.npy (h, w, 2) float16"""
-    keep_ = dict(world=sc.world, samples=cy.samples, dn=cy.use_denoising, ad=cy.use_adaptive_sampling, mb=cy.max_bounces,
-                 ov=bpy.context.view_layer.material_override, hide=[o.hide_render for o in MASK_OFF])
-    w_ = bpy.data.worlds.new("black"); sc.world = w_
-    cy.samples = 16; cy.use_denoising = False; cy.use_adaptive_sampling = False; cy.max_bounces = 0
-    bpy.context.view_layer.material_override = mk
-    for o in MASK_OFF: o.hide_render = True
-    mo = out.rsplit(".", 1)[0] + "-mask.exr"
-    r.filepath = mo; bpy.ops.render.render(write_still=True)
-    px, w, h = read_exr(mo)
-    np.save(mo.rsplit(".", 1)[0] + ".npy", px[..., :2].astype(np.float16))
-    sc.world = keep_["world"]; cy.samples = keep_["samples"]; cy.use_denoising = keep_["dn"]
-    cy.use_adaptive_sampling = keep_["ad"]; cy.max_bounces = keep_["mb"]; bpy.context.view_layer.material_override = keep_["ov"]
-    for o, h_ in zip(MASK_OFF, keep_["hide"]): o.hide_render = h_
-    print("mask", mo, "people", round(float((px[..., 0] > 0.5).mean()), 3), flush=True)
+def read_exr(out):
+    """the strip just drawn, top row first: its colour, and with MASK its passes by name ({'Depth': (h, w), ...})"""
+    import OpenImageIO as oiio
+    inp = oiio.ImageInput.open(out); parts = {}; i = 0
+    while inp.seek_subimage(i, 0):
+        sp = inp.spec(); a_ = inp.read_image(i, 0, 0, sp.nchannels, oiio.FLOAT).reshape(sp.height, sp.width, sp.nchannels)
+        name = sp.channelnames[0].rsplit(".", 1)[0].split(".")[-1] if "." in sp.channelnames[0] else "Combined"
+        parts.setdefault(name, a_); i += 1
+    inp.close()
+    px = parts.pop("Combined"); h, w = px.shape[:2]
+    return px[..., :3].copy(), w, h, {k_: v_[..., 0] for k_, v_ in parts.items()}
+
+
+# MASK=1: where the people are (Object Index 1, stage_post.py blurs them as a lens would and leaves everything else
+# sharp) and how far, from the main render's own passes. Grown by two pixels, so the soft edge where a person meets
+# what is behind them is the person's too (taking the nearest person's distance); the cloth stays in front, so a
+# person behind it is behind it. Saved as <out>-mask.npy (h, w, 2) float16: (mask, mask * metres / 100)
+def save_mask(out, passes):
+    m = (passes["Object Index"] > 0.5).astype(np.float32); z = np.where(m > 0, passes["Depth"], 1e4).astype(np.float32)
+    for _ in range(2):
+        mp = np.pad(m, 1); zp = np.pad(z, 1, constant_values=1e4)
+        m = np.max([mp[1 + dy:mp.shape[0] - 1 + dy, 1 + dx:mp.shape[1] - 1 + dx] for dy in (-1, 0, 1) for dx in (-1, 0, 1)], 0)
+        z = np.min([zp[1 + dy:zp.shape[0] - 1 + dy, 1 + dx:zp.shape[1] - 1 + dx] for dy in (-1, 0, 1) for dx in (-1, 0, 1)], 0)
+    z = np.where(m > 0, np.minimum(z, 1e3), 0)
+    np.save(out.rsplit(".", 1)[0] + "-mask.npy", np.stack([m, m * z / 100], -1).astype(np.float16))
+    print("mask", out, "people", round(float(m.mean()), 3), flush=True)
 
 
 def render_to(out):
     r.filepath = out; bpy.ops.render.render(write_still=True)
-    px, w, h = read_exr(out)
+    px, w, h, passes = read_exr(out)
     np.save(out.rsplit(".", 1)[0] + ".npy", px.astype(np.float16))
     print("saved", PLACE, out, "strip", STRIP, "of", STRIPS, w, "x", h, flush=True)
-    if MASK: render_mask(out)
+    if MASK: save_mask(out, passes)
+    os.remove(out)
 
 
 def set_frame(f):
