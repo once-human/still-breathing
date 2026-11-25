@@ -208,6 +208,9 @@ for pose in POSES:
     print("baked", pose, flush=True); mem("baked " + pose)
     tee.data.materials.clear(); tee.data.materials.append(outer); tee.data.materials.append(inner)
     so = tee.modifiers.new("thick", "SOLIDIFY"); so.thickness = 0.0032; so.offset = 0; so.use_even_offset = True; so.material_offset = 1
+    # even thickness pushes a vertex at a very tight corner out by many times the thickness (the spike off his
+    # sleeve): never further than twice the edges round it
+    so.thickness_clamp = 2.0
     if "stiff" in tee.vertex_groups: so.vertex_group = "stiff"; so.thickness_vertex_group = 0.5
     sub = tee.modifiers.new("sub", "SUBSURF"); sub.levels = 1
     # plain Catmull-Clark: the limit-surface evaluator needs ~3 GB on this mesh and killed 7 GB CI runners
