@@ -2,12 +2,14 @@
 # skin.py paints its strands). Our own, from the head itself (no hair asset):
 #   - a shell over the scalp: the scalp's faces lifted off the head along their normals by the hair's depth, which
 #     runs to nothing at its edge (just under the skin there, so the painted hairline carries on past it)
-#   - him: a short textured crop, about 1.3 cm on top, the sides and back faded to the skin (skin.py's painted
+#   - him: a short textured crop, about 1 cm on top, the sides and back faded to the skin (skin.py's painted
 #     fade), loose tufts on top; the strands from the crown forward and out
 #   - her: sleek, pulled back from the hairline into a low bun at the back of the head (hair about 6 mm deep);
-#     the bun a coil of hair, its strands wound round it
+#     the bun a rounded knot with the coil's groove running round it, its strands wound in toward the middle
+#   the depth eases in over 2 cm from the hair's edge (measured over the head), so it rises out of the painted
+#   hairline with no step
 # Each vertex of the hair carries the way its strands lie ("flow", along the surface) for skin.py.
-import math
+import heapq, math
 import bmesh
 from mathutils import Vector, noise
 
@@ -37,32 +39,34 @@ def grow(b, SRC, wt, she, eyeL, eyeR, mouth):
     head = [v for v in b.verts if v.co.z > mouth.z - 0.03 and abs(v.co.x) < 0.14]
     top = max(head, key=lambda v: v.co.z).co.copy()
 
-    # the hair's depth at each vertex of the head (metres; 0 = none)
+    # the hair's depth at each vertex of the head (metres; 0 = none), before it is eased in from its edge
     def depth(v):
         p = v.co; s = wt(v[SRC], "scalp")
-        if s < 0.3: return 0.0
-        dy = p.y - mouth.y
-        front = 1 - sm(0.05, 0.1, dy)                       # the face side of the head
-        earD = min(((p - e) * Vector((1, 1, 0.7))).length for e in ears)
-        if she:
-            hz = eyeZ + 0.046
-            d = 0.0065 * (1 - front * (1 - sm(hz, hz + 0.022, p.z)))
-            d *= sm(mouth.z - 0.02, mouth.z + 0.02, p.z) * sm(0.022, 0.04, earD)
-        else:
-            hz = eyeZ + 0.054
-            d = 0.013 * (1 - front * (1 - sm(hz, hz + 0.026, p.z)))
-            d *= sm(eyeZ + 0.068, eyeZ + 0.105, p.z)          # the sides and back faded to the skin
-            d *= 1 + 0.28 * noise.noise(p * 70.0) + 0.12 * noise.noise(p * 160.0)   # tufts
-        return max(0.0, d * sm(0.3, 0.6, s))
+        if s < 0.5: return 0.0
+        if she: return 0.006
+        d = 0.0095 * sm(eyeZ + 0.07, eyeZ + 0.1, p.z)          # the sides and back faded to the skin
+        return d * (1 + 0.15 * noise.noise(p * 70.0) + 0.07 * noise.noise(p * 160.0))   # loose tufts
 
     D = {v.index: depth(v) for v in head}
     shell = [f for f in b.faces if all(D.get(v.index, 0.0) > 0.0 for v in f.verts)]
+    # eased in from the edge over the surface (2 cm), so it rises out of the painted hairline with no step
+    inshell = set(shell); sv = {v for f in shell for v in f.verts}
+    edge = {v for f in shell for e in f.edges if sum(1 for g in e.link_faces if g in inshell) == 1 for v in e.verts}
+    G = {v: (0.0 if v in edge else math.inf) for v in sv}
+    pq = [(0.0, v.index, v) for v in edge]; heapq.heapify(pq)
+    while pq:
+        d, _, v = heapq.heappop(pq)
+        if d > G[v]: continue
+        for e in v.link_edges:
+            o = e.other_vert(v)
+            if o in G and d + e.calc_length() < G[o]: G[o] = d + e.calc_length(); heapq.heappush(pq, (G[o], o.index, o))
+    for v in sv: D[v.index] *= sm(0.0, 0.02, G[v])
     # the bun's middle (hers): low at the back of the head, at about the bottom of the ears
     if she:
         zb = (ears[0].z + ears[1].z) / 2 - 0.012
         back = max((v for v in head if abs(v.co.z - zb) < 0.012 and abs(v.co.x) < 0.02), key=lambda v: v.co.y)
         bn = Vector((0, 1, -0.35)).normalized()
-        bc = back.co + bn * 0.02
+        bc = back.co + bn * 0.013
     crown = top + Vector((0, 0.035, -0.012))
 
     def flow_at(p, n):
@@ -90,34 +94,40 @@ def grow(b, SRC, wt, she, eyeL, eyeR, mouth):
     bmesh.ops.delete(b, geom=loose, context="VERTS")
 
     if she:
-        # the bun: a coil, a little flattened against the head; strands wound round it at 35 degrees
-        R, r, NU, NV = 0.026, 0.016, 48, 16
-        ax = bn; t1 = ax.cross(Vector((1, 0, 0))).normalized(); t2 = ax.cross(t1)
-        ring = []
+        # the bun: hair wound into a low knot, a rounded mound flattened against the head (3 cm out each side,
+        # 2.6 cm up and down, 2 cm off the head), the coil showing as a groove running round it to the middle;
+        # its strands wind round it, drawn in toward the middle
+        Ra, Rx, Rv, NU, NV = 0.02, 0.03, 0.026, 40, 18
+        tx = Vector((1, 0, 0)); tv = bn.cross(tx).normalized()
+        def at(ph, th):
+            q = bc + bn * (math.cos(th) * Ra) + (tx * (math.cos(ph) * Rx) + tv * (math.sin(ph) * Rv)) * math.sin(th)
+            nrm = (bn * (math.cos(th) / Ra) + (tx * (math.cos(ph) / Rx) + tv * (math.sin(ph) / Rv)) * math.sin(th)).normalized()
+            q += nrm * (0.0016 * math.sin(2.0 * ph + 9.0 * th) + 0.0008 * noise.noise(q * 120.0))
+            around = (tx * (-math.sin(ph) * Rx) + tv * (math.cos(ph) * Rv)).normalized()
+            inward = -(bn * (-math.sin(th) * Ra) + (tx * (math.cos(ph) * Rx) + tv * (math.sin(ph) * Rv)) * math.cos(th)).normalized()
+            return q, (around * math.cos(math.radians(28)) + inward * math.sin(math.radians(28))).normalized()
+        Rm = (Rx + Rv) / 2
+        def vert(q, f):
+            v = b.verts.new(q); v[SRC] = -1; v[fl] = f; return v
+        pole = vert(*at(0.0, 0.0))
+        rows = [[vert(*at(2 * math.pi * i / NU, math.pi * 0.62 * (j + 1) / NV)) for i in range(NU)] for j in range(NV)]
+        bun = []
+        def face(vs, uvs):
+            nf = b.faces.new(vs)
+            for l, (u_, w_) in zip(nf.loops, uvs): l[uvl].uv = (u_ * Rm + 3.0, w_ * Rm + 3.0)
+            nf[hl] = 1; nf.smooth = True; bun.append(nf)
+        dth = math.pi * 0.62 / NV
         for i in range(NU):
-            th = 2 * math.pi * i / NU
-            c0 = bc + (t1 * math.cos(th) + t2 * math.sin(th)) * R
-            rad = (t1 * math.cos(th) + t2 * math.sin(th))
-            row = []
-            for j in range(NV):
-                ph = 2 * math.pi * j / NV
-                q = c0 + (rad * math.cos(ph) + ax * math.sin(ph) * 0.8) * r
-                q += (q - bc).normalized() * 0.0015 * noise.noise(q * 90.0)
-                v = b.verts.new(q); v[SRC] = -1
-                tang = (-t1 * math.sin(th) + t2 * math.cos(th))
-                tw = (-rad * math.sin(ph) + ax * math.cos(ph))
-                v[fl] = (tang * math.cos(math.radians(35)) + tw * math.sin(math.radians(35))).normalized()
-                row.append(v)
-            ring.append(row)
-        for i in range(NU):
-            for j in range(NV):
-                i2, j2 = (i + 1) % NU, (j + 1) % NV
-                nf = b.faces.new([ring[i][j], ring[i2][j], ring[i2][j2], ring[i][j2]])
-                # UVs in metres (packing evens the scale); the seams are where i or j wraps
-                us = [i, i + 1, i + 1, i]; vs = [j, j, j + 1, j + 1]
-                for l, u_, w_ in zip(nf.loops, us, vs):
-                    l[uvl].uv = (u_ * 2 * math.pi * R / NU + 2.0, w_ * 2 * math.pi * r / NV + 2.0)
-                nf[hl] = 1; nf.smooth = True; new.append(nf)
-        bmesh.ops.recalc_face_normals(b, faces=new[-NU * NV:])     # a closed coil: all of it facing out
+            i2 = (i + 1) % NU; a0, a1 = 2 * math.pi * i / NU, 2 * math.pi * (i + 1) / NU
+            face([pole, rows[0][i], rows[0][i2]], [((a0 + a1) / 2, 0.0), (a0, dth), (a1, dth)])
+            for j in range(NV - 1):
+                face([rows[j][i], rows[j + 1][i], rows[j + 1][i2], rows[j][i2]],
+                     [(a0, dth * (j + 1)), (a0, dth * (j + 2)), (a1, dth * (j + 2)), (a1, dth * (j + 1))])
+        bmesh.ops.recalc_face_normals(b, faces=bun)
+        bun[0].normal_update()
+        if bun[0].normal.dot(bn) < 0:                        # the outer pole faces away from the head
+            bmesh.ops.reverse_faces(b, faces=bun)
+        # its open side, 0.62 of the way round, lies under the hair on the head
+        new += bun
     b.normal_update()
     return len(new), len(under)

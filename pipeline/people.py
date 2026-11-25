@@ -299,6 +299,10 @@ for o in [art] + eyes:
     o.modifiers.new("Armature", "ARMATURE").object = newrig
 for o in [art] + eyes:
     for p in o.data.polygons: p.use_smooth = True
+# the regions skin.py and hair.py paint by, found on the artist's own mesh (regions.py), not carried from MakeHuman
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import regions
+regions.mark(art, eyes, SEX == "female", newrig)
 art["sex"] = SEX; art["height"] = HEIGHT; art["offset"] = (float(-cx), 0.0, float(-zmin)); art["scale"] = float(k)
 bpy.ops.wm.save_as_mainfile(filepath=OUT, compress=True)
 print("saved", OUT, flush=True)

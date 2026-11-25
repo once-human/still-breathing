@@ -146,12 +146,29 @@ def close_edges(bm, passes=8):
                 if not o.is_boundary: o.co += d * 0.5
     print("edges closed", moved, flush=True)
 
+def strays(bm, far=0.025, passes=4):
+    """A particle the simulation flung out (one vertex dragged centimetres from its neighbours, a spike from a
+    sleeve) is put back among them: the cloth's own edges are millimetres long, so nothing real sits this far
+    from the middle of the vertices round it."""
+    moved = 0
+    for _ in range(passes):
+        n = 0
+        for v in bm.verts:
+            ns = [e.other_vert(v).co for e in v.link_edges]
+            if len(ns) < 2: continue
+            m = sum(ns, v.co * 0) / len(ns)
+            if (v.co - m).length > far: v.co = m.copy(); n += 1
+        moved += n
+        if not n: break
+    print("strays put back", moved, flush=True)
+
+
 for pose in POSES:
     tee = bpy.data.objects[f"tee_{pose}"]; go(tee["frame"])
     for o in sc.objects:
         if o.name.startswith("tee"): o.hide_render = o is not tee
     bm = bmesh.new(); bm.from_mesh(tee.data); bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=0.0008)
-    close_edges(bm)
+    strays(bm); close_edges(bm)
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces); bm.to_mesh(tee.data); bm.free()
     if PROXY and pose == "stand":
         select_only(tee); glb(os.path.join(OUT, "proxy.glb"), export_draco_mesh_compression_enable=False)

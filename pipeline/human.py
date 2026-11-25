@@ -91,6 +91,7 @@ CURL = {2: (16, 17, 8), 3: (20, 21, 10), 4: (24, 25, 12), 5: (28, 27, 14)}    # 
 for side, s in (("L", 1), ("R", -1)):
     e = EASE[side]
     aim(rig.pose.bones["lowerarm01." + side], Vector((s * e["fore"][0], e["fore"][1], e["fore"][2])), "lowerarm02." + side)
+    if HBM: continue       # the artist sculpted the hands relaxed: they stay as made (the fitted finger bones are rough)
     aim(rig.pose.bones["wrist." + side], Vector((s * e["wrist"][0], e["wrist"][1], e["wrist"][2])))
     upd()
     B = rig.pose.bones
@@ -366,6 +367,7 @@ GY, GX, GV = np.concatenate(GY), np.concatenate(GX), np.concatenate(GV)
 print("skin texels", len(GY), "of", RES * RES, flush=True)
 LM = {k: list(v) for k, v in dict(eyeL=eyeL, eyeR=eyeR, mouth=mouth, jaw=jaw, head=head).items()}
 LM["female"] = [1.0 if body.get("sex") == "female" else 0.0]
+LM["hbm"] = [1.0 if HBM else 0.0]
 for sd in ("L", "R"):
     for n_ in ["lowerarm01", "wrist"] + HANDB[1:]:
         LM[f"{n_}.{sd}"] = [list(B_[f"{n_}.{sd}"].head), list(B_[f"{n_}.{sd}"].tail)]
@@ -459,6 +461,55 @@ else:
     v[el] = (c.x, c.y, c.z, 1.0)
 
 
+# ---------- how it moves: weights for the 3D view's idle motion ----------
+# The view keeps the person alive with a few slow turns about fixed joints (breath, the head, each arm from the
+# shoulder, forearm from the elbow, hand from the wrist; the whole body swaying over the feet). Each vertex
+# carries how much of each it follows, from the rig's own skin weights (so the shoulder and the elbow bend as
+# they do when posed), in five float attributes (the side, left or right, is the sign of x). The joints go with
+# the skin object as extras ("motion", glTF's y-up frame).
+def chain(n):
+    return {n} | {c.name for c in rig.data.bones[n].children_recursive} if n in rig.data.bones else set()
+
+
+GI = {g.index: g.name for g in body.vertex_groups}
+HEADS = chain("neck03") | chain("head")
+ARMS = {sd: chain("upperarm01." + sd) for sd in "LR"}
+FORES = {sd: chain("lowerarm01." + sd) for sd in "LR"}
+HANDS = {sd: chain("wrist." + sd) for sd in "LR"}
+TORSO = {n for n in ("spine01", "spine02", "spine03", "spine04", "spine05", "breast.L", "breast.R", "pectoral.L",
+                     "pectoral.R", "clavicle.L", "clavicle.R", "shoulder01.L", "shoulder01.R") if n in rig.data.bones}
+MOT = ("_breath", "_head", "_arm", "_fore", "_hand")
+
+
+def motion_of(i, co, n):
+    w = {GI[g]: x for g, x in W[i].items() if g in GI}
+    sd = "L" if co.x > 0 else "R"
+    head = sum(x for k, x in w.items() if k in HEADS) + 0.5 * w.get("neck02", 0.0)
+    arm = sum(x for k, x in w.items() if k in ARMS[sd]) + 0.35 * w.get("shoulder01." + sd, 0.0)
+    fore = sum(x for k, x in w.items() if k in FORES[sd]); hand = sum(x for k, x in w.items() if k in HANDS[sd])
+    torso = sum(x for k, x in w.items() if k in TORSO)
+    breath = torso * (0.45 + 0.55 * max(0.0, n.dot(fwd)))
+    return [min(1.0, x) for x in (breath, head, arm, fore, hand)]
+
+
+def weigh(b, src=None, const=None):
+    lays = [b.verts.layers.float.new(k) for k in MOT]
+    for v in b.verts:
+        vals = const if const else (motion_of(v[src], v.co, v.normal) if v[src] >= 0 else [0, 1, 0, 0, 0])
+        for l, x in zip(lays, vals): v[l] = x
+
+
+weigh(skin, SRC)
+if hairb: weigh(hairb, const=[0, 1, 0, 0, 0])
+weigh(eyes, const=[0, 1, 0, 0, 0])
+if jeans: weigh(jeans, const=[0, 0, 0, 0, 0])
+gl = lambda p: [round(p.x, 4), round(p.z, 4), round(-p.y, 4)]
+MOTION = {"neck": gl(bone("neck02")), "feet": gl((bone("foot.L") + bone("foot.R")) / 2)}
+for sd in "LR":
+    MOTION["shoulder." + sd] = gl(bone("upperarm01." + sd)); MOTION["elbow." + sd] = gl(bone("lowerarm01." + sd))
+    MOTION["wrist." + sd] = gl(bone("wrist." + sd))
+
+
 # ---------- out ----------
 def obj(name, b, sub=1):
     m = bpy.data.meshes.new(name); b.to_mesh(m); b.free()
@@ -473,11 +524,12 @@ def obj(name, b, sub=1):
 
 outs = [obj("skin", skin, 0 if HBM else 1)] + ([obj("jeans", jeans, 0 if HBM else 1)] if jeans else []) + [obj("eyes", eyes)] \
     + ([obj("hair", hairb, 0)] if hairb else [])
+outs[0]["motion"] = json.dumps(MOTION)
 for o in list(sc.objects):
     if o not in outs: bpy.data.objects.remove(o)
 for o in outs: o.select_set(True)
 args = dict(filepath=OUT, use_selection=True, export_apply=True, export_yup=True, export_materials="EXPORT",
             export_draco_mesh_compression_enable=True, export_draco_mesh_compression_level=7, export_vertex_color="NAME", export_vertex_color_name="albedo", export_all_vertex_colors=False,
-            export_skins=False, export_animations=False, export_morph=False)
+            export_skins=False, export_animations=False, export_morph=False, export_attributes=True, export_extras=True)
 bpy.ops.export_scene.gltf(**args)
 print("saved", OUT, {o.name: len(o.data.polygons) for o in outs})
