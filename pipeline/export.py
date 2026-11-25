@@ -149,8 +149,33 @@ def close_edges(bm, passes=8):
 def strays(bm, far=0.025, passes=4):
     """A particle the simulation flung out (one vertex dragged centimetres from its neighbours, a spike from a
     sleeve) is put back among them: the cloth's own edges are millimetres long, so nothing real sits this far
-    from the middle of the vertices round it."""
+    from the middle of the vertices round it. A few flung together (a spike with a fan of its own at the tip)
+    are found as a piece of cloth joined to the rest only by edges longer than any real one: each of its vertices
+    goes back to the cloth it was torn from (the middle of the cloth's vertices it is joined to, then the middle
+    of its own neighbours already put back)."""
     moved = 0
+    long = {e for e in bm.edges if e.calc_length() > 1.2 * far}
+    seen, pieces = set(), []
+    for v in bm.verts:
+        if v in seen: continue
+        seen.add(v); stack, mem = [v], [v]
+        while stack:
+            a = stack.pop()
+            for e in a.link_edges:
+                if e in long: continue
+                o = e.other_vert(a)
+                if o not in seen: seen.add(o); stack.append(o); mem.append(o)
+        pieces.append(mem)
+    for mem in pieces:
+        if len(mem) > 300 or not any(e in long for v in mem for e in v.link_edges): continue
+        inp = set(mem); done = set()
+        for _ in range(len(mem) + 1):
+            todo = [v for v in mem if v not in done]
+            if not todo: break
+            for v in todo:
+                an = [e.other_vert(v).co for e in v.link_edges if e.other_vert(v) not in inp or e.other_vert(v) in done]
+                if an: v.co = sum(an, v.co * 0) / len(an); done.add(v)
+        moved += len(done)
     for _ in range(passes):
         n = 0
         for v in bm.verts:
