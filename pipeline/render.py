@@ -31,6 +31,18 @@ elif HALL:
         bpy.ops.file.pack_all()
         bpy.ops.wm.save_as_mainfile(filepath=os.environ["HALL_SAVE"], compress=True)
         print("hall saved", os.environ["HALL_SAVE"]); bpy.ops.wm.quit_blender()
+if HALL:
+    # stage.py keeps 1.9 m clear round the person; the camera walks a 2.8 m ring, so the crowd steps back to 3.6 m
+    # (the people only: stage.py's empties that instance a body, and the phone a few of them hold up)
+    gone = 0
+    for o in list(bpy.data.objects):
+        if o.type == "EMPTY" and o.instance_type == "COLLECTION" and o.name.startswith("p") and o.location.xy.length < 3.6:
+            bpy.data.objects.remove(o); gone += 1
+    for o in [o for o in bpy.data.objects if o.type == "MESH" and any(m and m.name.startswith("phone") for m in o.data.materials)]:
+        b_ = bmesh.new(); b_.from_mesh(o.data)
+        bmesh.ops.delete(b_, geom=[f for f in b_.faces if (o.matrix_world @ f.calc_center_median()).xy.length < 3.6], context="FACES")
+        b_.to_mesh(o.data); b_.free()
+    print("cleared round the person", gone, flush=True)
 ROOT = os.path.dirname(os.path.abspath(__file__)) if GLB else os.path.dirname(bpy.data.filepath)   # textures
 sc = bpy.context.scene
 if GLB:
