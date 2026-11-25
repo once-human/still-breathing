@@ -9,6 +9,7 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 
 ## Unreleased
 ### New
+- Worn by him or her: under the 3D view, pick who wears the tee. Two new people, both Indian, lean and athletic: him at 175 cm in M, with a textured quiff, faded sides and a short beard drawn hair by hair; her at 163 cm in S, with an open bob parted in the middle and a soft, natural hairline. Both breathe and shift their weight as they stand, and the tee is simulated on each of their own bodies.
 - On the table: the tee laid flat on a worn wooden table, lit by a window on the right whose frame throws a soft shadow across the boards. Air comes in through it, never quite straight: it dies away, breezes, builds slowly or bursts. Now and then a dry leaf (rarely a thread or a hair) drifts down or skates in; it has weight, holding until a puff beats its grip, then breaking loose, skidding and stopping again. Leaves glow a little with the light behind them. The cotton breathes with the air.
 
 ### Changed

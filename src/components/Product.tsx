@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { setFocusCity } from "@/lib/city";
 import { Viewer, warmDesign } from "@/components/Viewer";
 import { Countdown } from "@/components/Countdown";
-import { Fit, SHOP } from "@/components/Fit";
+import { Fit, SHOP, WEARERS, type Wearer } from "@/components/Fit";
 import type { Variant } from "@/lib/viewer/raster";
 import { CITIES, COLOURS, DESIGNS, SIZES, SIZE_ORDER, SHOWS, THE_TEE, type Design, type Size } from "@/content/tee";
 
@@ -16,6 +16,7 @@ export function Product() {
   const tee = DESIGNS[design].colour;
   const [size, setSize] = useState<Size>("M");
   const [variant, setVariant] = useState<Variant>(SHOP);
+  const [wearer, setWearer] = useState<Wearer>("him");
   const z = SIZES[size];
   // the whole page follows this shirt's city; a lineup-wide shirt (no city) follows the visitor's nearest show
   useEffect(() => { setFocusCity(DESIGNS[design].city ?? null); }, [design]);
@@ -23,6 +24,13 @@ export function Product() {
     <section id="studio" className="grid scroll-mt-14 grid-cols-1 gap-x-4 gap-y-8 px-4 md:grid-cols-12">
       <div className="md:col-span-7 lg:col-span-6 lg:col-start-2">
         <Viewer design={design} tee={tee} variant={variant} />
+        <div className="mt-2 flex items-baseline gap-4 text-[13px]" role="group" aria-label="Worn by">
+          <span className="text-quiet">worn by</span>
+          {(Object.keys(WEARERS) as Wearer[]).map((w) => (
+            <button key={w} onClick={() => setWearer(w)} aria-pressed={w === wearer}
+              className={`hit ${w === wearer ? "border-b border-blue font-semibold text-ink" : "text-quiet hover:text-ink"}`}>{w}</button>
+          ))}
+        </div>
       </div>
       <div className="md:col-span-5 lg:col-span-4 lg:col-start-9">
         <div className="md:sticky md:top-16">
@@ -67,7 +75,7 @@ export function Product() {
             <p className="mt-2 text-[12px] text-quiet">measured on the garment, around the chest. it&apos;s cut big: most people take their usual size.</p>
           </div>
 
-          <Fit size={size} onVariant={setVariant} />
+          <Fit size={size} shop={WEARERS[wearer]} onVariant={setVariant} />
 
           <div className="mt-8 border-t border-line pt-1.5 text-[13px]">
             <p className="text-quiet">the shows</p>

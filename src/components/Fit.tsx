@@ -23,8 +23,14 @@ const SKINS: { name: string; lin: V3; hex: string }[] = [
   { name: "deep", lin: [0.15, 0.078, 0.045], hex: "#6a4a37" },
 ];
 const POSES: { id: Pose; label: string }[] = [{ id: "stand", label: "standing" }, { id: "up", label: "hands up" }, { id: "sit", label: "sitting" }];
-/** The shop view: the tee in M, worn by someone (the 170 cm body it was simulated on, made a person) */
-export const SHOP: Variant = { dir: "m170-M", size: "M", pose: "stand", body: false, person: "/tee/human/m170-stand.glb" };
+/** Who wears the tee in the shop view: him (175 cm, the tee in M) or her (163 cm, in S), each the tee simulated on
+ * their own body (pipeline/people.py, human.py) */
+export const WEARERS = {
+  him: { dir: "hm175-M", size: "M", pose: "stand", body: false, person: "/tee/human/hm175-M-stand.glb", still: "" },
+  her: { dir: "hf163-S", size: "S", pose: "stand", body: false, person: "/tee/human/hf163-S-stand.glb" },
+} satisfies Record<string, Variant>;
+export type Wearer = keyof typeof WEARERS;
+export const SHOP: Variant = WEARERS.him;
 
 type FitData = {
   size: string; body: { height_cm: number; chest_cm: number }; chest_ease_cm: number;
@@ -70,7 +76,7 @@ function words(f: FitData, pose: Pose): string[] {
  * Fit mode: tell it roughly who you are, and the tee is shown sewn onto the nearest of five simulated Indian
  * bodies, in your size, standing, with hands up at the show, or sitting.
  */
-export function Fit({ size, onVariant }: { size: Size; onVariant: (v: Variant) => void }) {
+export function Fit({ size, shop = SHOP, onVariant }: { size: Size; shop?: Variant; onVariant: (v: Variant) => void }) {
   const [on, setOn] = useState(false);
   const [sex, setSex] = useState<"m" | "f">("m");
   const [height, setHeight] = useState(170);
@@ -88,8 +94,8 @@ export function Fit({ size, onVariant }: { size: Size; onVariant: (v: Variant) =
   useEffect(() => { if (on && !index) fetch(asset("/tee/fit/index.json")).then((r) => r.json()).then(setIndex).catch(() => setIndex({})); }, [on, index]);
   const seat = data?.poses.sit?.seat_cm;
   useEffect(() => {
-    onVariant(on ? { dir, size: shown, pose, body: true, skin: SKINS[skin].lin, seat: seat ? seat / 100 : undefined } : SHOP);
-  }, [on, dir, shown, pose, skin, seat]); // eslint-disable-line react-hooks/exhaustive-deps
+    onVariant(on ? { dir, size: shown, pose, body: true, skin: SKINS[skin].lin, seat: seat ? seat / 100 : undefined } : shop);
+  }, [on, dir, shown, pose, skin, seat, shop]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="mt-8 border-t border-line pt-1.5 text-[13px]">

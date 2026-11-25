@@ -22,7 +22,9 @@ export type Pose = "stand" | "up" | "sit";
  * `body` shows fit mode's plain body; `person` is someone wearing it (a GLB from pipeline/human.py: painted skin,
  * jeans, eyes, the same body in the same pose the tee was simulated on).
  */
-export type Variant = { dir: string; size: string; pose: Pose; body: boolean; seat?: number; skin?: V3; person?: string };
+/** `still`: where this person's rendered frames at the show are (public/tee/still/<design>/<still>/, "" the design's
+ * own folder); none rendered yet, none shown */
+export type Variant = { dir: string; size: string; pose: Pose; body: boolean; seat?: number; skin?: V3; person?: string; still?: string };
 export const FABRIC: Record<"black" | "cream", V3> = { black: srgbToLinear(0x151515), cream: srgbToLinear(0xfffae7) };
 
 function srgbToLinear(hex: number): V3 {

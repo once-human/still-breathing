@@ -101,7 +101,7 @@ const PHOTO_SPP = 64;
 // GPU time the background tracer may use per frame, and the full-sample cost past which it isn't worth it
 const TRACE_MS = 3;
 const SLOW_MS = 600;
-const STILL = (d: string, a: number) => asset(`/tee/still/${d}/a${a}.webp`);
+const STILL = (d: string, a: number, who = "") => asset(`/tee/still/${d}${who ? `/${who}` : ""}/a${a}.webp`);
 /** the tee on its own on the paper (the studio stills: front, ¾ at 35°, back), for the views without a person */
 const TEE_STILLS = [{ v: "front", a: 0 }, { v: "q", a: 35 }, { v: "back", a: 180 }];
 const TEE_STILL = (d: string, v: string) => asset(`/tee/still/${d}/tee/${v}.webp`);
@@ -754,7 +754,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
     const sh = shotRef.current, v = variantRef.current;
     let still: string | null = null, a: number | null = null;
     if (sh.id === "tee") { const x = nearestTee(e.yaw()); a = TEE_STILLS.find((t) => t.v === x)!.a; still = TEE_STILL(design, x); }
-    else if (sh.id === "worn" && sceneRef.current === "show" && v.person && !v.body) { a = nearest(e.yaw()); still = STILL(design, a); }
+    else if (sh.id === "worn" && sceneRef.current === "show" && v.person && !v.body && v.still !== undefined) { a = nearest(e.yaw()); still = STILL(design, a, v.still); }
     void veiled("shirt", async () => { await e.setLook(design, tee); if (a !== null) e.setYaw(a); }, still)
       .then((last) => { if (last) void capture(); });
   }, [design, tee]); // eslint-disable-line react-hooks/exhaustive-deps

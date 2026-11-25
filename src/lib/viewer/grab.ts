@@ -29,7 +29,7 @@ export function prefetchTee(v: { dir: string; size: string; pose: string; body: 
     `${A}${v.dir}/${v.pose}.glb`, `${A}tex/print-back-${design}-${tee}.webp`, `${A}tex/print-front-${tee}.webp`,
     `${A}tex/normal-${v.size}.png`, `${A}tex/knit-normal.png`, "/draco/draco_wasm_wrapper.js", "/draco/draco_decoder.wasm",
   ];
-  if (v.person) urls.push(v.person, v.person.replace(/\.glb$/, "-skin.webp"), v.person.replace(/\.glb$/, "-skin-n.webp"));
+  if (v.person) urls.push(v.person, v.person.replace(/\.glb$/, "-skin.webp"), v.person.replace(/\.glb$/, "-skin-n.webp"), v.person.replace(/\.glb$/, "-hair.webp"));
   else if (v.body) urls.push(`${A}${v.dir}/body-${v.pose}.glb`);
   for (const u of urls) grab(u).catch(() => {});
 }
