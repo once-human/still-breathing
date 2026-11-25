@@ -104,8 +104,9 @@ if PERSON:
             po.data.materials[i] = pm
         po.location.z += LIFT
     tee.location.z += LIFT
-# ---- TROUSERS=<blend> (trousers.py): the draped trousers in place of the person's own; raw indigo denim under the
-# off-white tee, light stone cotton chinos under the black one, each a twill whose diagonal and yarn read up close
+# ---- TROUSERS=<blend> (trousers.py): the draped trousers in place of the person's own, in real denim: photographed
+# denim from Poly Haven (CC0, pipeline/denim, 27 cm of cloth per image): a dark raw indigo under the off-white tee,
+# a lighter blue wash under the black one
 if PERSON and os.environ.get("TROUSERS"):
     for po in person:
         if "jean" in po.name.lower(): po.hide_render = True
@@ -114,31 +115,26 @@ if PERSON and os.environ.get("TROUSERS"):
     trz = dst.objects[0]; sc.collection.objects.link(trz); trz.location.z += LIFT
     so_ = trz.modifiers.new("thick", "SOLIDIFY"); so_.thickness = 0.0022; so_.offset = 1
     sd_ = trz.modifiers.new("sub", "SUBSURF"); sd_.levels = sd_.render_levels = 1
-    denim = tee_col == "cream"
-    tmat = bpy.data.materials.new("denim" if denim else "chino"); tmat.use_nodes = True
+    dn = os.path.join(os.path.dirname(os.path.abspath(__file__)), "denim", "denim_fabric_03" if tee_col == "cream" else "denim_fabric_04")
+    # UVs at the cloth's own scale: one image = 27 cm of denim (a cube projection, the wales running up the leg)
+    bpy.context.view_layer.objects.active = trz
+    for o in sc.objects: o.select_set(o is trz)
+    bpy.ops.object.mode_set(mode="EDIT"); bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.uv.cube_project(cube_size=0.27, correct_aspect=True, scale_to_bounds=False)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    tmat = bpy.data.materials.new("denim"); tmat.use_nodes = True
     TN, TL = tmat.node_tree.nodes, tmat.node_tree.links; tb = TN["Principled BSDF"]
-    tco = TN.new("ShaderNodeTexCoord")
-    # the twill: diagonal wales, 1.6 mm apart on denim, 1.1 mm on chino, running up and to the left as a 3x1 twill does
-    rot = TN.new("ShaderNodeMapping"); rot.inputs["Rotation"].default_value = (0, math.radians(-63), 0)
-    TL.new(tco.outputs["Object"], rot.inputs[0])
-    wav = TN.new("ShaderNodeTexWave"); wav.wave_type = "BANDS"; wav.inputs["Scale"].default_value = 1 / (0.0016 if denim else 0.0011) / 2
-    wav.inputs["Distortion"].default_value = 0.4; TL.new(rot.outputs[0], wav.inputs["Vector"])
-    # slub: thicker and thinner stretches of the warp yarn, long and thin up the leg
-    sl = TN.new("ShaderNodeMapping"); sl.inputs["Scale"].default_value = (220, 220, 18); TL.new(tco.outputs["Object"], sl.inputs[0])
-    nz = TN.new("ShaderNodeTexNoise"); nz.inputs["Detail"].default_value = 3; TL.new(sl.outputs[0], nz.inputs["Vector"])
-    base = (0.016, 0.026, 0.06) if denim else (0.47, 0.42, 0.32)   # linear albedo
-    lo_, hi_ = (0.8, 1.25) if denim else (0.93, 1.06)
-    mr_ = TN.new("ShaderNodeMapRange"); mr_.inputs[3].default_value = lo_; mr_.inputs[4].default_value = hi_
-    TL.new(nz.outputs[0], mr_.inputs[0])
-    tw = TN.new("ShaderNodeMapRange"); tw.inputs[3].default_value = 0.9; tw.inputs[4].default_value = 1.1; TL.new(wav.outputs[0], tw.inputs[0])
-    m1 = TN.new("ShaderNodeMath"); m1.operation = "MULTIPLY"; TL.new(mr_.outputs[0], m1.inputs[0]); TL.new(tw.outputs[0], m1.inputs[1])
-    cm = TN.new("ShaderNodeVectorMath"); cm.operation = "SCALE"; cm.inputs[0].default_value = base
-    TL.new(m1.outputs[0], cm.inputs["Scale"]); TL.new(cm.outputs[0], tb.inputs["Base Color"])
-    bp = TN.new("ShaderNodeBump"); bp.inputs["Strength"].default_value = 0.35; bp.inputs["Distance"].default_value = 0.0003
-    TL.new(wav.outputs[0], bp.inputs["Height"]); TL.new(bp.outputs[0], tb.inputs["Normal"])
-    tb.inputs["Roughness"].default_value = 0.82 if denim else 0.75
+    tuv = TN.new("ShaderNodeUVMap"); tuv.uv_map = trz.data.uv_layers[0].name
+    def denim_map(kind, color):
+        t = TN.new("ShaderNodeTexImage"); t.image = bpy.data.images.load(f"{dn}-{kind}.jpg"); t.interpolation = "Cubic"
+        if not color: t.image.colorspace_settings.name = "Non-Color"
+        TL.new(tuv.outputs[0], t.inputs[0]); return t
+    TL.new(denim_map("diff", True).outputs[0], tb.inputs["Base Color"])
+    TL.new(denim_map("rough", False).outputs[0], tb.inputs["Roughness"])
+    nmap = TN.new("ShaderNodeNormalMap"); nmap.uv_map = tuv.uv_map     # nor_gl: Blender's own convention
+    TL.new(denim_map("nor", False).outputs[0], nmap.inputs["Color"]); TL.new(nmap.outputs[0], tb.inputs["Normal"])
     tb.inputs["Specular IOR Level"].default_value = 0.25
-    tb.inputs["Sheen Weight"].default_value = 0.25 if denim else 0.35; tb.inputs["Sheen Roughness"].default_value = 0.4
+    tb.inputs["Sheen Weight"].default_value = 0.2; tb.inputs["Sheen Roughness"].default_value = 0.4
     trz.data.materials.clear(); trz.data.materials.append(tmat)
 # ---- material: cotton jersey + DTG ink ----
 m = bpy.data.materials.new("jersey"); m.use_nodes = True; nt = m.node_tree; N = nt.nodes; L = nt.links
