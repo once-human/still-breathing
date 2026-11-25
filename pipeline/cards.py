@@ -4,10 +4,11 @@
 # the hair it follows the flow over the surface for its length, conforming to the head as it goes, a little above
 # it (each card a layer: the pile builds up), its sides wrapped round the head. The strands' own edges break up the
 # silhouette and the hairline, and the light runs along them.
-#   - her: long sleek cards (4 to 8 cm) lying almost flat, combed back into the bun and wound round it; sparse
-#     cards at the hairline (single strands coming out of the skin) and a few loose hairs over the top
-#   - him: short cards (2 to 3.5 cm) on top, lifted at an angle off the head and settling back toward their
-#     tips (a textured crop), shorter and sparser toward the faded sides
+#   - her: long sleek cards (4 to 8 cm) lying almost flat, combed back to the ponytail's tie; sparse cards at
+#     the hairline (single strands coming out of the skin), a few loose hairs over the top; down the ponytail long
+#     cards (8 to 16 cm) in layers round it, the outer ones standing off it a little for its body
+#   - him: a quiff: at the front long cards (up to 5.5 cm) rising steeply off the forehead and curling back,
+#     shorter and flatter toward the crown, shorter and sparser toward the faded sides
 # The cards' normals are the head's (so the pile shades as one mass, not as so many flat strips); their front faces
 # away from the head (the viewer draws only the fronts). UVs: hairtex.py's 16 strips across, v from the root (top of
 # the picture) to the tip; strips 0-9 the main cards, 10-15 the sparse ones.
@@ -28,6 +29,10 @@ def grow(hb, she, colour, seed=1618):
     rnd = random.Random(seed)
     hb.verts.ensure_lookup_table(); hb.faces.ensure_lookup_table(); hb.normal_update()
     fl = hb.verts.layers.float_vector["flow"]; kl = hb.verts.layers.float["hairk"]
+    tl = hb.verts.layers.float.get("tail")                   # her ponytail (hair.py)
+    # the front of his hair (where the quiff rises) and its back, over the head (not the ponytail)
+    ys = [v.co.y for v in hb.verts if v[kl] > 0.5 and not (tl and v[tl] > 0.5)]
+    y0, y1 = min(ys), max(ys)
     bvh = BVHTree.FromBMesh(hb)
 
     def at(p):
@@ -41,14 +46,14 @@ def grow(hb, she, colour, seed=1618):
         k = sum(v[kl] * w for v, w in zip(f.verts, ws)) / s
         t = fw - nn * fw.dot(nn)
         if t.length < 1e-6: return None
-        return q, nn, t.normalized(), k, d
+        return q, nn, t.normalized(), k, d, (sum(v[tl] for v in f.verts) / len(f.verts) if tl else 0.0)
 
     def trace(p0, L, K):
         pts, p = [], p0
         for _ in range(K + 1):
             r = at(p)
             if r is None or r[4] > 0.004 or r[3] < 0.03: break
-            q, n, t, k, _ = r
+            q, n, t, k = r[:4]
             if pts and (q - pts[-1][0]).length < 0.25 * L / K: break      # stalled (at an edge)
             pts.append((q, n, t, k)); p = q + t * (L / K)
         return pts
@@ -62,8 +67,8 @@ def grow(hb, she, colour, seed=1618):
         wts.append(f.calc_area() * (1 + (3.0 if she else 1.5) * (1 - k)) * (0.0 if k < 0.02 else 1.0))
     area = sum(f.calc_area() for f in faces)
     # layers deep: how many cards cover a point, on average
-    if she: N = int(area * 5.5 / (0.06 * 0.009)) + 25
-    else: N = int(area * 4.0 / (0.026 * 0.009))
+    if she: N = int(area * 5.5 / (0.07 * 0.009)) + 25
+    else: N = int(area * 4.5 / (0.034 * 0.009))
     cum, s = [], 0.0
     for w in wts: s += w; cum.append(s)
 
@@ -89,15 +94,21 @@ def grow(hb, she, colour, seed=1618):
         if r0 is None: continue
         k0 = r0[3]
         wisp = she and c < 25                                    # her loose hairs over the top
-        if she:
+        tail = r0[5] > 0.5
+        if she and tail:
+            L = rnd.uniform(0.08, 0.16); W = rnd.uniform(0.007, 0.011); K = 12
+            sparse = rnd.random() < 0.2
+            h0 = rnd.uniform(0.0005, 0.005); lift = 0.0
+        elif she:
             L = rnd.uniform(0.04, 0.08); W = rnd.uniform(0.006, 0.01); K = 8
             sparse = wisp or k0 < 0.45
             h0 = 0.0015 + rnd.uniform(0, 0.001) if wisp else (0.0007 if k0 < 0.45 else rnd.uniform(0.0004, 0.0013))
             lift = 0.0
         else:
-            L = rnd.uniform(0.02, 0.034) * (0.55 + 0.45 * k0); W = rnd.uniform(0.007, 0.011); K = 5
+            f = max(0.0, min(1.0, (y1 - p0.y) / (y1 - y0)))     # 1 at the front, 0 at the back
+            L = (0.022 + 0.033 * f ** 1.5) * rnd.uniform(0.8, 1.15) * (0.55 + 0.45 * k0); W = rnd.uniform(0.007, 0.011); K = 6
             sparse = k0 < 0.5
-            h0 = 0.0006; lift = math.tan(math.radians(rnd.uniform(14, 30) * (0.4 + 0.6 * k0)))
+            h0 = 0.0006; lift = math.tan(math.radians((12 + 34 * f ** 1.3) * rnd.uniform(0.75, 1.15) * (0.4 + 0.6 * k0)))
         pts = trace(p0, L, K)
         if len(pts) < 3: continue
         arc = [0.0]
