@@ -150,6 +150,33 @@ if PERSON and os.environ.get("TROUSERS"):
     with bpy.data.libraries.load(os.environ["TROUSERS"]) as (src, dst):
         dst.objects = ["trousers"]
     trz = dst.objects[0]; sc.collection.objects.link(trz); trz.location.z += LIFT; trz.location.y += BACK
+    # tucked in under the tee: the trousers were hung on the bare body and the tee on the bare body, so where the tee
+    # sits close (the hips, the seat) the denim came out through it. Looking out level from the trousers' middle, any
+    # denim past the tee's inner face is drawn back under it (the denim's 2.2 mm, half the tee's, 3 mm between); just
+    # under the hem it runs back out at 45 degrees, so the jeans step out from under the tee as they do
+    from mathutils.bvhtree import BVHTree
+    bpy.context.view_layer.update()
+    tbv = BVHTree.FromObject(tee, bpy.context.evaluated_depsgraph_get())   # in the tee's own frame
+    T = tee.matrix_world; Ti = T.inverted(); T3 = Ti.to_3x3()
+    M = trz.matrix_world; Mi = M.inverted()
+    top = max(v.co.z for v in trz.data.vertices)
+    band = [M @ v.co for v in trz.data.vertices if v.co.z > top - 0.02]
+    mid = sum(band, Vector()) / len(band)
+    GAP = 0.0022 + 0.0016 + 0.003
+    tucked = 0
+    for v in trz.data.vertices:
+        w = M @ v.co; d = Vector((w.x - mid.x, w.y - mid.y, 0)); r = d.length
+        if r < 1e-4: continue
+        d /= r
+        for k in range(6):
+            o = Vector((mid.x, mid.y, w.z + 0.01 * k))
+            hit = tbv.ray_cast(Ti @ o, (T3 @ d).normalized(), 0.6)[0]
+            if hit is not None:
+                hit = T @ hit
+                lim = (hit - o).length - GAP + 0.01 * k
+                if r > lim: v.co = Mi @ (Vector((mid.x, mid.y, w.z)) + d * max(lim, 0.0)); tucked += 1
+                break
+    trz.data.update(); print("trousers tucked under the tee:", tucked, "of", len(trz.data.vertices), flush=True)
     so_ = trz.modifiers.new("thick", "SOLIDIFY"); so_.thickness = 0.0022; so_.offset = 1
     sd_ = trz.modifiers.new("sub", "SUBSURF"); sd_.levels = sd_.render_levels = 1
     dn = os.path.join(os.path.dirname(os.path.abspath(__file__)), "denim", "denim_fabric_03" if tee_col == "cream" else "denim_fabric_04")
@@ -166,7 +193,11 @@ if PERSON and os.environ.get("TROUSERS"):
         t = TN.new("ShaderNodeTexImage"); t.image = bpy.data.images.load(f"{dn}-{kind}.jpg"); t.interpolation = "Cubic"
         if not color: t.image.colorspace_settings.name = "Non-Color"
         TL.new(tuv.outputs[0], t.inputs[0]); return t
-    TL.new(denim_map("diff", True).outputs[0], tb.inputs["Base Color"])
+    # the photographs are lit bright to show the weave, which melts into one flat blue at this distance: the colour
+    # brought to worn jeans' own (raw indigo near navy; the lighter wash greyer, as washing fades it)
+    hsv = TN.new("ShaderNodeHueSaturation")
+    hsv.inputs["Saturation"].default_value, hsv.inputs["Value"].default_value = (0.95, 0.5) if tee_col == "cream" else (0.72, 0.78)
+    TL.new(denim_map("diff", True).outputs[0], hsv.inputs["Color"]); TL.new(hsv.outputs[0], tb.inputs["Base Color"])
     TL.new(denim_map("rough", False).outputs[0], tb.inputs["Roughness"])
     nmap = TN.new("ShaderNodeNormalMap"); nmap.uv_map = tuv.uv_map     # nor_gl: Blender's own convention
     TL.new(denim_map("nor", False).outputs[0], nmap.inputs["Color"]); TL.new(nmap.outputs[0], tb.inputs["Normal"])
