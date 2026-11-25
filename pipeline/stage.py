@@ -706,7 +706,7 @@ def crowd_kinds():
     """every fitted body (public/tee/fit: 19 bodies and sizes) standing and with arms up, each in its own simulated
     tee, as collections to instance. The body gets a 'mask' (hair, legs, shoes) from where its vertices are."""
     people, tee_m = crowd_materials()
-    hair_m = mat("hair", (0.01, 0.008, 0.006), 0.45, sheen=0.5)
+    hair_m = mat("hair", (0.008, 0.006, 0.005), 0.55, sheen=0.12)   # dark hair, a little shine, no grey cap
     fit = os.path.join(ROOT, "public", "tee", "fit")
     kinds = {"stand": [], "up": []}
     for v in sorted(os.listdir(fit)):

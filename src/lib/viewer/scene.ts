@@ -125,14 +125,15 @@ export const SCENES: Scene[] = [
   },
   {
     id: "show", label: "the show",
-    // in the crowd, facing the stage (+z, ahead of the person, so behind the camera in the front view). Front
-    // light at a show is hard and comes from far off and high: a warm par and a cool head on the front truss over
-    // the stage (12.6 m out, 10 m up), a warm follow spot on a side tower; behind the person the front-of-house
-    // spots light the back. Each hangs in the hall's picture (pipeline/stage.py) where it lights the person from.
+    // the night in the round at Alexandra Palace under its cloth canopy (pipeline/stage.py): the person is in the
+    // crowd facing the decks 6.5 m ahead (+z, behind the camera in the front view). Front light at a show is hard
+    // and from high up: a warm par and a cool head on the bar over the front of the stage (3 m out, 5.5 m up), a
+    // warm follow spot on a stand to the side; behind the person the front-of-house light lights the back. Each
+    // hangs in the hall's picture where it lights the person from.
     lights: [
-      { name: "stage", pos: [1.5, 10.35, 12.6], size: [0.4, 0.4], power: 6000, tint: [1, 0.8, 0.6] },
-      { name: "beam", pos: [-2.5, 10.35, 12.6], size: [0.2, 0.2], power: 2700, tint: [0.86, 0.91, 1] },
-      { name: "spot", pos: [-9.0, 7.0, 4.0], size: [0.3, 0.3], power: 1000, tint: [1, 0.72, 0.45] },
+      { name: "stage", pos: [1.4, 5.85, 3.0], size: [0.4, 0.4], power: 760, tint: [1, 0.8, 0.6] },
+      { name: "beam", pos: [-1.6, 5.85, 3.2], size: [0.2, 0.2], power: 360, tint: [0.86, 0.91, 1] },
+      { name: "spot", pos: [-6.0, 4.6, 2.0], size: [0.3, 0.3], power: 390, tint: [1, 0.72, 0.45] },
       { name: "foh", pos: [-1.4, 3.5, -3.6], size: [0.8, 0.8], power: 480, tint: [1, 0.86, 0.7] },
     ],
     paper: [0, 0, 0], world: [0.0015, 0.0015, 0.002], creamK: 0.6, open: true, venue: true, aim: CHEST,
