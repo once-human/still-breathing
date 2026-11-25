@@ -59,7 +59,7 @@ jobs:
           mkdir -p out; O="$PWD/out/${{ matrix.fit }}-stand.glb"
           T="$PWD/pipeline/people/${{ matrix.body }}-trousers.blend"; [ -s "$T" ] && export TROUSERS="$T"
           ~/blender/blender -b --factory-startup -P pipeline/human.py -- "$PWD/pipeline/bodies/${{ matrix.body }}.blend" \
-            "$PWD/public/tee/fit/${{ matrix.fit }}/stand.glb" "$O" | grep -E "pelvis|trousers|skin|eyes|jeans|saved|Error|Traceback|line [0-9]"
+            "$PWD/public/tee/fit/${{ matrix.fit }}/stand.glb" "$O" | grep -E "pelvis|trousers|hair|skin|eyes|jeans|saved|Error|Traceback|line [0-9]"
           test -s "$O"; ls -la out
       - name: Look
         run: |

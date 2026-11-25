@@ -70,7 +70,7 @@ def seg(p, a, b):
     return np.linalg.norm(p - (a + t[:, None] * ab), axis=1), t
 
 
-def shade(P, N, lips, ears, nails, scalp, handw):
+def shade(P, N, lips, ears, nails, scalp, handw, hairw=None, flow=None):
     """colour (linear), roughness and relief (metres out of the skin) at these points"""
     n = len(P); x, y, z = P[:, 0], P[:, 1], P[:, 2]
     H = np.zeros(n)                     # relief, metres (out of the skin)
@@ -209,6 +209,20 @@ def shade(P, N, lips, ears, nails, scalp, handw):
 
 
 
+    # ---------- the hair itself (hair.py's shell and bun): strands along the flow ----------
+    if hairw is not None and hairw.max() > 0:
+        hw = sm(0.5, 0.9, hairw)
+        f = flow / (np.linalg.norm(flow, axis=1, keepdims=True) + 1e-9)
+        fine = vnoise(along(P * 2400.0, f, 16.0))           # single strands, under half a millimetre across
+        clump = vnoise(along(P * 420.0, f, 9.0))            # locks a few millimetres across
+        broad = fbm(P * 40.0, 2)                            # where the light catches more or less of it
+        col = HAIR * (1.0 + 0.22 * fine + 0.3 * clump + 0.15 * broad)[:, None]
+        col = col * np.array([1.0, 0.97, 0.94]) + np.array([0.004, 0.0025, 0.0015]) * sm(0.2, 0.9, clump)[:, None]
+        rough = (0.36 if SHE else 0.5) + 0.06 * fine
+        hh = 0.00008 * fine + (0.00012 if SHE else 0.00035) * clump
+        C = C * (1 - hw[:, None]) + col * hw[:, None]
+        R = R * (1 - hw) + rough * hw
+        H = H * (1 - hw) + hh * hw
     return np.clip(C, 0.003, 0.9), np.clip(R, 0.18, 0.85), H
 
 # ---------- texel by texel: four points across each, the relief's slope across it ----------
@@ -221,7 +235,8 @@ for c0 in range(0, len(YS), 200000):
     Pu, Pv = g[:, 11:14], g[:, 14:17]
     cs, rs, hs = [], [], []
     for ox, oy in OFF:
-        c, r, h = shade(P + Pu * ox + Pv * oy, N, *(g[:, k] for k in range(6, 11)))
+        c, r, h = shade(P + Pu * ox + Pv * oy, N, *(g[:, k] for k in range(6, 11)),
+                        *((g[:, 17], g[:, 18:21]) if g.shape[1] > 17 else ()))
         cs.append(c); rs.append(r); hs.append(h)
     lu, lv = np.maximum(np.linalg.norm(Pu, axis=1), 1e-7), np.maximum(np.linalg.norm(Pv, axis=1), 1e-7)
     gx = ((hs[1] + hs[3]) - (hs[0] + hs[2])) / 2 / (0.5 * lu)

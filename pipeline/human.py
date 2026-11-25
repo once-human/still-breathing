@@ -172,12 +172,20 @@ def poking(c, n):
     return hit[0] is not None and hit[1].dot(n) > 0
 
 
-def covered(c, n):
-    if kd_open.find(c)[2] < 0.07: return False                 # near an opening it can be seen
+def openings(b):
+    es = [e for e in b.edges if len(e.link_faces) == 1]      # hem, sleeve ends, collar
+    kd = KDTree(max(1, len(es)))
+    for i, e in enumerate(es): kd.insert((e.verts[0].co + e.verts[1].co) / 2, i)
+    kd.balance(); return kd
+
+
+def covered(c, n, bvh=None, kd=None, near=0.07):
+    bvh = bvh or tee_bvh; kd = kd or kd_open
+    if kd.find(c)[2] < near: return False                     # near an opening it can be seen
     t1, t2 = n.orthogonal().normalized(), None
     t2 = n.cross(t1)
     for d in (n, (n + t1 * 0.85).normalized(), (n - t1 * 0.85).normalized(), (n + t2 * 0.85).normalized(), (n - t2 * 0.85).normalized()):
-        hit = tee_bvh.ray_cast(c + n * 0.002, d, 0.2)
+        hit = bvh.ray_cast(c + n * 0.002, d, 0.2)
         if hit[0] is None: return False
     return True
 
@@ -205,6 +213,8 @@ if TROUSERS:
     tro = dst.objects[0]; sc.collection.objects.link(tro); upd()
     tme = bpy.data.meshes.new_from_object(tro.evaluated_get(bpy.context.evaluated_depsgraph_get()))
     tme.transform(tro.matrix_world); bpy.data.objects.remove(tro)
+    tbm = bmesh.new(); tbm.from_mesh(tme)
+    tro_bvh, tro_open = BVHTree.FromBMesh(tbm), openings(tbm); tbm.free()
     HEMZ = min(v.co.z for v in tme.vertices) + 0.025
     CUT = max(v.co.z for v in tme.vertices) - 0.01
     print("trousers", len(tme.polygons), "faces, waist", round(CUT, 3), "hem", round(HEMZ, 3), flush=True)
@@ -226,22 +236,32 @@ def part(name, keep):
 
 
 # ---------- skin ----------
-LEG = [VG[g] for g in VG if g.startswith(("pelvis.", "upperleg", "lowerleg", "foot.", "toe"))] + [VG["root"]]
+LEG = [VG[g] for g in VG if g.startswith(("pelvis.", "upperleg", "lowerleg", "foot.", "toe"))] + ([VG["root"]] if "root" in VG else [])
 leg = lambda i: sum(W[i].get(g, 0.0) for g in LEG)
 
 
 def is_skin(f):
     ix = [v.index for v in f.verts]
     if not all(wt(i, "body") > 0.5 for i in ix): return False
-    if all(HEMZ < P[i].z < CUT and leg(i) > 0.5 for i in ix): return False     # inside the jeans
     c = sum((P[i] for i in ix), Vector()) / len(ix)
     n = (P[ix[1]] - P[ix[0]]).cross(P[ix[2]] - P[ix[0]]).normalized()
+    if TROUSERS:                                                        # under trousers.py's trousers
+        if c.z < CUT + 0.02 and covered(c, n, tro_bvh, tro_open, 0.03): return False
+    elif all(HEMZ < P[i].z < CUT and leg(i) > 0.5 for i in ix): return False     # inside the jeans
     return not covered(c, n) and not poking(c, n)
 
 
 skin, SRC = part("skin", is_skin)
 skin.normal_update()
 print("skin faces", len(skin.faces), "settled", settle(skin, CUT + 0.15), flush=True)
+if HBM:
+    # hair (hair.py): grown into the skin's mesh, so it shares the skin's UV square and maps; split off at the end
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import hair as hair_
+    print("hair faces %d, skin under it cut %d" % hair_.grow(skin, SRC, wt, body.get("sex") == "female",
+          joint("joint-l-eye"), joint("joint-r-eye"), joint("joint-mouth")), flush=True)
+HAIRF = skin.faces.layers.int.get("hair")
+FLOW = skin.verts.layers.float_vector.get("flow")
 
 
 def pack_skin_uvs(b):
@@ -262,13 +282,14 @@ def pack_skin_uvs(b):
     isl = {}
     for f in b.faces: isl.setdefault(find(f.index), []).append(f)
     neck = bone("neck01").z
+    hl = b.faces.layers.int.get("hair")
     for fs in isl.values():
         a3 = sum(f.calc_area() for f in fs)
         a2 = 0.0
         for f in fs:
             uv = [l[uvl].uv for l in f.loops]
             a2 += abs(sum(uv[i].x * uv[i - 1].y - uv[i - 1].x * uv[i].y for i in range(len(uv)))) / 2
-        k = math.sqrt(a3 / max(a2, 1e-12)) * (2.0 if sum(f.calc_center_median().z for f in fs) / len(fs) > neck else 1.0)
+        k = math.sqrt(a3 / max(a2, 1e-12)) * (1.4 if hl and fs[0][hl] else 2.0 if sum(f.calc_center_median().z for f in fs) / len(fs) > neck else 1.0)
         ls = [l for f in fs for l in f.loops]
         c = sum((l[uvl].uv for l in ls), Vector((0, 0))) / len(ls)
         for l in ls: l[uvl].uv = (l[uvl].uv - c) * k + Vector((0.5, 0.5))
@@ -305,10 +326,13 @@ import numpy as np, json, subprocess, os, tempfile
 HANDB = ["wrist", "metacarpal1", "metacarpal2", "metacarpal3", "metacarpal4"] + [f"finger{f}-{j}" for f in range(1, 6) for j in (1, 2, 3)]
 skin.verts.ensure_lookup_table()
 uvl = skin.loops.layers.uv.active
-VA = np.zeros((len(skin.verts), 11), np.float32)          # P, N, lips, ears, nails, scalp, hand
+skin.verts.index_update(); skin.faces.ensure_lookup_table()
+VA = np.zeros((len(skin.verts), 15), np.float32)          # P, N, lips, ears, nails, scalp, hand, hair, its flow
 for v in skin.verts:
     i = v[SRC]
     VA[v.index, :3] = v.co; VA[v.index, 3:6] = v.normal
+    if i < 0:                                           # hair (hair.py)
+        VA[v.index, 11] = 1.0; VA[v.index, 12:15] = v[FLOW]; continue
     VA[v.index, 6:11] = (wt(i, "lips"), wt(i, "ears"), wt(i, "fingernails"), wt(i, "scalp"),
                          max(wt(i, f"{b_}.{sd}") for b_ in HANDB for sd in ("L", "R")))
 RES = 2048
@@ -337,7 +361,7 @@ for f in skin.faces:
         du1, dv1, du2, dv2 = uu[1] - uu[0], vv[1] - vv[0], uu[2] - uu[0], vv[2] - vv[0]
         Pu = (E1 * dv2 - E2 * dv1) / det; Pv = (E2 * du1 - E1 * du2) / det
         GY.append(ys[m]); GX.append(xs[m])
-        GV.append(np.hstack([val, np.tile(np.concatenate([Pu, Pv]), (len(val), 1))]).astype(np.float32))
+        GV.append(np.hstack([val[:, :11], np.tile(np.concatenate([Pu, Pv]), (len(val), 1)), val[:, 11:]]).astype(np.float32))
 GY, GX, GV = np.concatenate(GY), np.concatenate(GX), np.concatenate(GV)
 print("skin texels", len(GY), "of", RES * RES, flush=True)
 LM = {k: list(v) for k, v in dict(eyeL=eyeL, eyeR=eyeR, mouth=mouth, jaw=jaw, head=head).items()}
@@ -355,6 +379,13 @@ subprocess.run(["python3", os.path.join(os.path.dirname(os.path.abspath(__file__
 if not os.environ.get("SKIN_GBUF"): import shutil; shutil.rmtree(tmp)
 lay = skin.verts.layers.float_color.new("albedo")
 for v in skin.verts: v[lay] = (1.0, 1.0, 1.0, 1.0)
+hairb = None
+if HAIRF:                                               # the hair, off the skin's mesh into its own
+    hairb = skin.copy()
+    bmesh.ops.delete(hairb, geom=[f for f in hairb.faces if not f[hairb.faces.layers.int["hair"]]], context="FACES")
+    bmesh.ops.delete(hairb, geom=[v for v in hairb.verts if not v.link_faces], context="VERTS")
+    bmesh.ops.delete(skin, geom=[f for f in skin.faces if f[HAIRF]], context="FACES")
+    bmesh.ops.delete(skin, geom=[v for v in skin.verts if not v.link_faces], context="VERTS")
 
 # ---------- jeans: the tights helper, loosened and smoothed ----------
 # (people.py's bodies: trousers.py's trousers, if any, painted and settled under the tee)
@@ -440,7 +471,8 @@ def obj(name, b, sub=1):
     return o
 
 
-outs = [obj("skin", skin, 0 if HBM else 1)] + ([obj("jeans", jeans, 0 if HBM else 1)] if jeans else []) + [obj("eyes", eyes)]
+outs = [obj("skin", skin, 0 if HBM else 1)] + ([obj("jeans", jeans, 0 if HBM else 1)] if jeans else []) + [obj("eyes", eyes)] \
+    + ([obj("hair", hairb, 0)] if hairb else [])
 for o in list(sc.objects):
     if o not in outs: bpy.data.objects.remove(o)
 for o in outs: o.select_set(True)
