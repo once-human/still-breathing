@@ -24,9 +24,11 @@ export const BODY_CAMERA: Record<"stand" | "up" | "sit", Camera> = {
   up: { pos: [0.33, FLOOR + 1.12, 5.15], target: [0, FLOOR + 1.02, 0], lensMm: 85, sensorMm: 36, fstop: 8, focus: 5.1 },
   sit: { pos: [0.33, FLOOR + 0.8, 4.4], target: [0, FLOOR + 0.66, 0], lensMm: 85, sensorMm: 36, fstop: 8, focus: 4.3 },
 };
-/** The shop shot with someone wearing the tee: the same lens, chest height, framed from just under the eyes to
- * above the knees (the face is cropped as product photographs crop it; the tee is the subject). */
-export const WEAR_CAMERA: Camera = { pos: [0.2, FLOOR + 1.1, 2.85], target: [0, FLOOR + 0.99, 0], lensMm: 85, sensorMm: 36, fstop: 5.6, focus: 2.8 };
+/** The shop shot with someone wearing the tee: the same lens, from chest height, tilted up to take in the whole
+ * head with a little room above it, down to the middle of the thighs (the face is seen; the legs mostly aren't).
+ * The camera stays where the places' pictures were made from (2.86 m out, 1.1 m up) and only turns, so every place
+ * still lines up behind the person. */
+export const WEAR_CAMERA: Camera = { pos: [0.2, FLOOR + 1.1, 2.85], target: [0, FLOOR + 1.24, 0], lensMm: 85, sensorMm: 36, fstop: 5.6, focus: 2.8 };
 export const VFOV = 2 * Math.atan(CAMERA.sensorMm / 2 / CAMERA.lensMm); // radians
 
 export type RectLight = { name: string; pos: V3; size: [number, number]; power: number; tint: V3 };
