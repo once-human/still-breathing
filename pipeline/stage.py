@@ -713,6 +713,34 @@ def crowd_materials():
     return m, t
 
 
+def arm_axes(vs, top):
+    """each arm of a body in the fit's rest A-pose: the shoulder joint and the arm's direction (to the wrist)"""
+    out = []
+    for side in (-1, 1):
+        arm = [c for c in vs if side * c.x > 0.3 * top / 1.71 and c.z > 0.45 * top]
+        tip = max(arm, key=lambda c: side * c.x)                                       # the fingertips
+        sh = Vector((side * 0.165 * top / 1.71, sum(c.y for c in arm) / len(arm), 0.81 * top))
+        d = (tip - sh); d.y = 0; d.normalize()
+        out.append((side, sh, d))
+    return out
+
+
+def relax_arms(me, arms, drop=20.0):
+    """lower the arms by `drop` degrees about the shoulder (toward the sides, as people stand), with a weight that
+    fades in from the armpit like a skin's; the body and its tee get the same field, so the sleeve stays on the arm"""
+    for v in me.vertices:
+        c = v.co.copy()
+        for side, sh, d in arms:
+            q = c - sh; t = q.x * d.x + q.z * d.z
+            if t <= -0.02: continue
+            perp = (Vector((q.x, 0, q.z)) - Vector((d.x, 0, d.z)) * t).length
+            w = min(1.0, max(0.0, (t + 0.02) / 0.1)) * (1 - min(1.0, max(0.0, (perp - 0.1) / 0.05)))
+            if w <= 0: continue
+            R = Matrix.Rotation(math.radians(side * drop * w), 3, "Y")
+            v.co = sh + R @ q
+    me.update()
+
+
 def crowd_kinds():
     """every fitted body (public/tee/fit: 19 bodies and sizes) standing and with arms up, each in its own simulated
     tee, as collections to instance. The body gets a 'mask' (hair, legs, shoes) from where its vertices are."""
@@ -723,6 +751,7 @@ def crowd_kinds():
         if v.startswith("form") or not os.path.exists(os.path.join(fit, v, "body-stand.glb")): continue
         for pose in kinds:
             k = bpy.data.collections.new(f"{v}-{pose}")
+            arms = None
             for f, m in ((f"body-{pose}.glb", people), (f"{pose}.glb", tee_m)):
                 before = set(bpy.data.objects); bpy.ops.import_scene.gltf(filepath=os.path.join(fit, v, f))
                 new = set(bpy.data.objects) - before
@@ -731,6 +760,7 @@ def crowd_kinds():
                     o.data = o.data.copy(); o.data.transform(o.matrix_world); o.parent = None; o.matrix_world = Matrix()
                     for c in list(o.users_collection): c.objects.unlink(o)
                     k.objects.link(o); o.data.materials.clear(); o.data.materials.append(m)
+                    if pose == "stand" and m is tee_m: relax_arms(o.data, arms)
                     b = bmesh.new(); b.from_mesh(o.data)
                     if m is tee_m:   # the sim's few stretched triangles at the armpits: drop them
                         bmesh.ops.delete(b, geom=[e for e in b.edges if e.calc_length() > 0.03], context="EDGES")
@@ -738,6 +768,7 @@ def crowd_kinds():
                     b.free()
                     vs = [vv.co for vv in o.data.vertices]
                     top = max(c.z for c in vs if abs(c.x) < 0.12)
+                    if pose == "stand": arms = arm_axes(vs, top); relax_arms(o.data, arms)
                     front = min(c.y for c in vs if c.z > top - 0.25 and abs(c.x) < 0.1)
                     s = top / 1.71
                     a = o.data.color_attributes.new("mask", "FLOAT_COLOR", "POINT")
@@ -886,7 +917,7 @@ def build_show():
     # ---------- banks of screens on the walls, showing the shop's artworks ----------
     arts = [os.path.join(ROOT, "pipeline", "art", p) for p in ("art-c-crowd/art-black.png", "art-crowd-tour/art-black.png",
             "art-c-breath/art-black.png", "art-b-lines/art-black-al3.png", "art-a-map/art-black-al3.png", "art-d-map/art-cream.png")]
-    sm = [screen_mat(f"screen{i}", a_, 2.6) for i, a_ in enumerate(arts)]
+    sm = [screen_mat(f"screen{i}", a_, 5.0) for i, a_ in enumerate(arts)]
     SW, SH = 6.6, 8.8                                                 # portrait LED walls, the artworks' 3:4
     for i, x in enumerate((-13.5, -6.75, 0.0, 6.75, 13.5)):          # the far end, behind the person
         plane((x, Y1 - 0.05, 2.6 + SH / 2), SW, SH, sm[i % len(sm)], (0, -1, 0))
@@ -911,6 +942,13 @@ def build_show():
         cyl((FX - 2.3, y, 3.5), (FX + 2.3, y, 3.5), 0.06, M_TRUSS, 8)
     for x in (-2.3, 2.3):
         cyl((FX + x, 3.6, 3.5), (FX + x, 7.0, 3.5), 0.06, M_TRUSS, 8)
+    for side in (-1, 1):                                              # warm pars on the long walls, onto the crowd
+        for y in range(int(Y0) + 6, int(Y1) - 2, 6):
+            light("SPOT", (side * (HX - 1.0), y, 7.5), (side * 6, y + rnd.uniform(-3, 3), 0.8), 1400, (1.0, 0.6, 0.3), size=0.12, spot=34, blend=0.6)
+    for x in (-9, -3, 3, 9):                                          # front of house truss at the back: on the crowd
+        cyl((x, 18.0, 9.4), (x, 17.6, 9.1), 0.16, M_CASE, 16)
+        light("SPOT", (x, 17.6, 9.05), (x * 0.4, rnd.uniform(-2, 10), 1.2), 2600, (1.0, 0.86, 0.7), size=0.08, spot=14, blend=0.5)
+    cyl((-11, 18.0, 9.6), (11, 18.0, 9.6), 0.06, M_TRUSS, 8)
     for side in (-1, 1):                                              # the house: lamps along the walls, exit signs
         for y in range(int(Y0) + 6, int(Y1), 8):
             light("POINT", (side * (HX - 0.6), y, 2.6), None, 10, (1.0, 0.55, 0.28), size=0.1)
@@ -943,7 +981,7 @@ def build_show():
             if math.hypot(x, y) < 0.85 or deck(x, y) or foh(x, y) or math.hypot(x - sp_.x, y - sp_.y) < 0.9: continue
             if y > 26 and rnd.random() < (y - 26) / 6: continue      # it thins out toward the back
             near = math.hypot(x - CX, y - CY)
-            up = rnd.random() < (0.3 if near < 12 else 0.14)
+            up = rnd.random() < (0.42 if near < 12 else 0.24)
             rot = facing(x, y, CX, CY) + rnd.gauss(0, 0.3) if rnd.random() < 0.88 else rnd.uniform(-math.pi, math.pi)
             kk = kinds["up" if up else "stand"]
             instance(kk[rnd.randrange(len(kk))], x, y, rot, rnd.uniform(0.97, 1.04)); n += 1
