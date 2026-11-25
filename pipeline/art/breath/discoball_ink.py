@@ -1,7 +1,6 @@
 # the mirror ball render (discoball.py) cut into the shirt's flat inks. Every tile gets one flat tone, from the mean of
 # its own reflection: cream for the tiles that blaze, warm greys down to a dark grey, the rest the shirt's own black
-# (knocked out to fabric by printtex/texture). Where the blue light glances off, the same tone goes cooler, a sheen of
-# the brand blue rather than blue tiles. The grout is far finer than the print can hold, so the tiles meet edge to edge.
+# (knocked out to fabric by printtex/texture), and so is the grout between them.
 #   python3 pipeline/art/breath/discoball_ink.py <render.png> <out.png> <px>   (reads <render>-id.png beside it)
 import sys, numpy as np
 from PIL import Image
@@ -10,12 +9,7 @@ beauty = np.asarray(Image.open(src).convert("RGBA").resize((px, px), Image.BOX))
 idp = np.asarray(Image.open(src.replace(".png", "-id.png")).convert("RGB").resize((px, px), Image.NEAREST)).astype(np.int32)
 tid = idp[..., 0] + idp[..., 1] * 256                       # 0 is grout or empty
 inside = beauty[..., 3] > 0.5
-# the grout: each grout pixel takes the tile next to it
-for _ in range(6):
-    z = (tid == 0) & inside
-    if not z.any(): break
-    for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
-        nb = np.roll(np.roll(tid, dy, 0), dx, 1); fill = z & (nb > 0) & (tid == 0); tid[fill] = nb[fill]
+# the grout stays the shirt: the gaps between the mirrors are what make it read as tiles
 n = tid.max() + 1
 cnt = np.bincount(tid.ravel(), minlength=n).astype(np.float32) + 1e-6
 mean = np.stack([np.bincount(tid.ravel(), beauty[..., c].ravel(), n) / cnt for c in range(3)], 1)
@@ -27,10 +21,6 @@ TONES = [(0.82, (241, 231, 208)), (0.66, (212, 205, 190)), (0.52, (178, 172, 160
 DARK, BLUE = np.array((21, 21, 21), np.float32), np.array((76, 102, 245), np.float32)
 col = np.tile(DARK, (n, 1))
 for t, c in reversed(TONES): col[lum > t] = c
-# the blue light glancing off: only the tiles turned to it, and the brighter the tile the more of the blue it throws
-cool = (lum > 0.27) & (coolness > 1.12) & (np.random.default_rng(7).random(n) < 0.7)
-k = np.where(lum > 0.6, 0.55, 0.35)
-col[cool] = col[cool] * (1 - k[cool, None]) + BLUE * k[cool, None]
 col[0] = DARK
 rgb = col[tid].round().clip(0, 255).astype(np.uint8)
 alpha = (inside * 255).astype(np.uint8)

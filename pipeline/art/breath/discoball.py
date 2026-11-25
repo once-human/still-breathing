@@ -7,7 +7,7 @@ argv = sys.argv[sys.argv.index("--") + 1:]
 OUT = argv[0]; PX = int(argv[1]) if len(argv) > 1 else 800
 bpy.ops.wm.read_factory_settings(use_empty=True)
 sc = bpy.context.scene
-R, T, GAP = 1.0, 0.13, 0.014                       # radius, tile, grout (the grout is never printed; the tiles read by tone)
+R, T, GAP = 1.0, 0.24, 0.022                       # radius, tile, grout (the grout is never printed; the tiles read by tone)
 bm = bmesh.new()
 rows = int(math.pi * R / T)
 for i in range(rows):
@@ -50,7 +50,7 @@ wl.new(ramp.outputs["Color"], mul.inputs[6]); wl.new(key.outputs["Result"], mul.
 # a blue wash from low on the right (a screen, a stage light): the tiles facing it throw back the brand blue
 dot2 = wn.new("ShaderNodeVectorMath"); dot2.operation = "DOT_PRODUCT"; dot2.inputs[1].default_value = (0.7, -0.35, -0.6)
 wl.new(tc.outputs["Generated"], dot2.inputs[0])
-bl = wn.new("ShaderNodeMapRange"); bl.inputs["From Min"].default_value = 0.5; bl.inputs["From Max"].default_value = 0.9
+bl = wn.new("ShaderNodeMapRange"); bl.inputs["From Min"].default_value = 2.0; bl.inputs["From Max"].default_value = 3.0
 wl.new(dot2.outputs["Value"], bl.inputs["Value"])
 tint = wn.new("ShaderNodeMix"); tint.data_type = "RGBA"; tint.inputs[7].default_value = (0.42, 0.55, 1.0, 1)
 wl.new(bl.outputs["Result"], tint.inputs["Factor"]); wl.new(mul.outputs[2], tint.inputs[6])
