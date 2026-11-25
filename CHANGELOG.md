@@ -2,6 +2,12 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.17.0 — 2026-11-25
+### Studio
+- up close has an actual size button: the print opens as big as it is on the shirt, on the shirt's own colour, to drag around. A dashed bank card outline checks the screen's scale; − and + set it right, and it's kept for next time.
+- Keys 1, 2 and 3 turn the view to the front, ¾ and the back (up close: the front and back prints) while the viewer is on screen.
+- New studio stills and turntable for 02 i am a party (no mirror ball) and 03 Mumbai.
+
 ## 0.16.4 — 2026-11-25
 ### Shirts
 - 03 Mumbai map has its new lettering: the note reads we were somewhere in here, i swear, and every arrow has its dark line back.

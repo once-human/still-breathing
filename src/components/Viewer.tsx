@@ -69,6 +69,12 @@ const TEE_SIDES = [{ label: "front", yaw: 0 }, { label: "back", yaw: 180 }];
 /** the shop tee on its own form, no one in it */
 const ALONE: Variant = { dir: "form-M", size: "M", pose: "stand", body: false };
 
+/** keys 1 2 3: the same three faces in every view (up close has no ¾) */
+const FACES = [{ label: "front", yaw: 0 }, { label: "¾", yaw: 30 }, { label: "back", yaw: 180 }];
+/** actual size: how wide each print is on the shirt, in cm, and a bank card's width to check the screen against */
+const PRINT_CM: Record<string, number> = { back: 38.1, front: 10.5 };
+const CARD_CM = [8.56, 5.398];
+const SCALE_KEY = "sb-cm";
 const VIEWS = [
   { label: "front", yaw: 0 },
   { label: "¾", yaw: 30 },
@@ -138,6 +144,12 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
   const [edge, setEdge] = useState<"l" | "r" | null>(null);
   // and whether it's down by the bottom edge, where the strip and the counter are
   const [low, setLow] = useState(false);
+  // actual size: which print is open at the size it prints (null: closed), and the screen's own centimetre
+  const [actual, setActual] = useState<string | null>(null);
+  const [cm, setCm] = useState(1);
+  const [card, setCard] = useState(false);
+  const pane = useRef<HTMLDivElement>(null);
+  const paneDrag = useRef<{ x: number; y: number; l: number; t: number } | null>(null);
 
   useEffect(() => {
     let dead = false;
@@ -619,6 +631,47 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
     setSpotI(i); engine.current?.turnTo(TEE_SIDES[i].yaw);
     if (mode !== "3d") showAngle(TEE_SIDES[i].yaw);
   };
+  /** the worn view: one of its angles */
+  const turnWorn = (i: number) => {
+    setView(i); engine.current?.zoomBy(0); engine.current?.turnTo(VIEWS[i].yaw);
+    if (mode !== "3d") showAngle(VIEWS[i].yaw);
+  };
+  /** keys 1 2 3: front, ¾, back, in whichever view is up */
+  const face = (k: number) => {
+    const n = shotI, sh = SHOTS[n], f = FACES[k];
+    if (sh.spots) { const i = sh.spots.findIndex((x) => x.label === f.label); if (i >= 0 && i !== spotI) void goShot(n, i); return; }
+    if (sh.id === "worn") { turnWorn(VIEWS.findIndex((v) => v.label === f.label)); return; }
+    const side = TEE_SIDES.findIndex((v) => v.label === f.label);
+    if (side >= 0) { turnTee(side); return; }
+    setSpotI(-1); engine.current?.turnTo(f.yaw);
+    if (mode !== "3d") showAngle(f.yaw);
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || actual) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      const k = ["1", "2", "3"].indexOf(e.key); if (k < 0) return;
+      const r = stage.current?.getBoundingClientRect();
+      if (!r || r.bottom < 0 || r.top > innerHeight) return;      // only while the viewer is on screen
+      e.preventDefault(); face(k);
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  });
+  // actual size: the screen's centimetre as last checked against a card, Esc closes, and it opens on the middle
+  useEffect(() => { try { const v = Number(localStorage.getItem(SCALE_KEY)); if (v > 0.5 && v < 2) setCm(v); } catch { /* default */ } }, []);
+  useEffect(() => {
+    if (!actual) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setActual(null); };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, [actual]);
+  const nudgeCm = (k: number) => setCm((v) => {
+    const n = Math.min(1.9, Math.max(0.6, Math.round(v * k * 1000) / 1000));
+    try { localStorage.setItem(SCALE_KEY, String(n)); } catch { /* not kept */ }
+    return n;
+  });
   // the rendered frames framed the way up close frames the live view (the same crop of the same camera)
   const stillCrop = spot && mode !== "3d"
     ? { transform: `scale(${spot.open[0]}) translate(${-spot.open[1] * 50}%, ${spot.open[2] * 50}%)` } : undefined;
@@ -749,13 +802,13 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           {TEE_SIDES.map((v, i) => (
             <button key={v.label} onClick={() => turnTee(i)} className={`hit ${i === spotI ? "font-semibold" : "text-quiet hover:text-ink"}`}>{v.label}</button>
           ))}
-          <span className="ml-auto text-quiet">drag to turn it</span>
+          <span className="ml-auto text-quiet">drag to turn it<span className="hidden md:inline">, or press 1 2 3</span></span>
         </div>
       ) : null}
       {shot.id === "worn" ? (
         <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1 border-t border-line pt-1.5 text-[13px]" role="group" aria-label="Angle">
           {VIEWS.map((v, i) => (
-            <button key={v.label} onClick={() => { setView(i); engine.current?.zoomBy(0); engine.current?.turnTo(v.yaw); if (mode !== "3d") showAngle(v.yaw); }} className={`hit ${i === view ? "font-semibold" : "text-quiet hover:text-ink"}`}>
+            <button key={v.label} onClick={() => turnWorn(i)} className={`hit ${i === view ? "font-semibold" : "text-quiet hover:text-ink"}`}>
               {v.label}
             </button>
           ))}
@@ -767,6 +820,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           {shot.spots.map((v, i) => (
             <button key={v.label} onClick={() => void goShot(shotI, i)} className={`hit ${i === spotI ? "font-semibold" : "text-quiet hover:text-ink"}`}>{v.label}</button>
           ))}
+          <button onClick={() => { setCard(false); setActual(spot?.label ?? "back"); }} className="hit font-semibold text-blue hover:text-ink">actual size</button>
           {zoomRow}
         </div>
       ) : null}
@@ -798,6 +852,42 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
               <button onClick={() => stopPhoto.current?.abort()} className="text-quiet underline hover:text-ink">stop</button>
             </span>
           )}
+        </div>
+      ) : null}
+      {actual ? (
+        <div className={`fixed inset-0 z-50 flex flex-col ${tee === "black" ? "text-[#efe9dc]" : "text-[#1a1a1a]"}`} style={{ background: COLOURS[tee].hex }} role="dialog" aria-modal aria-label={`The ${actual} print at actual size`}>
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3 text-[13px]">
+            <span className="font-semibold">actual size</span>
+            <span className="opacity-60">the {actual} print as big as it is on the shirt{actual === "back" ? ". drag to look around" : ""}</span>
+            <button onClick={() => setCard((c) => !c)} className={`hit ${card ? "font-semibold" : "opacity-60 hover:opacity-100"}`}>check with a card</button>
+            <button onClick={() => setActual(null)} className="hit ml-auto font-semibold" autoFocus>close ×</button>
+          </div>
+          <div
+            ref={pane} data-lenis-prevent
+            className="relative flex-1 cursor-grab touch-pan-x touch-pan-y overflow-auto active:cursor-grabbing"
+            onPointerDown={(e) => { if (e.pointerType === "touch" || !pane.current) return; paneDrag.current = { x: e.clientX, y: e.clientY, l: pane.current.scrollLeft, t: pane.current.scrollTop }; e.currentTarget.setPointerCapture(e.pointerId); }}
+            onPointerMove={(e) => { const d = paneDrag.current, p = pane.current; if (!d || !p) return; p.scrollLeft = d.l - (e.clientX - d.x); p.scrollTop = d.t - (e.clientY - d.y); }}
+            onPointerUp={() => { paneDrag.current = null; }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={asset(actual === "front" ? printFrontURL(tee) : printBackURL(design, tee, true))} alt="" draggable={false}
+              className="mx-auto my-10 block max-w-none select-none"
+              style={{ width: `${PRINT_CM[actual] * cm}cm` }}
+              onLoad={() => { const p = pane.current; if (p) p.scrollLeft = (p.scrollWidth - p.clientWidth) / 2; }}
+            />
+          </div>
+          {card ? (
+            // a bank card held to the screen should fit this outline exactly; if it doesn't, − and + set the screen right
+            <div className="pointer-events-none fixed bottom-4 left-4 z-10 flex flex-col items-start gap-2">
+              <div className="rounded-[0.32cm] border-2 border-dashed border-current opacity-80" style={{ width: `${CARD_CM[0] * cm}cm`, height: `${CARD_CM[1] * cm}cm` }} />
+              <div className="pointer-events-auto flex items-baseline gap-3 rounded px-2 py-1 text-[13px]" style={{ background: COLOURS[tee].hex }}>
+                <span className="opacity-70">hold a bank card here: same size?</span>
+                <button onClick={() => nudgeCm(1 / 1.02)} className="hit font-semibold" aria-label="Smaller">−</button>
+                <button onClick={() => nudgeCm(1.02)} className="hit font-semibold" aria-label="Bigger">+</button>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
       {photo ? (
