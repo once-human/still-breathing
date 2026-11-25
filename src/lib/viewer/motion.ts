@@ -75,9 +75,27 @@ export class Motion {
     return turn(q, this.j.feet, X, this.a.fb);
   }
 
-  /** zero weights for a mesh that has none of its own (a tee on its form, an older person GLB) */
+  /**
+   * The five weights as one vertex buffer (interleaved): WebGPU gives a mesh 8 vertex buffers, and the tee already
+   * uses most of them (position, normal, uv, the cloth's two); five more of its own and it can't be drawn at all.
+   */
+  private static put(g: THREE.BufferGeometry, w: ArrayLike<number>[]) {
+    const cnt = g.attributes.position.count, K = MOTION_ATTRS.length, data = new Float32Array(cnt * K);
+    for (let i = 0; i < cnt; i++) for (let k = 0; k < K; k++) data[i * K + k] = w[k][i] ?? 0;
+    const buf = new THREE.InterleavedBuffer(data, K);
+    MOTION_ATTRS.forEach((nm, k) => g.setAttribute(nm, new THREE.InterleavedBufferAttribute(buf, 1, k)));
+  }
+
+  /** the weights in one buffer: the person's own (from its GLB, five separate ones), or zero for a mesh that has none */
   static ensure(g: THREE.BufferGeometry) {
-    for (const n of MOTION_ATTRS) if (!g.getAttribute(n)) g.setAttribute(n, new THREE.BufferAttribute(new Float32Array(g.attributes.position.count), 1));
+    const a = MOTION_ATTRS.map((n) => g.getAttribute(n));
+    if (a.every((x) => x && (x as THREE.InterleavedBufferAttribute).isInterleavedBufferAttribute)) return;
+    const cnt = g.attributes.position.count;
+    Motion.put(g, a.map((x) => {
+      const o = new Float32Array(cnt);
+      if (x) for (let i = 0; i < cnt; i++) o[i] = x.getX(i);
+      return o;
+    }));
   }
 
   /**
@@ -110,7 +128,7 @@ export class Motion {
       if (best < 0) continue;
       out[0][i] = body.w[0][best]; out[1][i] = body.w[1][best] * 0.5; out[2][i] = body.w[2][best];
     }
-    MOTION_ATTRS.forEach((nm, k) => g.setAttribute(nm, new THREE.BufferAttribute(out[k], 1)));
+    Motion.put(g, out);
   }
 
   /** advance; true while anything moves */
