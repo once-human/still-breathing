@@ -14,6 +14,21 @@ on:
       samples:
         description: "Cycles samples per pixel"
         default: "64"
+      scene:
+        description: "turntable: hall (the person inside stage.py's real hall, built once for the run) or show (the old 360 picture laid in behind)"
+        type: choice
+        options: [hall, show]
+        default: hall
+      wearers:
+        description: "turntable: who wears it, comma separated label=person@fit[@trousers] (public/tee/human/<person>.glb, public/tee/fit/<fit>/stand.glb, pipeline/people/<trousers>-trousers.blend); an empty label keeps public/tee/still/<design>/"
+        default: "=m170-stand@m170-M"
+      views:
+        description: "turntable angles to render, comma separated (empty = all twelve); for timing a test"
+        default: ""
+      publish:
+        description: "commit the frames to the site (off: they stay as run artifacts for a week)"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -33,11 +48,48 @@ jobs:
           import json, os
           tees = [t.strip() for t in "${{ inputs.tees }}".split(",") if t.strip()]
           views = [f"a{a}" for a in range(0, 360, 30)] if "${{ inputs.kind }}" == "turntable" else ["front", "q", "back"]
-          print("matrix=" + json.dumps({"include": [{"design": t.split("-")[0], "tee": t.split("-")[1], "view": v} for t in tees for v in views]}))
+          pick = [f"a{x.strip()}" for x in "${{ inputs.views }}".split(",") if x.strip()]
+          if pick and "${{ inputs.kind }}" == "turntable": views = [v for v in views if v in pick]
+          W = []
+          for w in ("${{ inputs.wearers }}".split(",") if "${{ inputs.kind }}" == "turntable" else ["="]):
+              label, _, rest = w.strip().partition("="); parts = rest.split("@") if rest else []
+              W.append({"label": label, "person": parts[0] if parts else "", "fit": parts[1] if len(parts) > 1 else "", "trousers": parts[2] if len(parts) > 2 else ""})
+          print("matrix=" + json.dumps({"include": [{"design": t.split("-")[0], "tee": t.split("-")[1], "view": v, **w} for t in tees for v in views for w in W]}))
           EOF
 
+  hall:
+    # stage.py's hall takes ~8 min to build (the photographed hall, the crowd): built once here, opened by every frame
+    if: inputs.kind == 'turntable' && inputs.scene == 'hall'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/blender
+          key: blender-${{ env.BLENDER }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/polyhaven
+          key: polyhaven-hall-v1
+      - name: Blender ${{ env.BLENDER }}
+        run: |
+          if [ ! -x ~/blender/blender ]; then
+            mkdir -p ~/blender
+            curl -sSL "https://download.blender.org/release/Blender${BLENDER%.*}/blender-${BLENDER}-linux-x64.tar.xz" | tar -xJ -C ~/blender --strip-components=1
+          fi
+          sudo apt-get -qq update && sudo apt-get -qq install -y libxi6 libxxf86vm1 libxfixes3 libxrender1 libgl1 libxkbcommon0 libsm6 > /dev/null
+          pip install -q numpy pillow
+      - name: Build the hall
+        run: |
+          SCENE=hall HALL_SAVE="$PWD/hall.blend" ~/blender/blender -b --factory-startup -P pipeline/render.py -- C black a0 "$PWD/x.png" \
+            | grep -E "crowd|hall saved|Error|Traceback"
+          test -s hall.blend && ls -la hall.blend
+      - uses: actions/upload-artifact@v4
+        with: { name: hall, path: hall.blend, retention-days: 2 }
+
   frame:
-    needs: plan
+    needs: [plan, hall]
+    if: always() && needs.plan.result == 'success' && needs.hall.result != 'failure' && needs.hall.result != 'cancelled'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -56,16 +108,21 @@ jobs:
             curl -sSL "https://download.blender.org/release/Blender${BLENDER%.*}/blender-${BLENDER}-linux-x64.tar.xz" | tar -xJ -C ~/blender --strip-components=1
           fi
           sudo apt-get -qq update && sudo apt-get -qq install -y libxi6 libxxf86vm1 libxfixes3 libxrender1 libgl1 libxkbcommon0 libsm6 > /dev/null
+      - if: inputs.kind == 'turntable' && inputs.scene == 'hall'
+        uses: actions/download-artifact@v4
+        with: { name: hall, path: hall }
       - name: Print files for ${{ matrix.design }} ${{ matrix.tee }}
         working-directory: pipeline
         run: pip install -q numpy pillow && python3 texture.py ${{ matrix.design }} ${{ matrix.tee }} && SIZE=M python3 texture.py detail
       - name: Render ${{ matrix.design }} ${{ matrix.tee }} ${{ matrix.view }}
         run: |
-          mkdir -p out; N="${{ matrix.design }}-${{ matrix.tee }}-${{ matrix.view }}"
+          mkdir -p out; N="${{ matrix.design }}-${{ matrix.tee }}-${{ matrix.label }}-${{ matrix.view }}"
           if [ "${{ inputs.kind }}" = "turntable" ]; then
-            # the poster frames of the 3D view: the shop tee in M on the 170 cm body it was simulated on, worn by that
-            # body made a person, at the show (its lights, the stage picture laid in behind by still_post.py)
-            export W=880 H=1120 SCENE=show GLB="$PWD/public/tee/fit/m170-M/stand.glb" PERSON="$PWD/public/tee/human/m170-stand.glb"
+            # the poster frames of the 3D view: the shop tee on the body it was simulated on, worn by that body made a
+            # person (human.py), in the hall itself or at the show picture
+            export W=880 H=1120 SCENE=${{ inputs.scene }} GLB="$PWD/public/tee/fit/${{ matrix.fit }}/stand.glb" PERSON="$PWD/public/tee/human/${{ matrix.person }}.glb"
+            [ -n "${{ matrix.trousers }}" ] && export TROUSERS="$PWD/pipeline/people/${{ matrix.trousers }}-trousers.blend"
+            [ "${{ inputs.scene }}" = "hall" ] && export HALL_BLEND="$PWD/hall/hall.blend"
             R="$PWD/out/$N-film.png"
           else
             # the shop tee: size M sewn onto the ghost form by fit.yml
@@ -74,19 +131,19 @@ jobs:
           THREADS=$(nproc) ~/blender/blender -b --factory-startup -P pipeline/render.py -- \
             ${{ matrix.design }} ${{ matrix.tee }} ${{ matrix.view }} "$R" ${{ inputs.samples }} | grep -E "Fra:|Saved|Error|Traceback" | tail -5
           test -s "$R"
-          if [ "${{ inputs.kind }}" = "turntable" ]; then
+          if [ "${{ inputs.kind }}" = "turntable" ] && [ "${{ inputs.scene }}" = "show" ]; then
             python3 pipeline/still_post.py "$R" "$R.cam.json" public/tee/stage/show.webp "out/$N.png" && rm "$R" "$R.cam.json"
-          fi
+          elif [ "${{ inputs.kind }}" = "turntable" ]; then mv "$R" "out/$N.png"; fi
           test -s "out/$N.png"
       - uses: actions/upload-artifact@v4
         with:
-          name: frame-${{ matrix.design }}-${{ matrix.tee }}-${{ matrix.view }}
+          name: frame-${{ matrix.design }}-${{ matrix.tee }}-${{ matrix.label }}-${{ matrix.view }}
           path: out/*.png
           retention-days: 7
 
   publish:
     needs: frame
-    if: always() && needs.frame.result != 'cancelled'
+    if: always() && needs.frame.result != 'cancelled' && inputs.publish
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -100,8 +157,8 @@ jobs:
           python3 -m pip install -q pillow 2>/dev/null || pip install -q pillow
           n=0
           for f in frames/*.png; do
-            b=$(basename "$f" .png); design=${b%%-*}; view=${b##*-}
-            if [ "${{ inputs.kind }}" = "turntable" ]; then d=public/tee/still/$(echo $design | tr A-Z a-z); mkdir -p $d
+            b=$(basename "$f" .png); design=${b%%-*}; view=${b##*-}; rest=${b%-*}; label=${rest##*-}
+            if [ "${{ inputs.kind }}" = "turntable" ]; then d=public/tee/still/$(echo $design | tr A-Z a-z)${label:+/$label}; mkdir -p $d
               # the web gets WebP: ~35 KB a frame instead of ~1 MB (84 looks the same as 90 over the soft hall, ~23 % smaller)
               python3 -c "import sys; from PIL import Image; Image.open(sys.argv[1]).save(sys.argv[2], 'WEBP', quality=84, method=6)" "$f" $d/$view.webp
             else d=previews; mkdir -p $d; cp "$f" $d/3d-$b.png; fi

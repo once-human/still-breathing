@@ -5,20 +5,40 @@
 #   both lifted by FLOOR, framed by WEAR_CAMERA, lit by the show's lights (src/lib/viewer/scene.ts). The place stays
 #   put and the camera walks round it (aNN = the viewer's yaw). Film is transparent; still_post.py lays the
 #   stage picture in behind along the pinhole ray, as the path tracer does (its lens blur is already in it).
+# PERSON=<person.glb> SCENE=hall ...   the same shot inside the hall itself: stage.py builds the show (its walls,
+#   decks, truss, haze, crowd and lights) and the person stands on its floor in the middle (Blender z = 0, as
+#   stage.py has it), so the depth, the haze and the lens blur behind them are real, not a picture.
 import bpy, bmesh, sys, math
 from mathutils import Vector
 a = sys.argv[sys.argv.index("--") + 1:]
 design, tee_col, view, out = a[:4]; samples = int(a[4]) if len(a) > 4 else 128
 import os
 GLB = os.environ.get("GLB")
-PERSON = os.environ.get("PERSON"); SHOW = os.environ.get("SCENE") == "show"
+PERSON = os.environ.get("PERSON"); SHOW = os.environ.get("SCENE") == "show"; HALL = os.environ.get("SCENE") == "hall"
 FLOOR = 0.35   # scene.ts FLOOR: the person stands on the floor the fit pipeline's bodies stand on
+LIFT = 0.0 if HALL else FLOOR   # stage.py's hall has its floor at z = 0
+if HALL and os.environ.get("HALL_BLEND"):
+    # the hall built once for the whole turntable (HALL_SAVE below), opened here
+    bpy.ops.wm.open_mainfile(filepath=os.environ["HALL_BLEND"])
+elif HALL:
+    # stage.py's own build of the show, everything before its camera (it starts from an empty scene)
+    sp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stage.py")
+    code = open(sp).read(); code = code[:code.index("# ---------- LOOK=")]
+    argv = sys.argv; sys.argv = [argv[0], "--", "show", out + ".exr"]
+    exec(compile(code, sp, "exec"), {"__file__": sp, "__name__": "stage"})
+    sys.argv = argv
+    if os.environ.get("HALL_SAVE"):   # the farm builds it once (~8 min) and every frame opens it
+        bpy.ops.file.pack_all()
+        bpy.ops.wm.save_as_mainfile(filepath=os.environ["HALL_SAVE"], compress=True)
+        print("hall saved", os.environ["HALL_SAVE"]); bpy.ops.wm.quit_blender()
 ROOT = os.path.dirname(os.path.abspath(__file__)) if GLB else os.path.dirname(bpy.data.filepath)   # textures
 sc = bpy.context.scene
 if GLB:
-    for o in list(bpy.data.objects): bpy.data.objects.remove(o)
+    if not HALL:
+        for o in list(bpy.data.objects): bpy.data.objects.remove(o)
+    before = set(bpy.data.objects)
     bpy.ops.import_scene.gltf(filepath=GLB)
-    parts = [o for o in sc.objects if o.type == "MESH"]
+    parts = [o for o in sc.objects if o.type == "MESH" and o not in before]
     for o in sc.objects: o.select_set(o in parts)
     bpy.context.view_layer.objects.active = parts[0]
     if len(parts) > 1: bpy.ops.object.join()
@@ -82,8 +102,44 @@ if PERSON:
                 pb.inputs["Subsurface Radius"].default_value = (1.0, 0.35, 0.2)
                 pb.inputs["Subsurface Scale"].default_value = 0.004
             po.data.materials[i] = pm
-        po.location.z += FLOOR
-    tee.location.z += FLOOR
+        po.location.z += LIFT
+    tee.location.z += LIFT
+# ---- TROUSERS=<blend> (trousers.py): the draped trousers in place of the person's own; raw indigo denim under the
+# off-white tee, light stone cotton chinos under the black one, each a twill whose diagonal and yarn read up close
+if PERSON and os.environ.get("TROUSERS"):
+    for po in person:
+        if "jean" in po.name.lower(): po.hide_render = True
+    with bpy.data.libraries.load(os.environ["TROUSERS"]) as (src, dst):
+        dst.objects = ["trousers"]
+    trz = dst.objects[0]; sc.collection.objects.link(trz); trz.location.z += LIFT
+    so_ = trz.modifiers.new("thick", "SOLIDIFY"); so_.thickness = 0.0022; so_.offset = 1
+    sd_ = trz.modifiers.new("sub", "SUBSURF"); sd_.levels = sd_.render_levels = 1
+    denim = tee_col == "cream"
+    tmat = bpy.data.materials.new("denim" if denim else "chino"); tmat.use_nodes = True
+    TN, TL = tmat.node_tree.nodes, tmat.node_tree.links; tb = TN["Principled BSDF"]
+    tco = TN.new("ShaderNodeTexCoord")
+    # the twill: diagonal wales, 1.6 mm apart on denim, 1.1 mm on chino, running up and to the left as a 3x1 twill does
+    rot = TN.new("ShaderNodeMapping"); rot.inputs["Rotation"].default_value = (0, math.radians(-63), 0)
+    TL.new(tco.outputs["Object"], rot.inputs[0])
+    wav = TN.new("ShaderNodeTexWave"); wav.wave_type = "BANDS"; wav.inputs["Scale"].default_value = 1 / (0.0016 if denim else 0.0011) / 2
+    wav.inputs["Distortion"].default_value = 0.4; TL.new(rot.outputs[0], wav.inputs["Vector"])
+    # slub: thicker and thinner stretches of the warp yarn, long and thin up the leg
+    sl = TN.new("ShaderNodeMapping"); sl.inputs["Scale"].default_value = (220, 220, 18); TL.new(tco.outputs["Object"], sl.inputs[0])
+    nz = TN.new("ShaderNodeTexNoise"); nz.inputs["Detail"].default_value = 3; TL.new(sl.outputs[0], nz.inputs["Vector"])
+    base = (0.016, 0.026, 0.06) if denim else (0.47, 0.42, 0.32)   # linear albedo
+    lo_, hi_ = (0.8, 1.25) if denim else (0.93, 1.06)
+    mr_ = TN.new("ShaderNodeMapRange"); mr_.inputs[3].default_value = lo_; mr_.inputs[4].default_value = hi_
+    TL.new(nz.outputs[0], mr_.inputs[0])
+    tw = TN.new("ShaderNodeMapRange"); tw.inputs[3].default_value = 0.9; tw.inputs[4].default_value = 1.1; TL.new(wav.outputs[0], tw.inputs[0])
+    m1 = TN.new("ShaderNodeMath"); m1.operation = "MULTIPLY"; TL.new(mr_.outputs[0], m1.inputs[0]); TL.new(tw.outputs[0], m1.inputs[1])
+    cm = TN.new("ShaderNodeVectorMath"); cm.operation = "SCALE"; cm.inputs[0].default_value = base
+    TL.new(m1.outputs[0], cm.inputs["Scale"]); TL.new(cm.outputs[0], tb.inputs["Base Color"])
+    bp = TN.new("ShaderNodeBump"); bp.inputs["Strength"].default_value = 0.35; bp.inputs["Distance"].default_value = 0.0003
+    TL.new(wav.outputs[0], bp.inputs["Height"]); TL.new(bp.outputs[0], tb.inputs["Normal"])
+    tb.inputs["Roughness"].default_value = 0.82 if denim else 0.75
+    tb.inputs["Specular IOR Level"].default_value = 0.25
+    tb.inputs["Sheen Weight"].default_value = 0.25 if denim else 0.35; tb.inputs["Sheen Roughness"].default_value = 0.4
+    trz.data.materials.clear(); trz.data.materials.append(tmat)
 # ---- material: cotton jersey + DTG ink ----
 m = bpy.data.materials.new("jersey"); m.use_nodes = True; nt = m.node_tree; N = nt.nodes; L = nt.links
 for n in list(N): N.remove(n)
@@ -124,15 +180,17 @@ def area(name, loc, size, power, tint=(1, 1, 1), aim=(0, 0, 1.12)):
     l = bpy.data.lights.new(name, "AREA"); l.shape = "RECTANGLE"; l.size, l.size_y = size; l.energy = power; l.color = tint
     ob = bpy.data.objects.new(name, l); sc.collection.objects.link(ob); ob.location = loc
     ob.rotation_euler = (Vector(aim) - Vector(loc)).to_track_quat("-Z", "Y").to_euler(); return ob
-w = bpy.data.worlds.new("w"); sc.world = w; w.use_nodes = True
-if SHOW:
+if not HALL: w = bpy.data.worlds.new("w"); sc.world = w; w.use_nodes = True
+if HALL:
+    pass   # the hall's own lights and world (stage.py)
+elif SHOW:
     # ---- the show: the place's own lights (scene.ts SCENES "show", three (x, y, z) -> Blender (x, -z, y)), no
     # sweep, the dim hall as the world light. The lamps light the person but are not seen: the picture shows them
     k = 0.6 if tee_col == "cream" else 1.0
     for name, (x, y, z), size, power, tint in [
-        ("stage", (1.5, 10.35, 12.6), (0.4, 0.4), 6000, (1, 0.8, 0.6)),
-        ("beam", (-2.5, 10.35, 12.6), (0.2, 0.2), 2700, (0.86, 0.91, 1)),
-        ("spot", (-9.0, 7.0, 4.0), (0.3, 0.3), 1000, (1, 0.72, 0.45)),
+        ("stage", (1.4, 5.85, 3.0), (0.4, 0.4), 760, (1, 0.8, 0.6)),
+        ("beam", (-1.6, 5.85, 3.2), (0.2, 0.2), 360, (0.86, 0.91, 1)),
+        ("spot", (-6.0, 4.6, 2.0), (0.3, 0.3), 390, (1, 0.72, 0.45)),
         ("foh", (-1.4, 3.5, -3.6), (0.8, 0.8), 480, (1, 0.86, 0.7)),
     ]:
         # scene.ts aims the places' lights at the chest, 1.1 m over the floor (the floor here is FLOOR up)
@@ -165,8 +223,8 @@ if PERSON:
     # WEAR_CAMERA in scene.ts, lifted with the person; the person stands still and the camera walks round them
     # (the viewer turns person and place together in front of a fixed camera: the same picture)
     a = math.radians(-ANG); x, y = 0.2, -2.85
-    cam.location = (x * math.cos(a) - y * math.sin(a), x * math.sin(a) + y * math.cos(a), FLOOR + 1.1)
-    aim = Vector((0, 0, FLOOR + 0.99)); cam.data.dof.focus_distance = 2.8
+    cam.location = (x * math.cos(a) - y * math.sin(a), x * math.sin(a) + y * math.cos(a), LIFT + 1.1)
+    aim = Vector((0, 0, LIFT + 0.99)); cam.data.dof.focus_distance = 2.8
 else:
     tee.rotation_mode = "XYZ"   # the glTF importer leaves objects in quaternion mode, which ignores rotation_euler
     tee.rotation_euler[2] = math.radians(ANG)
@@ -182,7 +240,13 @@ if os.environ.get("DEVICE", "CPU") != "CPU":
     for d in cp.devices: d.use = d.type != "CPU"
     sc.cycles.device = "GPU"
 sc.cycles.samples = samples; sc.cycles.use_denoising = True
-sc.cycles.max_bounces = 6; sc.render.threads_mode = "FIXED"; sc.render.threads = int(os.environ.get("THREADS", 3)); sc.view_settings.view_transform = "Khronos PBR Neutral"   # keeps base colours true (AgX desaturated the blue and cream)
+sc.cycles.max_bounces = 6
+if HALL:   # as stage.py renders the show: few bounces in the dark, one through the haze, adaptive
+    cy = sc.cycles; cy.max_bounces = 6; cy.diffuse_bounces = 3; cy.glossy_bounces = 2; cy.transmission_bounces = 2
+    cy.volume_bounces = 1; cy.volume_step_rate = 2.0; cy.sample_clamp_indirect = 4.0
+    cy.use_adaptive_sampling = True; cy.adaptive_threshold = 0.012
+    cy.caustics_reflective = cy.caustics_refractive = False
+sc.render.threads_mode = "FIXED"; sc.render.threads = int(os.environ.get("THREADS", 3)); sc.view_settings.view_transform = "Khronos PBR Neutral"   # keeps base colours true (AgX desaturated the blue and cream)
 sc.render.resolution_x, sc.render.resolution_y = int(os.environ.get("W", 1100)), int(os.environ.get("H", 1400)); sc.render.filepath = out
 if os.environ.get("TRANSPARENT") or SHOW:   # web stills: tee only, over the page colour, or the stage laid in behind
     sc.render.film_transparent = True
