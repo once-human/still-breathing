@@ -43,16 +43,17 @@ def disc(img, R, C=3):
 if BLUR:
     img = np.maximum(disc(img, max(1.0, W * BLUR)), 0)
 
-# the people, and only the people, as a fast portrait lens (85 mm f/1.4, focused on the person in front) would draw
-# them: soft shapes, more so the further back, while the hall, the cloth and the lamps stay sharp. Each person is
-# blurred over what is behind them (filled in from round them), so the blur spreads past their edges as it would.
+# the people, and only the people, as a very fast portrait lens (85 mm wide open, focused on the person in front)
+# would draw them: soft shapes in the dark, more so the further back, a little darker than the room round them so
+# they stay behind the person, while the hall, the cloth and the lamps stay sharp. Each person is blurred over what
+# is behind them (filled in from round them), so the blur spreads past their edges as it would.
 if mask is not None:
     m = np.clip(mask[..., 0], 0, 1)
     z = np.where(m > 0.02, mask[..., 1] * 100 / np.maximum(m, 1e-3), 100.0)
-    # never less than 8 px (a sixth of a degree): the near ones too are soft enough that no face or hair is made out
-    RADII = [8, 12, 17, 22, 28]
-    coc = np.clip(0.085 / 1.4 * np.abs(1 / 2.8 - 1 / np.maximum(z, 0.5)) * W / (4 * math.pi), RADII[0], RADII[-1]) * W / 16384
-    fill = disc(np.concatenate([img * (1 - m)[..., None], (1 - m)[..., None]], -1), 32, 4)
+    # never less than 40 px (nearly a degree): nobody is made out, only people
+    RADII = [40, 56, 74, 94, 116]
+    coc = np.clip(0.085 / 0.45 * np.abs(1 / 2.8 - 1 / np.maximum(z, 0.5)) * W / (4 * math.pi), RADII[0], RADII[-1]) * W / 16384
+    fill = disc(np.concatenate([img * (1 - m)[..., None], (1 - m)[..., None]], -1), 64 * W / 16384, 4)
     fill = fill[..., :3] / np.maximum(fill[..., 3:], 1e-3)
     base = img * (1 - m)[..., None] + fill * m[..., None]
     acc = np.zeros_like(img); cov = np.zeros((H, W), np.float32)
@@ -66,7 +67,7 @@ if mask is not None:
         b = disc(np.concatenate([img * mi[..., None], mi[..., None]], -1), R_ * W / 16384, 4)
         acc += b[..., :3]; cov += b[..., 3]
     cov = np.clip(cov, 0, 1)
-    img = np.maximum(base * (1 - cov)[..., None] + acc, 0)
+    img = np.maximum(base * (1 - cov)[..., None] + acc * 0.6, 0)
     print("people blurred:", round(float(m.mean()), 3), "of the picture, radius median", round(float(np.median(coc[m > 0.5])), 1) if (m > 0.5).any() else 0)
 
 # the show: a real lens's glow round the lamps and screens (light scattered in the glass), only from what is far

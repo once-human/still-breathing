@@ -1058,7 +1058,9 @@ def build_show():
             y = CY - RC + (j + rnd.uniform(0.15, 0.85)) * step
             if math.hypot((x - CX) / 1.15, y - CY) > RC: continue
             r0 = math.hypot(x, y)
-            if r0 < 1.9 or (r0 < 2.7 and rnd.random() < 0.5): continue
+            # a space round the person (the camera's ring is 2.86 m out): the nearest behind them about 6 m from
+            # the camera, as big as people that far off are, never looming over their shoulders
+            if r0 < 3.3 or (r0 < 4.2 and rnd.random() < 0.5): continue
             if deck(x, y) or foh(x, y) or math.hypot(x - sp_.x, y - sp_.y) < 0.9: continue
             if any(math.hypot(x - (CX + s_ * (SX + 2.6)), y - (CY + d_)) < 0.8 for s_ in (-1, 1) for d_ in (-2.2, 2.2)): continue
             up = rnd.random() < (0.45 if math.hypot(x - CX, y - CY) < 12 else 0.25)
