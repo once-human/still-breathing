@@ -55,7 +55,8 @@ def save(arr, path):
 BACK = {("a", "cream"): ("art/art-a-map/art-cream-al3.png", "overlays/ov-back-cream.png"),
         ("b", "black"): ("art/art-b-lines/art-black-al3.png", "overlays/ov-back-black.png"),
         ("c", "black"): ("art/art-crowd-tour/art-black.png", "overlays/ov-back-T-black-hi.png"),
-        ("d", "cream"): ("art/art-d-map/art-cream.png", "overlays/ov-back-D-cream-hi.png")}
+        ("d", "cream"): ("art/art-d-map/art-cream.png", "overlays/ov-back-D-cream-hi.png"),
+        ("e", "black"): ("art/art-e-breath/art-black.png", "overlays/ov-back-E-black-hi.png")}
 pairs = [tuple(p.split("-")) for p in sys.argv[2].split(",")] if len(sys.argv) > 2 else list(BACK)
 for d, tee in pairs:
     art, ov = BACK[(d, tee)]
