@@ -27,7 +27,7 @@ const POSES: { id: Pose; label: string }[] = [{ id: "stand", label: "standing" }
  * their own body (pipeline/people.py, human.py) */
 export const WEARERS = {
   him: { dir: "hm175-M", size: "M", pose: "stand", body: false, person: "/tee/human/hm175-M-stand.glb", still: "" },
-  her: { dir: "hf163-S", size: "S", pose: "stand", body: false, person: "/tee/human/hf163-S-stand.glb" },
+  her: { dir: "hf163-S", size: "S", pose: "stand", body: false, person: "/tee/human/hf163-S-stand.glb", still: "her" },
 } satisfies Record<string, Variant>;
 export type Wearer = keyof typeof WEARERS;
 export const SHOP: Variant = WEARERS.him;

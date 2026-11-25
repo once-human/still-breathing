@@ -926,7 +926,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
             : ANGLES.map((a) => (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                key={`${design}-${a}`} src={STILL(design, a)} alt="" draggable={false}
+                key={`${design}-${a}`} src={STILL(design, a, variant.still)} alt="" draggable={false}
                 fetchPriority={a === ang ? "high" : "low"} decoding="async"
                 className={`absolute inset-0 h-full w-full ${a === ang ? "" : "opacity-0"}`}
                 style={stillCrop}
@@ -973,7 +973,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           {SHOTS.map((x, i) => {
             const live = thumbs[`${design}-${x.id}`];
             // until a view has been seen live: the print itself for the table, a rendered frame for the others
-            const src = live ?? (x.spots ? asset(printBackURL(design, tee)) : x.who === "alone" ? TEE_STILL(design, nearestTee(x.thumb.a)) : STILL(design, x.thumb.a));
+            const src = live ?? (x.spots ? asset(printBackURL(design, tee)) : x.who === "alone" ? TEE_STILL(design, nearestTee(x.thumb.a)) : STILL(design, x.thumb.a, variant.still));
             return (
               <button
                 key={x.id} onClick={() => void goShot(i)} aria-label={x.label} aria-current={i === shotI}
