@@ -37,7 +37,7 @@ permissions:
 
 env:
   BLENDER: "5.3.0"
-  MOTION_ROWS: "3368,3816"   # the rows of the 16384 x 8192 show the canopy moves in, as the viewer's camera sees it (scene.ts MOTION)
+  MOTION_ROWS: "3368,4096"   # the rows of the 16384 x 8192 show the canopy moves in, as the viewer's camera sees it (scene.ts MOTION): from the band's top down to the horizon, as every swag hangs above the camera (the lowest, over the far crowd, swings down to row 4028)
   MOTION_FRAMES: "120"       # canopy.py: a 10 s loop at 12 frames a second
 
 jobs:

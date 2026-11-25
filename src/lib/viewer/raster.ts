@@ -126,6 +126,10 @@ export class Raster {
   /** the place's moving rows (the show's canopy), a video laid over the band where it moves; off: the band alone */
   private motionNode: ReturnType<typeof texture> | null = null;
   private motionOn = uniform(0);
+  // how far down the video reaches (in v) and half a row of it: read from the video's own size when it arrives, so a
+  // video of more or fewer rows is drawn right whichever this page expected (scene.ts MOTION)
+  private motionSpan = uniform(MOTION.v1 - MOTION.v0);
+  private motionEdge = uniform(2 / 1792);
   private motionVideo: HTMLVideoElement | null = null;
   private motionTex: THREE.VideoTexture | null = null;
   private envYaw = uniform(0);
@@ -261,8 +265,8 @@ export class Raster {
     const bx = clamp(fu.sub(tile), 0.5 / 4096, 1 - 0.5 / 4096), by = tile.add(clamp(vb, 2 / 6560, 1 - 2 / 6560)).div(T);
     const bandN = texture(band ?? t, vec2(bx, by)); this.band = bandN;
     // the moving rows: the same tiling over fewer rows; at their foot they ease into the band over a few rows
-    const vm = v.sub(MOTION.v0).div(MOTION.v1 - MOTION.v0);
-    const my = tile.add(clamp(vm, 2 / 1792, 1 - 2 / 1792)).div(T);
+    const vm = v.sub(MOTION.v0).div(this.motionSpan);
+    const my = tile.add(clamp(vm, this.motionEdge, float(1).sub(this.motionEdge))).div(T);
     const motionN = texture(band ?? t, vec2(bx, my)); this.motionNode = motionN;
     const wm = step(0, vm).mul(clamp(float(1).sub(vm).div(0.04), 0, 1)).mul(this.motionOn);
     this.bg = mix(mix(envN, bandN, step(0, vb).mul(step(vb, 1))), motionN, wm);
@@ -324,6 +328,11 @@ export class Raster {
         t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
         t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter;
         this.motionTex = t;
+        // its tiles are 4096 across at full size (2048 on a phone), the band's own scale: rows of 8192 down the panorama
+        if (video.videoWidth > 0 && video.videoHeight > 0) {
+          const rows = (video.videoHeight / MOTION.tiles) * (4096 / video.videoWidth);
+          this.motionSpan.value = rows / 8192; this.motionEdge.value = 2 / video.videoHeight;
+        }
       }
     }
     this.applyMotion();

@@ -68,10 +68,11 @@ export const LIGHT_AIM: V3 = [0, 1.12, 0];
  */
 export const BAND = { v0: 3368 / 8192, v1: 5008 / 8192, tiles: 4 };
 /**
- * The show's canopy breathing: the rows of the band it moves in (3368..3816 of 8192, about 16 down to 6.5 degrees up),
- * a looping video of the same four stacked tiles (pipeline/motion_post.py); everything below them stays the band.
+ * The show's canopy breathing: the rows of the band it moves in (3368..4096 of 8192, about 16 degrees up down to the
+ * horizon: every swag hangs above the camera), a looping video of the same four stacked tiles (pipeline/motion_post.py);
+ * everything below them stays the band. How far down it reaches is read from the video's own size (raster.ts).
  */
-export const MOTION = { v0: 3368 / 8192, v1: 3816 / 8192, tiles: 4 };
+export const MOTION = { v0: 3368 / 8192, v1: 4096 / 8192, tiles: 4 };
 export const motionOf = (url: string, lo: boolean) => (lo ? url.replace(/\.mp4$/, "-lo.mp4") : url);
 export const bandOf = (env: string, lo: boolean) => env.replace(/\.webp$/, lo ? "-band-lo.webp" : "-band.webp");
 
