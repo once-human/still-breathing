@@ -205,4 +205,6 @@ jobs:
           git add -A public previews
           git diff --cached --quiet && { echo "nothing new"; exit 0; }
           git commit -m "Render ${{ inputs.kind }}: $n frames (${{ inputs.tees }}, ${{ inputs.samples }} spp)"
-          git pull --rebase -q && git push
+          # a newer commit may have touched the same frames (another run's): this run's frames win, and a push that
+          # loses the race is tried again
+          for i in 1 2 3 4 5; do git pull --rebase -q -X theirs && git push && exit 0; git rebase --abort 2>/dev/null; sleep $((i * 7)); done; exit 1
