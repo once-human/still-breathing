@@ -32,6 +32,8 @@ jobs:
           inc.append({"body": "m170", "size": "M", "name": "form-M", "form": "1"})   # the shop tee, on a ghost form
           # the two people who wear it in the shop view: the athletic man in M, the athletic woman in S
           inc += [{"body": "ma175", "size": "M", "name": "ma175-M", "form": ""}, {"body": "fa163", "size": "S", "name": "fa163-S", "form": ""}]
+          # the same two on Blender Studio's realistic bodies (pipeline/people.py: the artist's sculpt, MakeHuman's rig)
+          inc += [{"body": "hm175", "size": "M", "name": "hm175-M", "form": ""}, {"body": "hf163", "size": "S", "name": "hf163-S", "form": ""}]
           inc = [x for x in inc if not only or x["name"] in only]
           print("matrix=" + json.dumps({"include": inc}))
           EOF
