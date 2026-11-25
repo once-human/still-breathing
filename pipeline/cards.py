@@ -180,7 +180,7 @@ def hairline(hb, at, out, uvl, col, normals, colour, rnd, kl, tl):
         a, b = e.verts[0].co, e.verts[1].co
         f = e.link_faces[0]
         n_e = (e.verts[0].normal + e.verts[1].normal).normalized()
-        for _ in range(max(1, int((b - a).length / 0.0007))):
+        for _ in range(max(1, int((b - a).length / 0.0011))):
             mid = a + (b - a) * rnd.random()
             inward = f.calc_center_median() - mid
             inward = (inward - n_e * inward.dot(n_e)).normalized()
@@ -191,7 +191,7 @@ def hairline(hb, at, out, uvl, col, normals, colour, rnd, kl, tl):
             L = rnd.uniform(0.015, 0.03) if fine else rnd.uniform(0.035, 0.07)
             W = rnd.uniform(0.004, 0.007) if fine else rnd.uniform(0.006, 0.009)
             K = 6
-            back = rnd.uniform(-0.0025, 0.0005) if fine else rnd.uniform(0.0005, 0.022) ** 1.0   # < 0: on the skin in front
+            back = rnd.uniform(-0.0025, 0.0005) if fine else rnd.uniform(0.003, 0.022)   # < 0: on the skin in front
             bend = rnd.uniform(0.5, 1.0)
             if back < 0: pts = [(mid - inward * back, n_e, inward)]; p = mid    # on the skin, just in front
             else:
@@ -204,7 +204,7 @@ def hairline(hb, at, out, uvl, col, normals, colour, rnd, kl, tl):
                 fw = r0[2] if r0 else side
                 # out of the hairline a little up into the hair, then the way the parting combs it (to the side)
                 cen = sm(0.022, 0.0, abs(mid.x))                 # at the middle it rises further, up to the parting
-                d = (fw * (0.4 + 0.6 * bend * s_) * (1 - 0.6 * cen) + inward * (0.55 + 1.2 * cen) * (1 - (1 - 0.5 * cen) * s_)).normalized()
+                d = (fw * (0.25 + 0.6 * bend * s_) * (1 - 0.6 * cen) + inward * (1.0 + 1.2 * cen) * (1 - 0.6 * s_)).normalized()
                 r = at(p + d * (L / K))
                 if r is None: break
                 q, nn, t = r[0], r[1], d - r[1] * d.dot(r[1])
@@ -223,7 +223,7 @@ def hairline(hb, at, out, uvl, col, normals, colour, rnd, kl, tl):
                 tt = arc[i] / Lt
                 sd = n.cross(t).normalized()
                 w = W * (0.7 + 0.3 * tt)                     # the roots close together, spreading a little
-                h = 0.0002 + 0.0011 * tt                     # out of the skin, lying onto the hair over it
+                h = 0.0001 + 0.0009 * tt                     # out of the skin, lying onto the hair over it
                 row = []
                 for a_ in (-0.5, 0.0, 0.5):
                     if a_ == 0.0 or i == 0: pq, pn = q + sd * (a_ * w), n

@@ -133,7 +133,7 @@ def grow(b, SRC, wt, she, eyeL, eyeR, mouth):
                             if qm is None or qm.z < hz: hi = mid
                             else: lo = mid
                         dm = (Vector((0, 0, 1)) * math.cos(lo) + hd * math.sin(lo)).normalized(); qm = inward(C, dm)
-                        if qm is not None: col.append((qm + dm * 0.0007, dm, qm.z)); edge_done = True; continue
+                        if qm is not None: col.append((qm - dm * 0.0004, dm, qm.z)); edge_done = True; continue   # just under the skin: no rim
                     col.append(None); continue
                 col.append((q + d * max(off, 0.0007), d, q.z))
             # below the head's widest it hangs straight, to just under the jaw (longer toward the face), ends under
