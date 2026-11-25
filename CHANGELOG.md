@@ -12,7 +12,7 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 - On the table: the tee laid flat on a worn wooden table, lit by a window on the right whose frame throws a soft shadow across the boards. Air comes in through it, never quite straight: it dies away, breezes, builds slowly or bursts. Now and then a dry leaf (rarely a thread or a hair) drifts down or skates in; it has weight, holding until a puff beats its grip, then breaking loose, skidding and stopping again. Leaves glow a little with the light behind them. The cotton breathes with the air.
 
 ### Changed
-- Up close is now on the table, and zooms out only a little.
+- Up close is now on the table: it zooms in closer than before, zooms out only a little, and pans only a little past the tee.
 - The print stays at full quality at every zoom, and renders sharper whenever the machine has room for it.
 - Every load says something different: a word in hand picked at random from twenty or more for that kind of load (dressing it.., lights down.., closer.., swapping shirts.., in the darkroom.., tape out.. and the rest), never the same twice in a row. No more breathing in..
 - The actual size button is called artwork.

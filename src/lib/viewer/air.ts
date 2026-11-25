@@ -209,7 +209,7 @@ export class Air {
     const W = wind.level;
     if (this.t > this.nextThing) {
       if (this.things.length < 3) this.spawn(wind);
-      this.nextThing = this.t - Math.log(1 - Math.random()) / (0.016 + 0.05 * W * W);
+      this.nextThing = this.t - Math.log(1 - Math.random()) / (0.032 + 0.1 * W * W);
     }
     for (const T of this.things) this.move(T, dt * TIME, dt, wind, over);
     this.things = this.things.filter((T) => {
@@ -223,7 +223,13 @@ export class Air {
   private floorUnder(T: Thing, over: (x: number, y: number) => number) {
     const r = T.size * 0.38, c = Math.cos(T.yaw) * r, s = Math.sin(T.yaw) * r;
     const top = Math.max(over(T.x, T.y), over(T.x + c, T.y + s), over(T.x - c, T.y - s), over(T.x - s, T.y + c), over(T.x + s, T.y - c));
-    return top + 0.0005 + (top > 0.0004 ? 0.0015 : 0);
+    let floor = top + 0.0005 + (top > 0.0004 ? 0.0015 : 0);
+    // one that comes down on another already lying there lies on top of it (never through it)
+    for (const O of this.things) {
+      if (O === T) break;
+      if (Math.hypot(O.x - T.x, O.y - T.y) < (O.size + T.size) * 0.26) floor = Math.max(floor, O.h + 0.0025);
+    }
+    return floor;
   }
 
   /** ds: slowed (physics) time; dt: time as seen, for how long a thing rests */
@@ -260,15 +266,17 @@ export class Air {
       // on the surface: static friction holds it until the push beats it; sliding, friction is a little less
       // (so it skids, sticks, skids as the push comes and goes); its upwind edge lifts and shivers as the push
       // builds; a strong gust under that edge lifts it off
-      const fx = Math.hypot(ax, ay), mu = grip * G, vs = Math.hypot(T.vx, T.vy);
+      // on a slope (the side of a crease, the tee's edge) its weight pulls it down toward the trough
+      // (the slope across the whole leaf, not the crease under its middle)
+      const e = Math.max(0.01, T.size * 0.4), gx = (over(T.x + e, T.y) - over(T.x - e, T.y)) / (2 * e), gy = (over(T.x, T.y + e) - over(T.x, T.y - e)) / (2 * e);
+      ax -= G * gx; ay -= G * gy;
+      const fx = Math.hypot(ax, ay), mu = grip * G * (1 / Math.sqrt(1 + gx * gx + gy * gy)), vs = Math.hypot(T.vx, T.vy);
       const strain = Math.min(1, fx / mu);
       target = base + strain * strain * (0.14 + 0.02 * Math.sin(this.ts * 40 + T.ph * 7) + 0.02 * T.n1) * K.tumble;
       if (vs < 0.008 && fx < mu) { ax = 0; ay = 0; T.vx = 0; T.vy = 0; }
       else if (vs > 0) { ax -= (T.vx / vs) * mu * 0.75; ay -= (T.vy / vs) * mu * 0.75; }
       if (lift > G * (1 + grip)) {
         T.vh = (lift - G) * 0.03;
-        // some take off turning over and over, the rest rock and glide
-        T.auto = rel > 1.2 && Math.random() < 0.3 * K.tumble ? (Math.random() < 0.5 ? -1 : 1) : 0;
       } else T.vh = 0;
     } else {
       // in the air: it swings like a falling leaf, gliding toward its low edge on each swing (only once clear of
@@ -281,11 +289,21 @@ export class Air {
       const own = Math.min(K.lift * rel * rel * (0.2 + 1.6 * up) * ground + Math.abs(Math.cos(T.tip)) * rel * K.lift * 0.4 * ground, G * 0.7);
       const wr = w - T.vh;
       T.vh += (own - G + (G / (K.fall * K.fall)) * Math.abs(wr) * wr) * ds;
-      if (rel < 0.6 || above < T.size * 0.4) T.auto = 0;
+      // only well up in a strong flow, and rarely, does one start turning over and over; it stops as it nears
+      // the surface again (and lands on whichever side it comes down)
+      if (!T.auto && above > T.size && rel > 2 && Math.random() < 0.06 * K.tumble * ds) T.auto = Math.random() < 0.5 ? -1 : 1;
+      if (rel < 1 || above < T.size * 0.8) T.auto = 0;
     }
-    if (T.auto && !down) T.pv += (T.auto * rel * K.tumble * 9 - T.pv) * 3 * ds;
+    if (T.auto && !down) T.pv += (T.auto * rel * K.tumble * 6 - T.pv) * 3 * ds;
     else T.pv += (160 * (target - T.pitch) - 22 * T.pv) * ds;
     T.pitch += T.pv * ds;
+    // short of really tumbling it never tips past where it would fall over: lying, its edge lifts a little at
+    // most; in the air it rocks but stays the side up it is
+    if (!T.auto) {
+      const lim = down ? 0.45 : 1.2, d = T.pitch - base;
+      if (d > lim) { T.pitch = base + lim; T.pv = Math.min(T.pv, 0); }
+      else if (d < -lim) { T.pitch = base - lim; T.pv = Math.max(T.pv, 0); }
+    }
     // its weight against the push: it gathers speed and loses it, it doesn't follow the air outright
     T.vx += ax * ds; T.vy += ay * ds;
     // resting: a moment on the tee at most (some never settle there), longer on the boards (in time as seen)
