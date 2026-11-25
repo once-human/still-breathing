@@ -1,7 +1,7 @@
 // Real-time view on three.js WebGPURenderer (falls back to WebGL2 by itself where WebGPU is missing).
 // It is the preview you drag; the path tracer takes over the moment you let go.
 import * as THREE from "three/webgpu";
-import { positionLocal, texture, uv, vec2, vec3, float, normalMap, normalize, uniform, mix, vertexColor, step, fwidth, clamp, length, normalWorldGeometry, atan, asin, cos, sin, sqrt, max } from "three/tsl";
+import { positionLocal, texture, uv, vec2, vec3, float, normalMap, normalize, uniform, mix, vertexColor, step, fwidth, clamp, length, normalWorldGeometry, atan, asin, cos, sin, sqrt, max, log2 } from "three/tsl";
 import { PRINT_BACK, PRINT_FRONT, type Rect } from "./print";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
@@ -94,6 +94,8 @@ export class Raster {
   /** the person's idle motion, and the tee's with them (motion.ts) */
   motion = new Motion();
   renderer: THREE.WebGPURenderer;
+  /** multisampled (a screen under 2x): the hair cards' edges go soft by coverage */
+  private msaa = false;
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera((VFOV * 180) / Math.PI, ASPECT, 0.05, 40);
   pivot = new THREE.Group();
@@ -141,7 +143,8 @@ export class Raster {
 
   constructor(canvas: HTMLCanvasElement) {
     // on a 2x screen the pixels already supersample the edges; multisampling on top only costs frames
-    this.renderer = new THREE.WebGPURenderer({ canvas, antialias: (globalThis.devicePixelRatio || 1) < 1.5, alpha: false });
+    this.msaa = (globalThis.devicePixelRatio || 1) < 1.5;
+    this.renderer = new THREE.WebGPURenderer({ canvas, antialias: this.msaa, alpha: false });
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.scene.add(this.pivot, this.rig, this.hemi, this.probe);
@@ -399,6 +402,28 @@ export class Raster {
     m.sheen = 1; m.sheenRoughness = 0.5; m.sheenColor = new THREE.Color().setRGB(0.16, 0.07, 0.045, THREE.LinearSRGBColorSpace);
     return m;
   }
+  /**
+   * Hair cards (pipeline/cards.py) from their strands (hairtex.py: brightness R, coverage A; the strands run down
+   * the picture): the hair's colour per vertex times the strand's brightness, cut out where no strand is (soft-edged
+   * with multisampling), the shine stretched across the strands as it is on real hair. Only their fronts are drawn
+   * (they face away from the head, and carry its normals, so the pile shades as one mass).
+   */
+  private cardsFrom(strands: ImageBitmap) {
+    const t = new THREE.Texture(strands);
+    t.flipY = false; t.colorSpace = THREE.NoColorSpace; t.anisotropy = this.maxAniso; t.needsUpdate = true;
+    const s = texture(t);
+    const m = new THREE.MeshPhysicalNodeMaterial({ metalness: 0, roughness: 0.4, specularIntensity: 0.6 });
+    m.colorNode = vec3(vertexColor()).mul(s.r.mul(0.85).add(0.55));
+    // smaller on screen, the strands' coverage averages away in the picture's smaller copies: kept up, so the
+    // hair doesn't thin out as it gets further away
+    const d = fwidth(uv().mul(1024)), lod = max(log2(max(d.x, d.y)), 0);
+    m.opacityNode = s.a.mul(lod.mul(0.25).add(1));
+    m.alphaTest = 0.5; m.alphaToCoverage = this.msaa;
+    m.anisotropy = 0.7;
+    m.positionNode = this.motion.node(positionLocal);
+    return m;
+  }
+  private cardMats = new Map<string, THREE.MeshPhysicalNodeMaterial>();
   private skinMats = new Map<string, THREE.MeshPhysicalNodeMaterial>();
   private hairMats = new Map<string, THREE.MeshPhysicalNodeMaterial>();
   stoolMat = new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0, color: new THREE.Color(0.05, 0.045, 0.04) });
@@ -489,7 +514,12 @@ export class Raster {
         if (!mesh.isMesh) return;
         const mname = (mesh.material as THREE.Material)?.name || "";
         const isInner = kind === "tee" && /inner/i.test(mname);
-        // the person: 4 skin, 5 denim, 6 eyes, 7 hair (the path tracer reads their colour per vertex too)
+        // the person: 4 skin, 5 denim, 6 eyes, 7 hair (the path tracer reads their colour per vertex too); 8 the hair
+        // cards, live view only (the path tracer has the hair under them)
+        if (kind === "person" && /haircard/i.test(mname)) {
+          if (cards) { mesh.material = cards; Motion.ensure(mesh.geometry); } else mesh.visible = false;
+          return;
+        }
         const pid = /jeans/i.test(mname) ? 5 : /eye/i.test(mname) ? 6 : /hair/i.test(mname) ? 7 : 4;
         mesh.material = kind === "person" ? [this.personSkin, this.personDenim, this.personEyes, this.personHair][pid - 4]
           : kind === "body" ? this.skinMat : kind === "stool" ? this.stoolMat : isInner ? this.inner : this.outer!;
@@ -543,6 +573,19 @@ export class Raster {
     if (skinMaps && v.person) {
       this.personSkin = this.skinMats.get(v.person) ?? this.skinMats.set(v.person, this.skinFrom(skinMaps[0], skinMaps[1])).get(v.person)!;
       this.personHair = this.hairMats.get(v.person) ?? this.hairMats.set(v.person, this.skinFrom(skinMaps[0], skinMaps[1], true)).get(v.person)!;
+    }
+    // the hair cards' strands sit beside the person's GLB too (<name>-hair.webp), only for a person who has cards
+    let cards: THREE.MeshPhysicalNodeMaterial | null = null;
+    if (bodyGltf && v.person) {
+      let has = false;
+      bodyGltf.scene.traverse((o) => { if ((o as THREE.Mesh).isMesh && /haircard/i.test(((o as THREE.Mesh).material as THREE.Material)?.name || "")) has = true; });
+      if (has) {
+        cards = this.cardMats.get(v.person) ?? null;
+        if (!cards) {
+          const b = await bitmap(v.person.replace(/\.glb$/, "-hair.webp")).catch(() => null);
+          if (b) this.cardMats.set(v.person, (cards = this.cardsFrom(b)));
+        }
+      }
     }
     if (bodyGltf) take(bodyGltf.scene, v.person ? "person" : "body");
     // the person moves (if their GLB says how), and the tee with them

@@ -88,7 +88,7 @@ jobs:
       - name: Place and commit
         run: |
           D=public/tee/human; mkdir -p $D
-          for f in got/*-stand.glb got/*-stand-skin.webp got/*-stand-skin-n.webp; do [ -s "$f" ] && cp "$f" $D/; done
+          for f in got/*-stand.glb got/*-stand-skin.webp got/*-stand-skin-n.webp got/*-stand-hair.webp; do [ -s "$f" ] && cp "$f" $D/; done
           git config user.name "once-human"
           git config user.email "121476278+once-human@users.noreply.github.com"
           git add -A $D

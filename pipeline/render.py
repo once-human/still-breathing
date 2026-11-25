@@ -86,7 +86,28 @@ if PERSON:
         for i, slot in enumerate(po.data.materials):
             # human.py exports placeholder materials, so the glTF has none: the mesh names say which part it is
             nm = ((slot.name if slot else "") + " " + po.name + " " + po.data.name).lower()
-            kind = "jeans" if "jean" in nm else "eyes" if "eye" in nm else "skin"
+            kind = "jeans" if "jean" in nm else "eyes" if "eye" in nm else "cards" if "haircard" in nm else "skin"
+            if kind == "cards":
+                # hair cards (cards.py): hairtex.py's strands, their coverage as alpha, the colour per vertex times
+                # the strand's brightness, the shine stretched across the strands (they run along V)
+                pm = bpy.data.materials.new("person-haircards"); pm.use_nodes = True
+                T = pm.node_tree; NN, LL = T.nodes, T.links; pb = NN["Principled BSDF"]
+                vc = NN.new("ShaderNodeVertexColor"); vc.layer_name = ca
+                uvn = NN.new("ShaderNodeUVMap"); uvn.uv_map = po.data.uv_layers[0].name
+                ti = NN.new("ShaderNodeTexImage"); ti.image = bpy.data.images.load(PERSON[:-4] + "-hair.webp")
+                ti.image.colorspace_settings.name = "Non-Color"; ti.image.alpha_mode = "CHANNEL_PACKED"; LL.new(uvn.outputs[0], ti.inputs[0])
+                sep = NN.new("ShaderNodeSeparateColor"); LL.new(ti.outputs[0], sep.inputs[0])
+                br = NN.new("ShaderNodeMapRange"); br.inputs[3].default_value = 0.55; br.inputs[4].default_value = 1.4
+                LL.new(sep.outputs[0], br.inputs[0])
+                mul = NN.new("ShaderNodeMix"); mul.data_type = "RGBA"; mul.blend_type = "MULTIPLY"; mul.inputs[0].default_value = 1.0
+                LL.new(vc.outputs["Color"], mul.inputs[6]); LL.new(br.outputs[0], mul.inputs[7]); LL.new(mul.outputs[2], pb.inputs["Base Color"])
+                LL.new(ti.outputs["Alpha"], pb.inputs["Alpha"])
+                pb.inputs["Roughness"].default_value = 0.38; pb.inputs["Specular IOR Level"].default_value = 0.5
+                pb.inputs["Anisotropic"].default_value = 0.7
+                tg = NN.new("ShaderNodeTangent"); tg.direction_type = "UV_MAP"; tg.uv_map = uvn.uv_map
+                LL.new(tg.outputs[0], pb.inputs["Tangent"])
+                po.data.materials[i] = pm
+                continue
             r, spec, sheen = LOOK[kind]
             pm = bpy.data.materials.new(f"person-{kind}"); pm.use_nodes = True
             pb = pm.node_tree.nodes["Principled BSDF"]

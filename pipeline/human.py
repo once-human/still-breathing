@@ -389,6 +389,14 @@ if HAIRF:                                               # the hair, off the skin
     bmesh.ops.delete(hairb, geom=[v for v in hairb.verts if not v.link_faces], context="VERTS")
     bmesh.ops.delete(skin, geom=[f for f in skin.faces if f[HAIRF]], context="FACES")
     bmesh.ops.delete(skin, geom=[v for v in skin.verts if not v.link_faces], context="VERTS")
+# the hair cards over it (cards.py) and their strands (hairtex.py: <out>-hair.webp, beside the skin's maps)
+cardb = cardn = None
+if hairb:
+    import cards as cards_
+    SHE_ = body.get("sex") == "female"
+    cardb, cardn = cards_.grow(hairb, SHE_, (0.024, 0.016, 0.011) if SHE_ else (0.016, 0.012, 0.0095))
+    subprocess.run(["python3", os.path.join(os.path.dirname(os.path.abspath(__file__)), "hairtex.py"), SKIN_OUT + "-hair.webp",
+                    "female" if SHE_ else "male"], check=True)
 
 # ---------- jeans: the tights helper, loosened and smoothed ----------
 # (people.py's bodies: trousers.py's trousers, if any, painted and settled under the tee)
@@ -502,6 +510,7 @@ def weigh(b, src=None, const=None):
 
 weigh(skin, SRC)
 if hairb: weigh(hairb, const=[0, 1, 0, 0, 0])
+if cardb: weigh(cardb, const=[0, 1, 0, 0, 0])
 weigh(eyes, const=[0, 1, 0, 0, 0])
 if jeans: weigh(jeans, const=[0, 0, 0, 0, 0])
 gl = lambda p: [round(p.x, 4), round(p.z, 4), round(-p.y, 4)]
@@ -525,6 +534,10 @@ def obj(name, b, sub=1):
 
 outs = [obj("skin", skin, 0 if HBM else 1)] + ([obj("jeans", jeans, 0 if HBM else 1)] if jeans else []) + [obj("eyes", eyes)] \
     + ([obj("hair", hairb, 0)] if hairb else [])
+if cardb:
+    co = obj("haircards", cardb, 0)
+    co.data.normals_split_custom_set_from_vertices([tuple(n) for n in cardn])
+    outs.append(co)
 outs[0]["motion"] = json.dumps(MOTION)
 for o in list(sc.objects):
     if o not in outs: bpy.data.objects.remove(o)
