@@ -26,6 +26,14 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 - The photo renderer only loads when a photo is asked for, and the rendered frames under the 3D are dropped once it's up.
 - The first switch to each shirt no longer holds the page: the print is decoded, scaled down for distance and sent to the graphics card a little at a time between frames, every pixel exactly as the artwork file has it. The shirt's render stays up until the whole print is in, so it's never shown softer or half loaded.
 
+## 0.18.1 — 2026-11-25
+Cleaner shoulders and collar in the try-on, and clips that open on the tee.
+
+### Try-on
+- No more flecks of the room on the shoulders beside the collar: the tops of the shoulders are always solid tee.
+- The edge of you no longer leaves stray specks over the tee; your hair, face and hands still show in front.
+- A recorded clip has the tee from its very first frame.
+
 ## 0.18.0 — 2026-11-25
 ### New
 - the tee view zooms in and out like the others (− zoom +, a pinch, a double-click) and slides along the print when close.

@@ -318,7 +318,9 @@ export class TryOn {
     {
       const P = positionGeometry, N = normalGeometry;
       const collar = P.y.greaterThan(yTop - 0.13).and(P.x.abs().lessThan(0.17));
-      const inward = N.x.mul(P.x).add(N.z.mul(P.z.sub(this.dims.zc))).lessThan(0);
+      // (facing sideways into the neck only: the shoulder tops beside the collar face up, and a wrinkle there that
+      // leans a little toward the neck is still the outside of the tee; cut, it showed as flecks of the room)
+      const inward = N.x.mul(P.x).add(N.z.mul(P.z.sub(this.dims.zc))).lessThan(0).and(N.y.lessThan(0.55));
       outer.maskNode = collar.and(inward).not();
     }
     this.rig.visible = false;
@@ -793,7 +795,19 @@ export class TryOn {
     const fx = fc.getContext("2d")!, sx = sc.getContext("2d")!;
     const front = fx.createImageData(w, h), skin = sx.createImageData(w, h);
     const F = new Uint32Array(front.data.buffer), S = new Uint32Array(skin.data.buffer), { hair, body, face, others } = this.lab;
-    for (let i = 0; i < cat.length; i++) { const k = cat[i]; if (k === hair || k === face || k === others) F[i] = 0xffffffff; else if (k === body) S[i] = 0xffffffff; }
+    // a pixel in front counts only inside its own patch: off your outline (no background beside it) and with at least
+    // two neighbours in front too. The model reads at 256 px and leaves stray specks of "hair" or "other" along the
+    // edge of you, which would show as flecks of the room over the tee's shoulders; real hair and hands lose a pixel
+    const fr = (k: number) => k === hair || k === face || k === others;
+    for (let i = 0; i < cat.length; i++) {
+      const k = cat[i];
+      if (fr(k)) {
+        const x = i % w, y = (i - x) / w; if (x === 0 || y === 0 || x === w - 1 || y === h - 1) continue;
+        const a = cat[i - 1], b = cat[i + 1], u = cat[i - w], d = cat[i + w];
+        if (!a || !b || !u || !d || +fr(a) + +fr(b) + +fr(u) + +fr(d) < 2) continue;
+        F[i] = 0xffffffff;
+      } else if (k === body) S[i] = 0xffffffff;
+    }
     fx.putImageData(front, 0, 0); sx.putImageData(skin, 0, 0);
     // the skin that counts: round each forearm and hand the pose model sees, wide enough for any arm
     const sw = Math.hypot((l[L_SH].x - l[R_SH].x) * w, (l[L_SH].y - l[R_SH].y) * h), r = sw * 0.14;
@@ -836,7 +850,8 @@ export class TryOn {
    */
   recordStart() {
     if (this.rec || typeof MediaRecorder === "undefined") return false;
-    const cv = document.createElement("canvas"); this.compose(cv);
+    // the first frame drawn here and now, so the clip opens on the tee (the 3D canvas holds a picture only right after a render)
+    const cv = document.createElement("canvas"); this.renderer.render(this.scene, this.camera); this.compose(cv);
     const type = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm"].find((t) => MediaRecorder.isTypeSupported(t));
     if (!type) return false;
     // a frame goes into the clip each time one is drawn, so the clip runs at the try-on's own pace, never repeats or skips
