@@ -1,10 +1,10 @@
 # blender -b --factory-startup -P trousers.py -- <body.blend> <out.blend>
 # Straight-leg trousers for the people who wear the shop tee, hung on the standing body by cloth simulation.
 #   1. a shell round the hips and legs: the body grown out by the ease (8 mm over the hips and seat), joined with
-#      one straight cone per leg from the upper thigh to the hem (40 cm round on him, 36.5 on her), as one volume,
-#      remeshed into one even surface. Where the thighs come close the shell bridges them, as a trouser crotch does
-#   2. cut at the waist (mid rise, 4 cm over the hip joints, under the tee's hem) and at the hem (over the shoe),
-#      the muscle smoothed away (cotton twill doesn't show it)
+#      one straight cone per leg from the upper thigh to the hem (36.5 cm round on him, 33 on her), stopping short of the middle, as one volume,
+#      remeshed into one even surface. Over the seat it bridges the cleft; the legs stay apart
+#   2. cut at the waist (mid rise, 4 cm over the hip joints, under the tee's hem) and at the hem (ankle length),
+#      the muscle smoothed away (denim doesn't show it)
 #   3. hung for a second on the body with the band held: it settles on the seat and the thighs and falls from them
 # Works on any body with MakeHuman's rig (bones upperleg01, foot): MakeHuman's own or people.py's.
 # Out: object "trousers" (Blender metres, the body's frame, standing as build.py stands it).
@@ -35,12 +35,15 @@ print("hip", round(HIP, 3), "waist", round(WAIST, 3), "hem", round(HEM, 3), flus
 
 # ---------- 1. the shell ----------
 bm = bmesh.new(); bm.from_mesh(me); bm.normal_update()
-for v in bm.verts:
-    v.co += v.normal * 0.025        # grown out, remeshed, then pulled back IN (a closing): the seat and the
-IN = 0.017                                     # crotch bridge as denim does, 8 mm of ease is left
 legs = [p for p in P if p.z < HIP - 0.06 and abs(p.x) < 0.25]
 crotch = min((p.z for p in P if abs(p.x) < 0.01 and HIP - 0.2 < p.z < HIP), default=HIP - 0.1)   # thighs that touch lower down are not it
 crotch = max(crotch, HIP - 0.05 * H)            # a sculpted groin reaches lower than the trouser's crotch seam sits
+# over the seat the shell is grown 2.5 cm, remeshed, then pulled back 1.7 cm (a closing): it bridges the cleft of
+# the seat as denim does and leaves 8 mm of ease. Down the legs only 1 cm, so the gap between the thighs stays open
+seat = lambda z: max(0.0, min(1.0, (z - crotch) / 0.04))
+IN = lambda z: 0.017 * seat(z)
+for v in bm.verts:
+    v.co += v.normal * (0.010 + 0.015 * seat(v.co.z))
 TOPZ = crotch - 0.05
 
 
@@ -55,13 +58,14 @@ def slice_(s, z, d=0.008):
 
 for s in (1, -1):
     c0, r0 = slice_(s, TOPZ); c1, _ = slice_(s, ANKLE + 0.06)
-    r0 += 0.012 + IN
+    r0 += 0.012
     N, K = 48, 24
     rings = []
     for k in range(K + 1):
         z = TOPZ + 0.02 + (HEM - 0.02 - TOPZ - 0.02) * k / K
         u = (z - c1.z) / (c0.z - c1.z); c = c1 + (c0 - c1) * u
-        R = HEM_R + IN + (r0 - HEM_R - IN) * max(0.0, min(1.0, u)) ** 1.4
+        R = HEM_R + (r0 - HEM_R) * max(0.0, min(1.0, u)) ** 1.4
+        R = min(R, abs(c.x) - 0.006)                 # each leg stops short of the middle: the two never web together
         rings.append([bm.verts.new((c.x + R * math.cos(2 * math.pi * j / N), c.y + R * math.sin(2 * math.pi * j / N), z)) for j in range(N)])
     for k in range(K):
         for j in range(N):
@@ -77,7 +81,7 @@ bpy.data.objects.remove(sh)
 # ---------- 2. cut at the waist and the hem, one piece, smoothed ----------
 bm = bmesh.new(); bm.from_mesh(tm); bm.normal_update()
 for v in bm.verts:
-    v.co -= v.normal * IN
+    v.co -= v.normal * IN(v.co.z)
 for z, cut_below in ((WAIST, False), (HEM, True)):
     g = bm.verts[:] + bm.edges[:] + bm.faces[:]
     bmesh.ops.bisect_plane(bm, geom=g, plane_co=(0, 0, z), plane_no=(0, 0, 1), clear_inner=cut_below, clear_outer=not cut_below)
