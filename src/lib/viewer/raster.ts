@@ -399,7 +399,7 @@ export class Raster {
     m.normalNode = normalMap(vec3(r.r, r.g, sqrt(max(float(1).sub(nx.mul(nx)).sub(ny.mul(ny)), 0)).mul(0.5).add(0.5)));
     if (hair) return m;
     // a soft warm fuzz at grazing angles, where light goes into skin and comes back out
-    m.sheen = 1; m.sheenRoughness = 0.5; m.sheenColor = new THREE.Color().setRGB(0.16, 0.07, 0.045, THREE.LinearSRGBColorSpace);
+    m.sheen = 1; m.sheenRoughness = 0.5; m.sheenColor = new THREE.Color().setRGB(0.1, 0.05, 0.037, THREE.LinearSRGBColorSpace);
     return m;
   }
   /**

@@ -84,6 +84,10 @@ def shade(P, N, lips, ears, nails, scalp, handw, hairw=None, flow=None):
     C[:, 2] *= 1 - 0.03 * fbm(P * 18.0 + 9.7)
     # skin that breathes: a gentle undulation a few millimetres across, so a highlight breaks the way it does on skin
     H += 0.00004 * fbm(P * 260.0, 2)
+    # and its fine surface: the shallow lines skin is crossed by, about a millimetre apart in two directions, too
+    # shallow to see as lines, enough that a highlight on skin is broken up and never a smooth sheen
+    d1 = np.tile(np.array([0.71, 0.0, 0.71]), (n, 1)); d2 = np.tile(np.array([0.71, 0.0, -0.71]), (n, 1))
+    H += 0.000011 * (np.abs(vnoise(along(P * 1300.0, d1, 3.0))) + np.abs(vnoise(along(P * 1300.0, d2, 3.0)) + 0.4) - 0.9)
 
     # ---------- head ----------
     isHead = (z > mouth[2] - 0.13) & (np.abs(x) < 0.14)
@@ -161,6 +165,23 @@ def shade(P, N, lips, ears, nails, scalp, handw, hairw=None, flow=None):
     C = C * (1 - lw[:, None]) + np.array([0.15, 0.06, 0.058] if SHE else [0.15, 0.068, 0.06]) * lw[:, None] * (1 + 0.15 * (1 - sm(0.6, 0.95, lips)))[:, None] * 0.95
     R = R * (1 - lw) + 0.3 * lw
     H -= 0.00005 * lw * (0.5 + 0.5 * np.sin(x * 2 * np.pi / 0.0011 + 2 * vnoise(P * 300.0)))
+    # the face's own colours: the skin round the eyes darker (a brown-violet shadow under each eye and in the
+    # inner corner, as most Indian faces have), the cheekbones a little warmer, the forehead and temples, in the
+    # sun the most, a touch darker and more golden; oilier down the middle (forehead, nose), matte on the cheeks
+    for e in (eyeL, eyeR):
+        de = P - e; dE = np.linalg.norm(de * np.array([1.0, 1.0, 1.25]), axis=1)
+        sx = de[:, 0] * np.sign(e[0])
+        ring = sm(0.011, 0.015, dE) * (1 - sm(0.021, 0.03, dE + 0.004 * edge / 0.006)) * (de[:, 1] < 0.012)
+        ring *= np.where(de[:, 2] < 0, 1.0, 0.55) * (1 + 0.35 * sm(-0.004, -0.014, sx)) * isHead
+        C *= (1 - np.clip(ring, 0, 1.2)[:, None] * np.array([0.15, 0.19, 0.13]))
+        cb = sm(0.028, 0.01, np.linalg.norm(P - (e + np.array([np.sign(e[0]) * 0.012, -0.004, -0.034])), axis=1)) * isHead
+        C[:, 0] *= 1 + 0.06 * cb; C[:, 2] *= 1 - 0.04 * cb
+        R += 0.03 * cb
+    eyeZ = (eyeL[2] + eyeR[2]) / 2
+    fh = sm(eyeZ + 0.018, eyeZ + 0.035, z) * sm(0.0, 0.5, facing) * isHead
+    C *= (1 - fh[:, None] * np.array([0.03, 0.04, 0.08]))
+    tz = (fh * (1 - sm(0.02, 0.04, np.abs(x))) + sm(0.03, 0.012, np.linalg.norm(P - (mouth + np.array([0, -0.012, 0.04])), axis=1))) * isHead
+    R -= 0.08 * np.clip(tz, 0, 1)
     # warm where blood is near the surface: ears, the nose's tip and wings, the cheeks a touch
     nose = sm(0.03, 0.012, np.linalg.norm((P - (mouth + np.array([0, -0.015, 0.035]))) * np.array([1.0, 1.0, 0.8]), axis=1)) * isHead
     warm = np.clip(0.6 * ears + 0.5 * nose, 0, 1)

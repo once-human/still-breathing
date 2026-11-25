@@ -452,11 +452,24 @@ if HBM:
         m_ = bpy.data.meshes.new_from_object(o.evaluated_get(bpy.context.evaluated_depsgraph_get())); m_.transform(o.matrix_world)
         e = EYEC[o.name]; gaze = (m_.vertices[pole].co - e).normalized()
         n0 = len(eyes.verts); eyes.from_mesh(m_); eyes.verts.ensure_lookup_table()
+        # finer, for the iris's fibres (round as the eyeball)
+        mine = [ed for ed in eyes.edges if ed.verts[0].index >= n0]
+        bmesh.ops.subdivide_edges(eyes, edges=mine, cuts=2, use_grid_fill=True, smooth=1.0)
+        eyes.verts.ensure_lookup_table()
+        side = gaze.orthogonal().normalized(); up = gaze.cross(side)
         for v in eyes.verts[n0:]:
-            d = (v.co - e).normalized().dot(gaze)
-            # sclera; a dark brown iris (about 11.7 mm across) with a darker ring at its edge; the pupil
-            c = Vector((0.6, 0.54, 0.48)).lerp(Vector((0.02, 0.009, 0.005)), smooth(0.855, 0.875, d))
-            c = c.lerp(Vector((0.055, 0.025, 0.012)), smooth(0.885, 0.93, d)).lerp(Vector((0.003, 0.003, 0.003)), smooth(0.984, 0.99, d))
+            r_ = (v.co - e).normalized(); d = r_.dot(gaze)
+            az = math.atan2(r_.dot(up), r_.dot(side))
+            # sclera: off-white, a little pinker and yellower toward the corners where the lids cover it
+            sc_ = Vector((0.6, 0.54, 0.48)).lerp(Vector((0.56, 0.43, 0.37)), smooth(0.6, 0.2, d))
+            # a dark brown iris (about 11.7 mm across): fibres running out from the pupil, a lighter ring round
+            # the pupil (the collarette), darker toward its edge, a dark ring where it meets the white
+            fib = 0.5 + 0.5 * math.sin(az * 38 + 2.5 * noise.noise(r_ * 25.0)) * (0.6 + 0.4 * noise.noise(r_ * 60.0))
+            ir = Vector((0.05, 0.023, 0.011)) * (0.7 + 0.6 * fib)
+            ir = ir.lerp(Vector((0.1, 0.052, 0.022)), 0.6 * smooth(0.955, 0.97, d) * (1 - smooth(0.975, 0.982, d)))
+            ir = ir.lerp(Vector((0.018, 0.008, 0.004)), smooth(0.92, 0.885, d))
+            c = sc_.lerp(Vector((0.02, 0.009, 0.005)), smooth(0.855, 0.875, d))
+            c = c.lerp(ir, smooth(0.875, 0.89, d)).lerp(Vector((0.003, 0.003, 0.003)), smooth(0.984, 0.99, d))
             v[el] = (c.x, c.y, c.z, 1.0)
         bpy.data.meshes.remove(m_)
     eyes.normal_update()
