@@ -9,7 +9,7 @@
 // and the next gust moves it on; nothing stays long, so the table never fills up however long it runs.
 // All of it in the table's frame (metres, z up off the table).
 import * as THREE from "three/webgpu";
-import { texture, uv, vec2, vec4, attribute, normalMap } from "three/tsl";
+import { texture, uv, vec2, vec3, vec4, attribute, normalMap, mix } from "three/tsl";
 import { KINDS, LEAF_CELLS, type Kind } from "./things";
 import { bitmap } from "./grab";
 
@@ -111,7 +111,9 @@ export class Air {
     // leaves: the scan's colour and relief, cut out by its own edge (the cut casts the shadow)
     const leaf = new THREE.MeshStandardNodeMaterial({ roughness: 0.78, metalness: 0, side: THREE.DoubleSide });
     const luv = uv().mul(vec2(0.25, 0.25)).add(cell), lcol = texture(lc, luv);
-    leaf.colorNode = vec4(lcol.rgb, 1); leaf.maskNode = lcol.a.greaterThan(0.5); leaf.normalNode = normalMap(texture(ln, luv).rgb);
+    // graded to the room as the boards were: a touch less saturated and bright than the scanner's flat light
+    const lum = lcol.rgb.dot(vec3(0.2126, 0.7152, 0.0722));
+    leaf.colorNode = vec4(mix(vec3(lum), lcol.rgb, 0.86).mul(0.9), 1); leaf.maskNode = lcol.a.greaterThan(0.5); leaf.normalNode = normalMap(texture(ln, luv).rgb);
     // thread and hair cut out and casting shadows; fluff and a seed's parachute see-through, too fine to throw
     // more than a haze of shadow
     const buv = uv().mul(vec2(0.25, 1 / 3)).add(cell), bcol = texture(bc, buv);
@@ -159,7 +161,7 @@ export class Air {
     const T: Thing = {
       kind, mesh, size, x, y, h: lying ? 0 : R(0.004, kind.move === "float" ? 0.08 : 0.05),
       vx: cd * u, vy: sd * u, vh: 0, yaw: R(0, TAU), vyaw: R(-2, 2), tip: R(0, TAU),
-      pitch: Math.random() < 0.5 ? 0 : Math.PI, pv: 0, auto: 0, zmin, zmax,
+      pitch: Math.random() < 0.5 ? 0 : Math.PI, pv: 0, auto: 0, zmin, zmax, loose: 0, n1: 0, n2: 0,
       grip: R(kind.grip[0], kind.grip[1]), rest: 0, restMax: -1, ph: R(0, 100),
     };
     this.things.push(T); this.group.add(mesh);
@@ -196,78 +198,93 @@ export class Air {
     const floor = this.floorUnder(T, over), onTee = floor > 0.004;
     const above = Math.max(0, T.h - floor), down = above < 0.0008;
     const cd = Math.cos(wind.dir), sd = Math.sin(wind.dir);
+    // its own slow buffeting: smoothed noise, never a frame-to-frame jitter
+    const nk = 1 - Math.exp(-dt * 5);
+    T.n1 += (R(-1, 1) * 1.7 - T.n1) * nk; T.n2 += (R(-1, 1) * 1.7 - T.n2) * nk;
     // the air right here: the gusting wind, a little torn up by turbulence, slower at the surface
     const sw = swirl(T.x, T.y, this.t, T.ph);
     const l = wind.at(T.x, T.y);
     const dir = wind.dir + 0.1 * sw[0];
-    const U = Wind.speed(l) * (1 + 0.22 * sw[1]) * (0.5 + 0.5 * Math.min(1, above / 0.04));
+    const U = Wind.speed(l) * (1 + 0.22 * sw[1]) * (0.6 + 0.4 * Math.min(1, above / 0.04));
+    // and its up-and-down: turbulent air rises and sinks at a good fraction of its speed (it can't blow down
+    // through the surface)
+    const w = U * 0.3 * sw[2] * Math.min(1, 0.3 + above / 0.03) * Math.max(0, 1 - above / 0.14);   // (and it thins out higher up, over a table by a window)
     const rx = Math.cos(dir) * U - T.vx, ry = Math.sin(dir) * U - T.vy, rel = Math.hypot(rx, ry);
     // how it sits to the air: tilted, it catches more of it (drag) and the air under its raised edge lifts it
-    const base = Math.round(T.pitch / Math.PI) * Math.PI;
     // (turning it further about the cross-wind line raises its upwind edge whichever side it lies on)
+    const base = Math.round(T.pitch / Math.PI) * Math.PI;
     const tilt = Math.abs(Math.sin(T.pitch)), up = Math.max(0, Math.sin(T.pitch - base));
     const kd = K.drag * K.catch * (0.45 + 0.55 * tilt);
     let ax = kd * rel * rx, ay = kd * rel * ry;
-    let lift = K.lift * rel * rel * (0.2 + 1.6 * up) + 0.3 * sw[2] * l * K.lift;
+    // lift is strongest skimming the surface (the air squeezed under it) and fades as it rises
+    const ground = 1 / (1 + above / 0.025);
+    const lift = K.lift * rel * rel * (0.2 + 1.6 * up) * ground + Math.max(0, w) * K.lift * 0.4;
     let target: number;
+    // when it's been still long enough, the air works in under it: its grip loosens over a moment or two, never a jump
+    T.loose = Math.max(0, T.loose - dt * 0.5);
+    const grip = T.grip * (1 - 0.75 * T.loose);
     if (down) {
-      // on the surface: friction holds it; as the air builds its upwind edge lifts and trembles, then it slides,
-      // and a gust under that raised edge throws it up
-      const fx = Math.hypot(ax, ay), mu = T.grip * G, vs = Math.hypot(T.vx, T.vy);
+      // on the surface: friction holds it; as the air builds its upwind edge lifts and shivers, then it slides
+      // (the stem end leading, the broad blade trailing), and a gust under that raised edge lifts it off
+      const fx = Math.hypot(ax, ay), mu = grip * G, vs = Math.hypot(T.vx, T.vy);
       const strain = Math.min(1, fx / mu);
-      target = base + strain * strain * 0.32 * K.tumble;
+      target = base + strain * strain * (0.22 + 0.04 * Math.sin(this.t * 19 + T.ph * 7) + 0.03 * T.n1) * K.tumble;
       if (vs < 0.01 && fx < mu) { ax = 0; ay = 0; T.vx = 0; T.vy = 0; }
-      else if (vs > 0) { ax -= (T.vx / vs) * mu * 0.7; ay -= (T.vy / vs) * mu * 0.7; }
-      T.pv += (Math.random() - 0.5) * strain * rel * 60 * dt;          // the tremble of an edge in the wind
-      if (lift > G * (1 + T.grip)) {
+      else if (vs > 0) { ax -= (T.vx / vs) * mu * 0.5; ay -= (T.vy / vs) * mu * 0.5; }
+      if (T.loose > 0) { ax += cd * T.loose * 2.5; ay += sd * T.loose * 2.5; }
+      if (lift > G * (1 + grip)) {
         T.vh = (lift - G) * 0.03;
-        // some take off spinning over and over, the rest rock and glide
-        T.auto = rel > 0.7 && Math.random() < 0.4 * K.tumble ? (Math.random() < 0.5 ? -1 : 1) : 0;
+        // some take off turning over and over, the rest rock and glide
+        T.auto = rel > 0.8 && Math.random() < 0.3 * K.tumble ? (Math.random() < 0.5 ? -1 : 1) : 0;
       } else T.vh = 0;
     } else {
-      // in the air: it swings like a falling leaf does, gliding toward its low edge on each swing, lift coming
-      // and going with the swing; or, in a strong flow, autorotates; it falls against its own drag
-      target = base + Math.sin(T.tip) * 0.6 * K.tumble;
-      const glide = Math.sin(T.pitch) * Math.cos(T.pitch) * G * 0.55 * K.tumble;
+      // in the air: it swings like a falling leaf, gliding toward its low edge on each swing, lift coming and going
+      // with the swing; only once clear of the surface (a leaf skimming the cotton can't swing through it); or,
+      // in a strong flow, it turns over and over; it falls against its own drag
+      const clear = Math.min(1, above / (T.size * 0.5));
+      target = base + (Math.sin(T.tip) * 0.55 + 0.12 * T.n2) * K.tumble * clear;
+      const glide = Math.sin(T.pitch) * Math.cos(T.pitch) * G * 0.5 * K.tumble * clear;
       ax += cd * glide; ay += sd * glide;
-      lift += Math.abs(Math.cos(T.tip)) * rel * K.lift * 0.15;
-      T.vh += (lift - G - (G / (K.fall * K.fall)) * Math.abs(T.vh) * T.vh) * dt;
-      if (rel < 0.35) T.auto = 0;
+      // its own lift (the swing, the air squeezed under it near the surface) never quite holds it up alone; what
+      // carries it off is the air itself rising: it falls through the air at its own falling speed, so a rising
+      // gust lifts it away and sinking air brings it down
+      const own = Math.min(K.lift * rel * rel * (0.2 + 1.6 * up) * ground + Math.abs(Math.cos(T.tip)) * rel * K.lift * 0.12 * ground, G * 0.7);
+      const wr = w - T.vh;
+      T.vh += (own - G + (G / (K.fall * K.fall)) * Math.abs(wr) * wr) * dt;
+      if (rel < 0.4 || above < T.size * 0.4) T.auto = 0;
     }
-    if (T.auto && !down) T.pv += (T.auto * rel * K.tumble * 10 - T.pv) * 4 * dt;
-    else T.pv += (140 * (target - T.pitch) - 13 * T.pv) * dt;
+    if (T.auto && !down) T.pv += (T.auto * rel * K.tumble * 9 - T.pv) * 3 * dt;
+    else T.pv += (110 * (target - T.pitch) - 19 * T.pv) * dt;
     T.pitch += T.pv * dt;
     T.vx += ax * dt; T.vy += ay * dt;
-    // resting: a moment on the tee at most (some never settle there), longer on the boards; then the air under it
-    // picks it up again
+    // resting: a moment on the tee at most (some never settle there), longer on the boards; then the air gets in
+    // under it again
     const speed = Math.hypot(T.vx, T.vy);
     if (down && speed < 0.01) {
       if (T.restMax < 0) T.restMax = onTee ? (Math.random() < 0.35 ? R(0.05, 0.3) : R(0.6, 5)) : R(1.5, 9);
       T.rest += dt;
-      if (T.rest > T.restMax) {
-        const kick = wind.dir + R(-0.25, 0.25), m = R(0.3, 0.8) * K.catch;
-        T.vx += Math.cos(kick) * m; T.vy += Math.sin(kick) * m; T.vh += K.move === "creep" ? 0 : R(0.2, 0.6);
-        T.pv += R(4, 10);
-        T.rest = 0; T.restMax = -1;
-      }
-    } else { T.rest = 0; T.restMax = -1; }
+      if (T.rest > T.restMax) { T.loose = R(1, 1.6); T.rest = 0; T.restMax = -1; }
+    } else if (!down || speed > 0.03) { T.rest = 0; T.restMax = -1; }
     T.x += T.vx * dt; T.y += T.vy * dt; T.h += T.vh * dt;
     if (T.h <= floor) {
-      // touching down: a little bounce if it came in fast, and it settles flat on whichever side it landed
-      T.h = floor; T.vh = T.vh < -0.4 ? -T.vh * 0.15 : 0;
+      // touching down: a small bounce if it came in fast, then it settles flat on whichever side it landed
+      T.h = floor; T.vh = T.vh < -0.35 ? -T.vh * 0.12 : 0;
       if (T.auto) { T.auto = 0; T.pv *= 0.3; }
     }
-    if (T.h > 0.14) { T.h = 0.14; T.vh = Math.min(T.vh, 0); }
-    // turning: in the air the flow swings it round and the swing quickens with the air rushing past; sliding it
-    // turns slowly as its edges catch
-    T.vyaw += ((sw[1] * 5 + (Math.random() - 0.5) * 7) * rel * K.spin * (down ? 0.5 : 1) - T.vyaw * 2.4) * dt; T.yaw += T.vyaw * dt;
-    T.tip += dt * (3 + rel * 6) * (down ? 0.2 : 1);
+    if (T.h > 0.22) { T.h = 0.22; T.vh = Math.min(T.vh, 0); }
+    // turning: sliding, it swings round to trail its broad end (the stem leads) and its edges catch; in the air
+    // the flow buffets it round, more the harder the air rushes past
+    // (turned over, its stem points the other way)
+    let dy = wind.dir + (Math.cos(T.pitch) < 0 ? Math.PI : 0) - T.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+    const vane = down ? dy * Math.min(1, speed * 4) * 9 : 0;
+    T.vyaw += ((T.n1 * 3 + sw[1] * 2) * rel * K.spin * (down ? 0.35 : 1) + vane - T.vyaw * 3) * dt; T.yaw += T.vyaw * dt;
+    T.tip += dt * (2.4 + rel * 4.5) * (down ? 0.2 : 1);
     // its pose: the tilt about the line across the wind, then its own turn; lifted so the lowest point of its curl
-    // and its tilted edge clear the surface
+    // and its tilted edge clear the surface (it pivots on the edge still touching)
     const ax2 = this.v2.set(-sd, cd, 0);
     this.q.setFromAxisAngle(ax2, T.pitch).multiply(this.q2.setFromAxisAngle(Z, T.yaw));
     const cp = Math.cos(T.pitch);
-    const low = (cp >= 0 ? T.zmin : -T.zmax) * Math.abs(cp) - Math.abs(Math.sin(T.pitch)) * 0.5;
+    const low = (cp >= 0 ? T.zmin : -T.zmax) * Math.abs(cp) - Math.abs(Math.sin(T.pitch)) * 0.42;
     v.set(T.x, T.y, T.h - low * T.size); s.set(T.size, T.size, T.size);
     T.mesh.matrix.compose(v, this.q, s); T.mesh.matrixWorldNeedsUpdate = true;
   }
@@ -288,6 +305,8 @@ type Thing = {
    *  whether it's autorotating (spinning over and over in a strong flow: -1, 0, 1), and how far its curl reaches
    *  below and above its middle (in its own size) */
   pitch: number; pv: number; auto: number; zmin: number; zmax: number;
+  /** how far the air has got in under it after a rest (0..1.6, fading), and its own smoothed buffeting */
+  loose: number; n1: number; n2: number;
 };
 const pick = () => {
   let r = Math.random() * KINDS.reduce((a, k) => a + k.weight, 0);
