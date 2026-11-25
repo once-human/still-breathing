@@ -58,7 +58,7 @@ def save8(a8, path, lossy=False):
 def save(arr, path):
     save8((np.clip(arr, 0, 1) * 255 + 0.5).astype(np.uint8), path)
 
-BACK = {("a", "cream"): ("art/art-a-map/art-cream-al3.png", "overlays/ov-back-cream.png"),
+BACK = {("a", "cream"): ("art/art-a-map/art-cream-al3.png", "overlays/ov-back-A-cream-hi.png"),
         ("b", "black"): ("art/art-b-lines/art-black-al3.png", "overlays/ov-back-black.png"),
         ("c", "black"): ("art/art-crowd-tour/art-black.png", "overlays/ov-back-T-black-hi.png"),
         ("d", "cream"): ("art/art-d-map/art-cream.png", "overlays/ov-back-D-cream-hi.png"),
