@@ -135,6 +135,7 @@ if PERSON:
                 LL.new(nm.outputs[0], pb.inputs["Normal"]); LL.new(sep.outputs[2], pb.inputs["Roughness"])
                 pb.subsurface_method = "RANDOM_WALK_SKIN"
                 pb.inputs["Subsurface Weight"].default_value = 0.0 if shell else 0.75
+                if shell: pb.inputs["Specular IOR Level"].default_value = 0.25
                 pb.inputs["Subsurface Radius"].default_value = (1.0, 0.35, 0.2)
                 pb.inputs["Subsurface Scale"].default_value = 0.004
             po.data.materials[i] = pm

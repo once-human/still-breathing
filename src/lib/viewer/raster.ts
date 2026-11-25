@@ -379,7 +379,7 @@ export class Raster {
   personDenim = this.painted({ roughness: 0.85, spec: 0.5, sheen: 1, sheenColor: [0.035, 0.035, 0.04] });
   personEyes = this.painted({ roughness: 0.12, spec: 0.75 });
   // hair (pipeline/hair.py): the skin's maps paint its strands; it shines, with no warm glow through it
-  personHair: THREE.MeshPhysicalNodeMaterial = this.painted({ roughness: 0.55, spec: 0.55 });
+  personHair: THREE.MeshPhysicalNodeMaterial = this.painted({ roughness: 0.7, spec: 0.35 });
   /**
    * The person's skin from its two maps (pipeline/skin.py): colour, and relief + roughness (normal in R, G,
    * roughness in B). The vertex colour, white on the skin, tints it.
@@ -391,7 +391,7 @@ export class Raster {
       t.anisotropy = this.maxAniso; t.needsUpdate = true; return t;
     };
     const a = texture(mk(albedo, true)), r = texture(mk(rn, false));
-    const m = new THREE.MeshPhysicalNodeMaterial({ metalness: 0, specularIntensity: hair ? 0.55 : 0.7 });
+    const m = new THREE.MeshPhysicalNodeMaterial({ metalness: 0, specularIntensity: hair ? 0.35 : 0.7 });
     m.colorNode = a.rgb.mul(vec3(vertexColor()));
     m.positionNode = this.motion.node(positionLocal);
     m.roughnessNode = r.b;

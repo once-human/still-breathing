@@ -105,7 +105,10 @@ def shade(P, N, lips, ears, nails, scalp, handw, hairw=None, flow=None):
     nape = sm(mouth[2] - (0.03 if SHE else 0.012), mouth[2] + (0.0 if SHE else 0.025), z + edge)
     hairv = sm(0.3, 0.6, scalp) * hairline * nape * sm(0.02 if SHE else 0.038, 0.032 if SHE else 0.05, earD + edge) * isHead
     if HBM:      # regions.py drew the hairline round the head: it only needs to wander, and stay off the ears
-        hairv = sm(0.2, 0.8, scalp + (edge * 60.0 if SHE else edge * 10.0) * 4 * scalp * (1 - scalp)) * sm(0.006, 0.012, earD + 0.5 * edge) * isHead
+        hairv = sm(0.2, 0.8, scalp + edge * 10.0 * 4 * scalp * (1 - scalp)) * sm(0.006, 0.012, earD + 0.5 * edge) * isHead
+        if SHE:      # her hairline thins out over its last few millimetres: fine short hairs, skin between them
+            hairv = sm(0.05, 0.95, scalp + edge * 6.0 * 4 * scalp * (1 - scalp)) * sm(0.006, 0.012, earD + 0.5 * edge) * isHead
+            hairv *= 0.55 + 0.45 * sm(0.4, 0.95, scalp)
     # a short trimmed beard: moustache, chin and jaw; the cheek line rises from the mouth's corner to the
     # sideburn, the neck line sits a finger's width under the jaw; thinner high on the cheeks
     dy = d[:, 1]
@@ -233,9 +236,12 @@ def shade(P, N, lips, ears, nails, scalp, handw, hairw=None, flow=None):
             dd, tt = seg(P, base + (k - base) * 0.15, k - (k - base) * 0.05)
             H += 0.00045 * back * np.exp(-(dd / 0.0026) ** 2) * sm(0.0, 0.3, tt) * sm(1.0, 0.75, tt)
         # veins: a branching network on the back of the hand and up the forearm, raised and a little blue
-        rv = 1 - np.abs(vnoise(along(P * 38.0, np.tile(adir, (n, 1)), 2.2) + 3.3))
-        vein = sm(0.93, 0.985, rv) * np.clip(back + 0.8 * fore * sm(-0.6, 0.3, -out) * sm(0.2, 0.9, t_arm), 0, 1)
-        H += 0.0005 * vein
+        # (stretched far along the arm, so the noise's lines run with it as veins do, never round in a ring; on her
+        # barely there)
+        rv = 1 - np.abs(vnoise(along(P * 34.0, np.tile(adir, (n, 1)), 5.0) + 3.3))
+        vein = sm(0.94, 0.985, rv) * np.clip(back + 0.8 * fore * sm(-0.6, 0.3, -out) * sm(0.2, 0.9, t_arm), 0, 1)
+        vein *= 0.35 if SHE else 1.0
+        H += 0.00045 * vein
         C *= (1 - 0.06 * vein[:, None] * np.array([1.0, 0.6, -0.4]))
         # knuckles: darker and creased across the back of each finger joint
         for f in range(2, 6):
@@ -267,6 +273,8 @@ def shade(P, N, lips, ears, nails, scalp, handw, hairw=None, flow=None):
         col = HAIR * (1.0 + 0.22 * fine + 0.3 * clump + 0.15 * broad)[:, None]
         col = col * np.array([1.0, 0.97, 0.94]) + np.array([0.004, 0.0025, 0.0015]) * sm(0.2, 0.9, clump)[:, None]
         rough = (0.48 if SHE else 0.58) + 0.06 * fine
+        if HBM:          # under hair cards (cards.py): the hair's depth, darker and matte; the cards carry the shine
+            col = col * 0.65; rough = 0.78 + 0.06 * fine
         groove = vnoise(along(P * 900.0, f, 22.0))            # fine grooves along the strands, ~1 mm apart
         hh = 0.00008 * fine + 0.00022 * groove + (0.00012 if SHE else 0.00035) * clump
         C = C * (1 - hw[:, None]) + col * hw[:, None]
