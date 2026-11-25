@@ -82,8 +82,10 @@ def hdri(name):
     npy = os.path.join(CACHE, f"{name}_{RES}.npy"); src = os.path.join(CACHE, f"{name}_{RES}.hdr")
     if os.path.exists(npy): return np.load(npy)
     if not os.path.exists(src):
-        req = urllib.request.Request(f"https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/{RES}/{name}_{RES}.hdr",
-                                     headers={"User-Agent": "stage-builder"})
+        # where Poly Haven keeps this size (the 16k files sit apart from the rest)
+        q = urllib.request.Request(f"https://api.polyhaven.com/files/{name}", headers={"User-Agent": "stage-builder"})
+        url = json.load(urllib.request.urlopen(q))["hdri"][RES]["hdr"]["url"]
+        req = urllib.request.Request(url, headers={"User-Agent": "stage-builder"})
         with urllib.request.urlopen(req) as r, open(src, "wb") as f:
             while True:
                 c = r.read(1 << 22)
