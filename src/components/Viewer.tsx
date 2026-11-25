@@ -899,9 +899,11 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         {/* while a change is got ready: one slow breath, and after a beat a word in hand */}
         {veil && mode === "3d" ? (
           <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center" role="status" aria-label="Getting the view ready">
-            <div className="flex flex-col items-center gap-3 opacity-0 animate-[appear_300ms_ease-out_250ms_forwards]">
-              <span className={`size-3.5 rounded-full animate-[breathe_1.8s_ease-in-out_infinite] ${dark ? "bg-ink" : "bg-black/75"}`} />
-              <span className={`font-hand text-[20px] leading-none ${dark ? "text-ink/80" : "text-black/65"}`}>{veilWord}</span>
+            {/* a soft shade behind it, as the arrows have, so it reads on a black tee as well as on a light room */}
+            <div aria-hidden className="absolute inset-0 opacity-0 animate-[appear_300ms_ease-out_250ms_forwards] bg-[radial-gradient(ellipse_38%_30%_at_50%_50%,rgba(0,0,0,0.6),rgba(0,0,0,0.32)_55%,transparent_100%)]" />
+            <div className="relative flex flex-col items-center gap-3 opacity-0 animate-[appear_300ms_ease-out_250ms_forwards] [filter:drop-shadow(0_1px_3px_rgba(0,0,0,0.6))]">
+              <span className="size-3.5 rounded-full bg-white/90 animate-[breathe_1.8s_ease-in-out_infinite]" />
+              <span className="font-hand text-[20px] leading-none text-white/90">{veilWord}</span>
             </div>
           </div>
         ) : null}
