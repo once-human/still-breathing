@@ -7,6 +7,11 @@ Versions follow [SemVer](https://semver.org), counted by what a buyer would noti
 
 The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.Y.Z` and a GitHub release with the studio renders that changed attached.
 
+## Unreleased
+### Changed
+- Every load says something different: a word in hand picked at random from twenty or more for that kind of load (dressing it.., lights down.., closer.., swapping shirts.., in the darkroom.., tape out.. and the rest), never the same twice in a row. No more breathing in..
+- The actual size button is called artwork.
+
 ## 0.18.0 — 2026-11-25
 ### New
 - the tee view zooms in and out like the others (− zoom +, a pinch, a double-click) and slides along the print when close.

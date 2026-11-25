@@ -5,6 +5,7 @@ import { SIZE_ORDER, type Size } from "@/content/tee";
 import type { Pose, Variant } from "@/lib/viewer/raster";
 import type { V3 } from "@/lib/viewer/scene";
 import { asset } from "@/lib/asset";
+import { word } from "@/lib/words";
 
 /** The five simulated bodies (Indian adult anthropometry) and the three sizes each was sewn into. */
 export const BODIES = [
@@ -77,6 +78,7 @@ export function Fit({ size, onVariant }: { size: Size; onVariant: (v: Variant) =
   const [skin, setSkin] = useState(1);
   const [pose, setPose] = useState<Pose>("stand");
   const [index, setIndex] = useState<Record<string, FitData> | null>(null);
+  const [fitWord] = useState(() => word("fit"));
 
   const body = nearest(sex, height, chestFrom(sex, height, weight));
   const shown = closestSize(size, body.sizes);
@@ -127,7 +129,7 @@ export function Fit({ size, onVariant }: { size: Size; onVariant: (v: Variant) =
           </p>
           {data ? (
             <ul className="space-y-1">{words(data, pose).map((w) => <li key={w}>{w}</li>)}</ul>
-          ) : index ? <p className="text-quiet">this body is still being simulated.</p> : null}
+          ) : index ? <p className="text-quiet">this body is still being simulated.</p> : <p className="font-hand text-[18px] leading-none text-quiet">{fitWord}</p>}
         </div>
       ) : null}
     </div>

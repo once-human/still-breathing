@@ -8,6 +8,7 @@ import { pickTier } from "@/lib/viewer/tier";
 import { prefetchTee, bitmap } from "@/lib/viewer/grab";
 import { printBackURL, printFrontURL } from "@/lib/viewer/print";
 import { asset } from "@/lib/asset";
+import { word, type WordKind } from "@/lib/words";
 import dynamic from "next/dynamic";
 
 // the camera try-on, and the pose model behind it, only download when someone asks for it
@@ -126,6 +127,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
   const [format, setFormat] = useState<Format>("story");
   const [look, setLook] = useState<Look>("film");
   const [developing, setDeveloping] = useState<number | null>(null);
+  const [devWord, setDevWord] = useState("developing..");
   const [photo, setPhoto] = useState<{ url: string; blob: Blob; name: string } | null>(null);
   const stopPhoto = useRef<AbortController | null>(null);
   // the offline path-traced frames, 12 angles, drag to turn: shown at once while the 3D loads ("poster"),
@@ -144,6 +146,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
   const [switching, setSwitching] = useState(false);
   // while a change is being got ready the view is veiled: never half a change on screen
   const [veil, setVeil] = useState(false);
+  // and the word under the breathing dot for that change, picked for each one
+  const [veilWord, setVeilWord] = useState("");
   const veilTurn = useRef(0);
   // each view's own little picture for the strip, taken from the live view once it has been seen
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
@@ -571,9 +575,9 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
   }, []);
 
   /** do a change behind the veil: the view fades out, the change is made and drawn whole, then it fades back in */
-  const veiled = async (change: () => Promise<void>) => {
+  const veiled = async (kind: WordKind, change: () => Promise<void>) => {
     const turn = ++veilTurn.current;
-    setVeil(true); setSwitching(true);
+    setVeilWord(word(kind)); setVeil(true); setSwitching(true);
     await new Promise((res) => setTimeout(res, 160));
     try { await change(); } finally { if (turn === veilTurn.current) { setVeil(false); setSwitching(false); } }
     return turn === veilTurn.current;
@@ -588,7 +592,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
   useEffect(() => {
     lookRef.current = { design, tee };
     const e = engine.current; if (!e) return;
-    void veiled(() => e.setLook(design, tee)).then((last) => { if (last) void capture(); });
+    void veiled("shirt", () => e.setLook(design, tee)).then((last) => { if (last) void capture(); });
   }, [design, tee]); // eslint-disable-line react-hooks/exhaustive-deps
   // the opening view's picture, the moment the 3D takes over
   useEffect(() => { if (mode === "3d") void capture(); }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -600,7 +604,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
     if (!engine.current || developing !== null) return;
     const ac = new AbortController(); stopPhoto.current = ac;
     const d = DESIGNS[design], sc = SCENE_LIST.find((x) => x.id === sceneId)!;
-    setDeveloping(0);
+    setDevWord(word("photo")); setDeveloping(0);
     try {
       const blob = await engine.current.photo({
         format, look, spp: PHOTO_SPP, signal: ac.signal,
@@ -634,7 +638,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       return;
     }
     const e = engine.current;
-    if (await veiled(() => e.setShot(sh, sp))) void capture();
+    if (await veiled(sh.id as WordKind, () => e.setShot(sh, sp))) void capture();
   };
   /** the tee view: turn it round to its front or back */
   const turnTee = (i: number) => {
@@ -777,7 +781,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center" role="status" aria-label="Getting the view ready">
             <div className="flex flex-col items-center gap-3 opacity-0 animate-[appear_300ms_ease-out_250ms_forwards]">
               <span className={`size-3.5 rounded-full animate-[breathe_1.8s_ease-in-out_infinite] ${dark ? "bg-ink" : "bg-black/75"}`} />
-              <span className={`font-hand text-[20px] leading-none ${dark ? "text-ink/80" : "text-black/65"}`}>breathing in..</span>
+              <span className={`font-hand text-[20px] leading-none ${dark ? "text-ink/80" : "text-black/65"}`}>{veilWord}</span>
             </div>
           </div>
         ) : null}
@@ -841,7 +845,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           {shot.spots.map((v, i) => (
             <button key={v.label} onClick={() => void goShot(shotI, i)} className={`hit ${i === spotI ? "font-semibold" : "text-quiet hover:text-ink"}`}>{v.label}</button>
           ))}
-          <button onClick={() => { setCard(false); setActual(spot?.label ?? "back"); }} className="hit font-semibold text-blue hover:text-ink">actual size</button>
+          <button onClick={() => { setCard(false); setActual(spot?.label ?? "back"); }} className="hit font-semibold text-blue hover:text-ink">artwork</button>
           {zoomRow}
         </div>
       ) : null}
@@ -849,7 +853,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       <div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-line pt-1.5 text-[13px]" role="group" aria-label="Light">
         <span className="text-quiet">light</span>
         {SCENE_LIST.map((x) => (
-          <button key={x.id} onClick={() => { sceneRef.current = x.id; setSceneId(x.id); const e = engine.current; if (e) void veiled(() => e.setScene(x.id)); }} className={`hit ${x.id === sceneId ? "font-semibold" : "text-quiet hover:text-ink"}`}>
+          <button key={x.id} onClick={() => { sceneRef.current = x.id; setSceneId(x.id); const e = engine.current; if (e) void veiled(x.id as WordKind, () => e.setScene(x.id)); }} className={`hit ${x.id === sceneId ? "font-semibold" : "text-quiet hover:text-ink"}`}>
             {x.label}
           </button>
         ))}
@@ -869,7 +873,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
             <button onClick={makePhoto} className="ml-auto font-semibold text-blue hover:text-ink">make the photo →</button>
           ) : (
             <span className="ml-auto tnum">
-              developing · {Math.round(developing * 100)}%{" "}
+              {devWord} {Math.round(developing * 100)}%{" "}
               <button onClick={() => stopPhoto.current?.abort()} className="text-quiet underline hover:text-ink">stop</button>
             </span>
           )}
@@ -878,7 +882,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       {actual ? (
         <div className={`fixed inset-0 z-50 flex flex-col ${tee === "black" ? "text-[#efe9dc]" : "text-[#1a1a1a]"}`} style={{ background: COLOURS[tee].hex }} role="dialog" aria-modal aria-label={`The ${actual} print at actual size`}>
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3 text-[13px]">
-            <span className="font-semibold">actual size</span>
+            <span className="font-semibold">artwork</span>
             <span className="opacity-60">the {actual} print as big as it is on the shirt{actual === "back" ? ". drag to look around" : ""}</span>
             <button onClick={() => setCard((c) => !c)} className={`hit ${card ? "font-semibold" : "opacity-60 hover:opacity-100"}`}>check with a card</button>
             <button onClick={() => setActual(null)} className="hit ml-auto font-semibold" autoFocus>close ×</button>
