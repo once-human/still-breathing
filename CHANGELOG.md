@@ -2,6 +2,14 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.14.0 — 2026-11-25
+Record yourself in the tee.
+
+### Try-on
+- A record button next to take a photo: up to 30 seconds of you in the tee, exactly as you see it, mirror, tee and hands.
+- Clips save as MP4 where the phone or browser can write it (iPhone, Android, recent Chrome), WebM otherwise.
+- Photos and clips can go straight to any app through your phone's share sheet, or save to the device. Nothing leaves it until you do.
+
 ## 0.13.2 — 2026-11-25
 ### Studio
 - The shades near the edges come and go slowly and evenly now. The bottom one only rises at the very bottom, wider and softer.
