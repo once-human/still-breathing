@@ -105,7 +105,7 @@ def shade(P, N, lips, ears, nails, scalp, handw, hairw=None, flow=None):
     nape = sm(mouth[2] - (0.03 if SHE else 0.012), mouth[2] + (0.0 if SHE else 0.025), z + edge)
     hairv = sm(0.3, 0.6, scalp) * hairline * nape * sm(0.02 if SHE else 0.038, 0.032 if SHE else 0.05, earD + edge) * isHead
     if HBM:      # regions.py drew the hairline round the head: it only needs to wander, and stay off the ears
-        hairv = sm(0.2, 0.8, scalp + edge * 60.0 * 4 * scalp * (1 - scalp)) * sm(0.006, 0.012, earD + 0.5 * edge) * isHead
+        hairv = sm(0.2, 0.8, scalp + (edge * 60.0 if SHE else edge * 10.0) * 4 * scalp * (1 - scalp)) * sm(0.006, 0.012, earD + 0.5 * edge) * isHead
     # a short trimmed beard: moustache, chin and jaw; the cheek line rises from the mouth's corner to the
     # sideburn, the neck line sits a finger's width under the jaw; thinner high on the cheeks
     dy = d[:, 1]
@@ -125,7 +125,8 @@ def shade(P, N, lips, ears, nails, scalp, handw, hairw=None, flow=None):
     H += 0.00006 * dens_b * vnoise(along(P * 700.0, dn, 4.0))
     dens_h = np.clip(hairv * ((0.94 if HBM else 0.9) + 0.05 * vnoise(P * 700.0)), 0, 1)
     if HBM and not SHE:      # his fade: the sides and back shorter toward the bottom, more skin showing through
-        dens_h *= 0.42 + 0.58 * sm(eyeL[2] - 0.035, eyeL[2] + 0.065, z + 0.3 * edge)
+        dens_h *= 0.1 + 0.85 * sm(eyeL[2] - 0.03, eyeL[2] + 0.075, z + 0.15 * edge) ** 1.3
+        dens_h *= 0.8 + 0.4 * sm(-0.3, 0.5, vnoise(P * 1800.0))       # each short hair a dot: the skin between them
     C = C * (1 - 0.95 * dens_h[:, None]) + HAIR * (0.95 * dens_h[:, None])
     R = R * (1 - dens_h) + 0.75 * dens_h
     # brows: along each brow sx runs from its inner end (about 1.6 cm in from the eye's middle) out to its tail
@@ -162,8 +163,8 @@ def shade(P, N, lips, ears, nails, scalp, handw, hairw=None, flow=None):
     lw = sm(0.12, 0.6, lips)
     peri = sm(0.03, 0.012, np.linalg.norm(d * np.array([0.8, 1.0, 1.4]), axis=1)) * (1 - lw) * isHead
     C *= (1 - 0.1 * peri[:, None])
-    C = C * (1 - lw[:, None]) + np.array([0.15, 0.06, 0.058] if SHE else [0.15, 0.068, 0.06]) * lw[:, None] * (1 + 0.15 * (1 - sm(0.6, 0.95, lips)))[:, None] * 0.95
-    R = R * (1 - lw) + 0.3 * lw
+    C = C * (1 - lw[:, None]) + np.array([0.13, 0.058, 0.048] if SHE else [0.13, 0.064, 0.052]) * lw[:, None] * (1 + 0.15 * (1 - sm(0.6, 0.95, lips)))[:, None] * 0.95
+    R = R * (1 - lw) + 0.42 * lw
     H -= 0.00005 * lw * (0.5 + 0.5 * np.sin(x * 2 * np.pi / 0.0011 + 2 * vnoise(P * 300.0)))
     # the face's own colours: the skin round the eyes darker (a brown-violet shadow under each eye and in the
     # inner corner, as most Indian faces have), the cheekbones a little warmer, the forehead and temples, in the

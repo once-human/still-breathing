@@ -255,7 +255,7 @@ fn teeSurf(h: Hit, ro: vec3f, rd: vec3f) -> Surf {
     else if (iv.w == 8u) {
       // hair cards: the hair's colour times the strand's brightness; shiny, no light through it
       S.base = S.base * (0.55 + 0.85 * textureSampleLevel(texHair, samp, uv, 0.0).r);
-      S.rough = 0.4; S.sheen = 0.0; S.spec = 0.04; S.sss = 0.0;
+      S.rough = 0.5; S.sheen = 0.0; S.spec = 0.032; S.sss = 0.0;
     }
     else { S.rough = 0.12; S.sheen = 0.0; S.spec = 0.03; }
   } else if (iv.w == 2u) {

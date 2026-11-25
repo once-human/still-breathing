@@ -45,7 +45,7 @@ def grow(b, SRC, wt, she, eyeL, eyeR, mouth):
         p = v.co; s = wt(v[SRC], "scalp")
         if s < 0.5: return 0.0
         if she: return 0.006
-        d = 0.0095 * sm(eyeZ + 0.07, eyeZ + 0.1, p.z)          # the sides and back faded to the skin
+        d = 0.0095 * sm(eyeZ + 0.055, eyeZ + 0.085, p.z)       # the sides and back faded to the skin
         return d * (1 + 0.15 * noise.noise(p * 70.0) + 0.07 * noise.noise(p * 160.0))   # loose tufts
 
     D = {v.index: depth(v) for v in head}

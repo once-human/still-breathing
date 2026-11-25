@@ -28,7 +28,7 @@ def sm(e0, e1, x):
 
 def strip(kind):
     P = np.zeros((H, SW, 3)); A = np.zeros((H, SW))          # premultiplied colour, coverage
-    if kind == "sleek":   n, root, tip, wid, wav, clumps = 190, (0.0, 0.07), (0.9, 1.0), (0.9, 1.5), 0.5, 0
+    if kind == "sleek":   n, root, tip, wid, wav, clumps = 170, (0.0, 0.22), (0.68, 1.0), (0.9, 1.5), 0.5, 0
     elif kind == "crop":  n, root, tip, wid, wav, clumps = 95, (0.0, 0.14), (0.45, 0.97), (1.0, 1.7), 0.35, 4
     elif kind == "wisp":  n, root, tip, wid, wav, clumps = 24, (0.0, 0.3), (0.55, 1.0), (0.8, 1.2), 1.4, 0
     else:                 n, root, tip, wid, wav, clumps = 18, (0.0, 0.3), (0.35, 0.8), (0.9, 1.3), 0.6, 0   # short sparse
@@ -50,7 +50,7 @@ def strip(kind):
         wpx = w0 * (1 - 0.7 * sm(0.55, 1.0, t))
         fade = sm(0.0, 0.05, t) * (1 - sm(0.93, 1.0, t))
         # brighter on top of the pile; a little lighter along it, slowly
-        b = rng.uniform(0.5, 0.82) + 0.22 * s / n
+        b = rng.uniform(0.42, 0.84) + 0.2 * s / n
         bv = b * (1 + 0.1 * np.sin(2 * np.pi * (rng.uniform(0.5, 1.5) * t + rng.uniform(0, 1))))
         sid = rng.uniform()
         base = np.floor(xc).astype(int)

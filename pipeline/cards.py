@@ -6,7 +6,7 @@
 # silhouette and the hairline, and the light runs along them.
 #   - her: long sleek cards (4 to 8 cm) lying almost flat, combed back into the bun and wound round it; sparse
 #     cards at the hairline (single strands coming out of the skin) and a few loose hairs over the top
-#   - him: short cards (1.5 to 2.5 cm) on top, lifted at an angle off the head and settling back toward their
+#   - him: short cards (2 to 3.5 cm) on top, lifted at an angle off the head and settling back toward their
 #     tips (a textured crop), shorter and sparser toward the faded sides
 # The cards' normals are the head's (so the pile shades as one mass, not as so many flat strips); their front faces
 # away from the head (the viewer draws only the fronts). UVs: hairtex.py's 16 strips across, v from the root (top of
@@ -62,8 +62,8 @@ def grow(hb, she, colour, seed=1618):
         wts.append(f.calc_area() * (1 + (3.0 if she else 1.5) * (1 - k)) * (0.0 if k < 0.02 else 1.0))
     area = sum(f.calc_area() for f in faces)
     # layers deep: how many cards cover a point, on average
-    if she: N = int(area * 4.5 / (0.06 * 0.015)) + 60
-    else: N = int(area * 4.0 / (0.019 * 0.009))
+    if she: N = int(area * 5.5 / (0.06 * 0.009)) + 25
+    else: N = int(area * 4.0 / (0.026 * 0.009))
     cum, s = [], 0.0
     for w in wts: s += w; cum.append(s)
 
@@ -88,16 +88,16 @@ def grow(hb, she, colour, seed=1618):
         r0 = at(p0)
         if r0 is None: continue
         k0 = r0[3]
-        wisp = she and c < 40                                    # her loose hairs over the top
+        wisp = she and c < 25                                    # her loose hairs over the top
         if she:
-            L = rnd.uniform(0.04, 0.08); W = rnd.uniform(0.011, 0.018); K = 8
+            L = rnd.uniform(0.04, 0.08); W = rnd.uniform(0.006, 0.01); K = 8
             sparse = wisp or k0 < 0.45
-            h0 = 0.0024 + rnd.uniform(0, 0.0012) if wisp else (0.0007 if k0 < 0.45 else rnd.uniform(0.0005, 0.0022))
+            h0 = 0.0015 + rnd.uniform(0, 0.001) if wisp else (0.0007 if k0 < 0.45 else rnd.uniform(0.0004, 0.0013))
             lift = 0.0
         else:
-            L = rnd.uniform(0.014, 0.024) * (0.55 + 0.45 * k0); W = rnd.uniform(0.007, 0.011); K = 4
+            L = rnd.uniform(0.02, 0.034) * (0.55 + 0.45 * k0); W = rnd.uniform(0.007, 0.011); K = 5
             sparse = k0 < 0.5
-            h0 = 0.0006; lift = math.tan(math.radians(rnd.uniform(10, 24) * (0.4 + 0.6 * k0)))
+            h0 = 0.0006; lift = math.tan(math.radians(rnd.uniform(14, 30) * (0.4 + 0.6 * k0)))
         pts = trace(p0, L, K)
         if len(pts) < 3: continue
         arc = [0.0]

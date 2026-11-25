@@ -412,14 +412,14 @@ export class Raster {
     const t = new THREE.Texture(strands);
     t.flipY = false; t.colorSpace = THREE.NoColorSpace; t.anisotropy = this.maxAniso; t.needsUpdate = true;
     const s = texture(t);
-    const m = new THREE.MeshPhysicalNodeMaterial({ metalness: 0, roughness: 0.4, specularIntensity: 0.6 });
+    const m = new THREE.MeshPhysicalNodeMaterial({ metalness: 0, roughness: 0.5, specularIntensity: 0.4 });
     m.colorNode = vec3(vertexColor()).mul(s.r.mul(0.85).add(0.55));
     // smaller on screen, the strands' coverage averages away in the picture's smaller copies: kept up, so the
     // hair doesn't thin out as it gets further away
     const d = fwidth(uv().mul(1024)), lod = max(log2(max(d.x, d.y)), 0);
     m.opacityNode = s.a.mul(lod.mul(0.25).add(1));
     m.alphaTest = 0.5; m.alphaToCoverage = this.msaa;
-    m.anisotropy = 0.7;
+    m.anisotropy = 0.5;
     m.positionNode = this.motion.node(positionLocal);
     return m;
   }

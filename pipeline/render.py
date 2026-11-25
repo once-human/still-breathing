@@ -87,6 +87,7 @@ if PERSON:
             # human.py exports placeholder materials, so the glTF has none: the mesh names say which part it is
             nm = ((slot.name if slot else "") + " " + po.name + " " + po.data.name).lower()
             kind = "jeans" if "jean" in nm else "eyes" if "eye" in nm else "cards" if "haircard" in nm else "skin"
+            shell = "hair" in nm                                  # hair.py's hair: the skin's maps, no light through it
             if kind == "cards":
                 # hair cards (cards.py): hairtex.py's strands, their coverage as alpha, the colour per vertex times
                 # the strand's brightness, the shine stretched across the strands (they run along V)
@@ -102,8 +103,8 @@ if PERSON:
                 mul = NN.new("ShaderNodeMix"); mul.data_type = "RGBA"; mul.blend_type = "MULTIPLY"; mul.inputs[0].default_value = 1.0
                 LL.new(vc.outputs["Color"], mul.inputs[6]); LL.new(br.outputs[0], mul.inputs[7]); LL.new(mul.outputs[2], pb.inputs["Base Color"])
                 LL.new(ti.outputs["Alpha"], pb.inputs["Alpha"])
-                pb.inputs["Roughness"].default_value = 0.38; pb.inputs["Specular IOR Level"].default_value = 0.5
-                pb.inputs["Anisotropic"].default_value = 0.7
+                pb.inputs["Roughness"].default_value = 0.5; pb.inputs["Specular IOR Level"].default_value = 0.3
+                pb.inputs["Anisotropic"].default_value = 0.5
                 tg = NN.new("ShaderNodeTangent"); tg.direction_type = "UV_MAP"; tg.uv_map = uvn.uv_map
                 LL.new(tg.outputs[0], pb.inputs["Tangent"])
                 po.data.materials[i] = pm
@@ -133,7 +134,7 @@ if PERSON:
                 nm = NN.new("ShaderNodeNormalMap"); nm.uv_map = uvn.uv_map; LL.new(comb.outputs[0], nm.inputs["Color"])
                 LL.new(nm.outputs[0], pb.inputs["Normal"]); LL.new(sep.outputs[2], pb.inputs["Roughness"])
                 pb.subsurface_method = "RANDOM_WALK_SKIN"
-                pb.inputs["Subsurface Weight"].default_value = 1.0
+                pb.inputs["Subsurface Weight"].default_value = 0.0 if shell else 0.75
                 pb.inputs["Subsurface Radius"].default_value = (1.0, 0.35, 0.2)
                 pb.inputs["Subsurface Scale"].default_value = 0.004
             po.data.materials[i] = pm
