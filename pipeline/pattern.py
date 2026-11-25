@@ -1,4 +1,4 @@
-# Qikink UC22 Unisex Oversized Classic, size M, flat-lay pattern (cm).
+# The unisex oversized classic blank, size M, flat-lay pattern (cm).
 # Published: chest 44 in (flat width 55.9), length 29 in (73.7 HPS to hem), shoulder 20 in (50.8 seam to seam).
 # Not published, standard oversized drop-shoulder values until a real sample is measured:
 #   neck width 19.6, front drop 9.5, back drop 2.5, rib 2.0, sleeve length 22, sleeve opening 20 flat,

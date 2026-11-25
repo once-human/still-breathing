@@ -137,7 +137,7 @@ edge = (side * bottom * fade_top) ** 1.2
 # a little wander in the dissolve, so it reads as drawn, not masked
 edge = np.clip(edge + (smooth_noise((h, w), 0.05 * h, 2, 11) - 0.5) * 0.25 * (edge < 0.999), 0, 1)
 alpha = np.clip(alpha * edge, 0, 1)
-# DTG: nothing faint enough to print as a speckle
+# the print: nothing faint enough to print as a speckle
 alpha = np.where(alpha < 0.06, 0, alpha)
 
 art = np.dstack([rgb, alpha * 255]).clip(0, 255).astype("u1")

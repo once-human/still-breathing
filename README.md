@@ -8,7 +8,7 @@ Live: https://still-breathing-studio.vercel.app (Vercel, deploys on every push t
 - `src/` the Next.js site (`npm run dev`); `src/lib/viewer/` has the WebGPU real-time renderer, the BVH builder and the WGSL path tracer
 - `public/tee/` meshes, maps and offline frames the viewer loads
 - `pipeline/` pattern, body, cloth sim, textures and renders
-  - `pattern.py` flat pattern of the Qikink UC22 blank (sizes in `sizes.py`)
+  - `pattern.py` flat pattern of the blank (sizes in `sizes.py`)
   - `body.py` builds a body from height and chest (MakeHuman via the MPFB Blender extension); `bodies.sh` makes the five in `bodies/`
   - `build.py` sews a size onto a body and poses it (standing, hands up, sitting); `FORM=1` drapes the shop tee on a ghost form
   - `texture.py`, `knit.py` colour atlas, ink mask, stitch relief, knit map

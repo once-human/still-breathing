@@ -136,7 +136,7 @@ if PERSON and os.environ.get("TROUSERS"):
     tb.inputs["Specular IOR Level"].default_value = 0.25
     tb.inputs["Sheen Weight"].default_value = 0.2; tb.inputs["Sheen Roughness"].default_value = 0.4
     trz.data.materials.clear(); trz.data.materials.append(tmat)
-# ---- material: cotton jersey + DTG ink ----
+# ---- material: cotton jersey + ink ----
 m = bpy.data.materials.new("jersey"); m.use_nodes = True; nt = m.node_tree; N = nt.nodes; L = nt.links
 for n in list(N): N.remove(n)
 o = N.new("ShaderNodeOutputMaterial"); b = N.new("ShaderNodeBsdfPrincipled")
@@ -151,7 +151,7 @@ L.new(tc.outputs["Object"], noise.inputs["Vector"])
 grain = N.new("ShaderNodeMapRange"); grain.inputs[3].default_value = 0.93; grain.inputs[4].default_value = 1.06; L.new(noise.outputs[0], grain.inputs[0])
 mul = N.new("ShaderNodeMix"); mul.data_type = "RGBA"; mul.blend_type = "MULTIPLY"; mul.inputs[0].default_value = 1.0
 L.new(img.outputs[0], mul.inputs[6]); L.new(grain.outputs[0], mul.inputs[7]); L.new(mul.outputs[2], b.inputs["Base Color"])
-# roughness: cotton 0.92, fresh DTG ink 0.6 (cured ink film is smoother than the yarn)
+# roughness: cotton 0.92, fresh ink 0.6 (cured ink film is smoother than the yarn)
 rr = N.new("ShaderNodeMapRange"); rr.inputs[3].default_value = 0.92; rr.inputs[4].default_value = 0.6; L.new(ink.outputs[0], rr.inputs[0]); L.new(rr.outputs[0], b.inputs["Roughness"])
 # sheen is the cotton fuzz: only on bare fabric. Over the ink it laid a white haze that washed the print out
 sh = N.new("ShaderNodeMapRange"); sh.inputs[3].default_value = 0.35; sh.inputs[4].default_value = 0.0; L.new(ink.outputs[0], sh.inputs[0]); L.new(sh.outputs[0], b.inputs["Sheen Weight"])
@@ -195,7 +195,7 @@ elif SHOW:
     w.node_tree.nodes["Background"].inputs[1].default_value = 1.0
 else:
     # ---- studio: seamless sweep, three softboxes ----
-    bg = (0.52, 0.515, 0.505) if tee_col == "black" else (0.42, 0.42, 0.425)   # studio grey like Qikink's shots, under Khronos neutral
+    bg = (0.52, 0.515, 0.505) if tee_col == "black" else (0.42, 0.42, 0.425)   # studio grey like the maker's shots, under Khronos neutral
     prof = [(y, 0.0) for y in [-6, -1, 0.3]] + [(0.3 + 0.6 * math.sin(t), 0.6 - 0.6 * math.cos(t)) for t in [k / 10 * math.pi / 2 for k in range(1, 11)]] + [(0.9, 4.0)]
     vs, fs = [], []
     for i, (y, z) in enumerate(prof):
