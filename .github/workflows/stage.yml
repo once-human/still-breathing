@@ -153,7 +153,8 @@ jobs:
 
   publish:
     needs: [strip, photo]
-    if: always() && !cancelled() && needs.strip.result != 'failure' && needs.photo.result != 'failure'
+    # a photo place that failed leaves only its own band out
+    if: always() && !cancelled() && needs.strip.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -161,6 +162,7 @@ jobs:
         with: { path: got, pattern: strip-*, merge-multiple: true }
       - uses: actions/download-artifact@v4
         if: inputs.photos != ''
+        continue-on-error: true
         with: { path: public/tee/stage, pattern: photo-*, merge-multiple: true }
       - name: Develop and commit
         run: |
