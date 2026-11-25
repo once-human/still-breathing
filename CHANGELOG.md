@@ -25,6 +25,7 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 - The actual size button is called artwork.
 
 ### Fixed
+- No more spikes of cloth: a few points of the tee that the simulation had thrown out (a spike off his sleeve, torn-off flaps when sitting or with hands up) sit back in the cloth, in the shop and in fit mode.
 - The tee's inside is plain cotton again, as in the renders, instead of carrying the prints; and the 3D draws the outside of the tee first, so what it covers (its inside, the body under it) is never lit only to be hidden: about a fifth less work for the graphics card every frame.
 - On a graphics card that can't draw 60 frames a second, the breeze, the breathing and the slow turn run at an even 30 instead of a ragged 15 to 40, leaving the card time for the rest of the page; turning it by hand still gets every frame.
 - The word and the breathing dot shown while a view gets ready sit on a soft shade of their own, so they read on a black tee too.
