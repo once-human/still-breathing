@@ -423,7 +423,7 @@ export class Raster {
     m.positionNode = this.motion.node(positionLocal);
     return m;
   }
-  private cardMats = new Map<string, THREE.MeshPhysicalNodeMaterial>();
+  private cardMats = new Map<string, { m: THREE.MeshPhysicalNodeMaterial; b: ImageBitmap }>();
   private skinMats = new Map<string, THREE.MeshPhysicalNodeMaterial>();
   private hairMats = new Map<string, THREE.MeshPhysicalNodeMaterial>();
   stoolMat = new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0, color: new THREE.Color(0.05, 0.045, 0.04) });
@@ -514,10 +514,13 @@ export class Raster {
         if (!mesh.isMesh) return;
         const mname = (mesh.material as THREE.Material)?.name || "";
         const isInner = kind === "tee" && /inner/i.test(mname);
-        // the person: 4 skin, 5 denim, 6 eyes, 7 hair (the path tracer reads their colour per vertex too); 8 the hair
-        // cards, live view only (the path tracer has the hair under them)
+        // the person: 4 skin, 5 denim, 6 eyes, 7 hair, 8 the hair cards (the path tracer reads their colour per vertex
+        // too, and cuts the cards out by their strands as the live view does)
         if (kind === "person" && /haircard/i.test(mname)) {
-          if (cards) { mesh.material = cards; Motion.ensure(mesh.geometry); } else mesh.visible = false;
+          if (!cards) { mesh.visible = false; return; }
+          mesh.material = cards.m; Motion.ensure(mesh.geometry);
+          parts.push({ mesh, mw: mesh.matrixWorld.clone(), id: 8, person: true });
+          triCount += (mesh.geometry.index ? mesh.geometry.index.count : mesh.geometry.attributes.position.count) / 3;
           return;
         }
         const pid = /jeans/i.test(mname) ? 5 : /eye/i.test(mname) ? 6 : /hair/i.test(mname) ? 7 : 4;
@@ -575,7 +578,7 @@ export class Raster {
       this.personHair = this.hairMats.get(v.person) ?? this.hairMats.set(v.person, this.skinFrom(skinMaps[0], skinMaps[1], true)).get(v.person)!;
     }
     // the hair cards' strands sit beside the person's GLB too (<name>-hair.webp), only for a person who has cards
-    let cards: THREE.MeshPhysicalNodeMaterial | null = null;
+    let cards: { m: THREE.MeshPhysicalNodeMaterial; b: ImageBitmap } | null = null;
     if (bodyGltf && v.person) {
       let has = false;
       bodyGltf.scene.traverse((o) => { if ((o as THREE.Mesh).isMesh && /haircard/i.test(((o as THREE.Mesh).material as THREE.Material)?.name || "")) has = true; });
@@ -583,7 +586,7 @@ export class Raster {
         cards = this.cardMats.get(v.person) ?? null;
         if (!cards) {
           const b = await bitmap(v.person.replace(/\.glb$/, "-hair.webp")).catch(() => null);
-          if (b) this.cardMats.set(v.person, (cards = this.cardsFrom(b)));
+          if (b) this.cardMats.set(v.person, (cards = { m: this.cardsFrom(b), b }));
         }
       }
     }
@@ -609,7 +612,8 @@ export class Raster {
     }
     this.tris = triCount;
     let built: TeeGeometry | null = null;
-    return () => (built ??= soupOf(parts, lift, skinMaps ? { albedo: skinMaps[0], rn: skinMaps[1] } : undefined));
+    const hairB = (cards as { b: ImageBitmap } | null)?.b;
+    return () => (built ??= soupOf(parts, lift, skinMaps ? { albedo: skinMaps[0], rn: skinMaps[1], hair: hairB } : undefined));
   }
 
   setCamera(c: Camera) {

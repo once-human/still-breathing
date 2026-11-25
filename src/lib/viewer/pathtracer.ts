@@ -10,7 +10,7 @@ import { CAMERA, VFOV, ASPECT, KNIT_REPEAT, cameraBasis, lightFrame, radiance, t
  */
 export type TeeGeometry = {
   pos: Float32Array; nrm: Float32Array; uv: Float32Array; idx: Uint32Array; mat: Uint8Array; col?: Float32Array;
-  skin?: { albedo: ImageBitmap; rn: ImageBitmap };
+  skin?: { albedo: ImageBitmap; rn: ImageBitmap; hair?: ImageBitmap };
 };
 /** back: the back print, front: the chest print (both premultiplied, at print resolution) */
 export type TeeImages = { back: ImageBitmap; front: ImageBitmap; normal: ImageBitmap; knit: ImageBitmap };
@@ -161,7 +161,8 @@ export class PathTracer {
       else this.device.queue.writeTexture({ texture: t }, new Uint8Array(fill), {}, [1, 1]);
       return t;
     };
-    this.skinTex = [img(g.skin?.albedo ?? null, true, [255, 255, 255, 255]), img(g.skin?.rn ?? null, false, [128, 128, 128, 255])];
+    this.skinTex = [img(g.skin?.albedo ?? null, true, [255, 255, 255, 255]), img(g.skin?.rn ?? null, false, [128, 128, 128, 255]),
+      img(g.skin?.hair ?? null, false, [0, 0, 0, 0])];
     this.traceBG = null;
     return { tris: n, nodes: bvh.nodeCount };
   }
@@ -316,6 +317,7 @@ export class PathTracer {
           { binding: 13, resource: this.skinTex[0].createView() },
           { binding: 14, resource: this.skinTex[1].createView() },
           { binding: 15, resource: this.bandView() },
+          { binding: 16, resource: this.skinTex[2].createView() },
         ],
       });
     }

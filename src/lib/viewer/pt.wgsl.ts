@@ -40,6 +40,7 @@ struct U {
 @group(0) @binding(13) var texSkin: texture_2d<f32>;  // the person's skin colour (sRGB)
 @group(0) @binding(14) var texSkinRN: texture_2d<f32>; // its relief (normal in r, g) and roughness (b)
 @group(0) @binding(15) var texBand: texture_2d<f32>;  // the band of the place the camera sees, sharp (scene.ts BAND); 1 x 1: none
+@group(0) @binding(16) var texHair: texture_2d<f32>;  // the hair cards' strands (pipeline/hairtex.py: brightness r, coverage a)
 
 const PI = 3.14159265359;
 const INF = 1e30;
@@ -57,6 +58,16 @@ fn aabb(ro: vec3f, inv: vec3f, mn: vec3f, mx: vec3f, tmax: f32) -> f32 {
   let a = min(t0, t1); let b = max(t0, t1);
   let tn = max(max(a.x, a.y), max(a.z, 0.0)); let tf = min(min(b.x, b.y), min(b.z, tmax));
   return select(INF, tn, tn <= tf);
+}
+
+// a hair card (material 8) is only there where its strands are: anywhere else the ray goes on through
+fn cardMiss(i: u32, bu: f32, bv: f32) -> bool {
+  let iv = triv[i];
+  if (iv.w != 8u) { return false; }
+  let w = 1.0 - bu - bv;
+  let uv = vec2f(verts[iv.x * 2u].w, verts[iv.x * 2u + 1u].x) * w + vec2f(verts[iv.y * 2u].w, verts[iv.y * 2u + 1u].x) * bu
+    + vec2f(verts[iv.z * 2u].w, verts[iv.z * 2u + 1u].x) * bv;
+  return textureSampleLevel(texHair, samp, uv, 0.0).a < 0.5;
 }
 
 // tee in object space (the turntable turns the tee, not the studio)
@@ -78,7 +89,10 @@ fn traceTee(ro: vec3f, rd: vec3f, tmaxIn: f32, any: bool) -> Hit {
         let qv = cross(tv, e1); let bv = dot(rd, qv) * id;
         if (bv < 0.0 || bu + bv > 1.0) { continue; }
         let t = dot(e2, qv) * id;
-        if (t > 1e-5 && t < h.t) { h = Hit(t, 1u, i, vec2f(bu, bv)); if (any) { return h; } }
+        if (t > 1e-5 && t < h.t) {
+          if (cardMiss(i, bu, bv)) { continue; }
+          h = Hit(t, 1u, i, vec2f(bu, bv)); if (any) { return h; }
+        }
       }
       if (sp == 0u) { break; }
       sp--; node = stack[sp]; continue;
@@ -220,7 +234,7 @@ fn teeSurf(h: Hit, ro: vec3f, rd: vec3f) -> Surf {
   } else if (iv.w == 3u) {
     S.base = vec3f(0.05, 0.045, 0.04); S.rough = 0.7; S.sheen = 0.0; S.spec = 0.03;   // the stool
   } else if (iv.w >= 4u) {
-    // someone wearing it: colour painted per vertex; 4 skin (a little oil), 5 denim, 6 eyes (wet), 7 hair
+    // someone wearing it: colour painted per vertex; 4 skin (a little oil), 5 denim, 6 eyes (wet), 7 hair, 8 hair cards
     let k0 = verts[iv.x * 2u + 1u].yzw; let k1 = verts[iv.y * 2u + 1u].yzw; let k2 = verts[iv.z * 2u + 1u].yzw;
     S.base = k0 * w + k1 * h.b.x + k2 * h.b.y;
     if (iv.w == 4u || iv.w == 7u) {
@@ -238,6 +252,11 @@ fn teeSurf(h: Hit, ro: vec3f, rd: vec3f) -> Surf {
       S.rough = tR.b; S.sheen = 0.0; S.spec = select(0.028, 0.038, iv.w == 7u); S.sss = select(1.0, 0.0, iv.w == 7u);
     }
     else if (iv.w == 5u) { S.rough = 0.85; S.sheen = 0.35; S.spec = 0.02; }
+    else if (iv.w == 8u) {
+      // hair cards: the hair's colour times the strand's brightness; shiny, no light through it
+      S.base = S.base * (0.55 + 0.85 * textureSampleLevel(texHair, samp, uv, 0.0).r);
+      S.rough = 0.4; S.sheen = 0.0; S.spec = 0.04; S.sss = 0.0;
+    }
     else { S.rough = 0.12; S.sheen = 0.0; S.spec = 0.03; }
   } else if (iv.w == 2u) {
     // skin (fit mode): diffuse-dominant, a soft sheen of oil, no subsurface (too costly here, too small to read)
