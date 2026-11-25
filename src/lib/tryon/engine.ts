@@ -115,6 +115,8 @@ export class TryOn {
   private seg: ImageSegmenter | null = null; private cat: Uint8Array | null = null; private catW = 0; private catH = 0;
   private lab = { hair: 1, body: 2, face: 3, others: 5 };
   private segIn = document.createElement("canvas");
+  // a recording: the same picture as on screen (the mirror, the tee, your hands), drawn into one canvas per frame
+  private rec: { cv: HTMLCanvasElement; mr: MediaRecorder; track: CanvasCaptureMediaStreamTrack; push: boolean; done: Promise<Blob> } | null = null;
   private segCv = [document.createElement("canvas"), document.createElement("canvas"), document.createElement("canvas")];
   private midU = new OneEuro(1.0, 0.04, 1.6); private midV = new OneEuro(1.0, 0.04, 1.6); private body = 0;
   private keyOff = new THREE.Vector3(0, 2, 2); private shown = false; private qSpeed = 0;
@@ -411,6 +413,7 @@ export class TryOn {
     if (this.frameN++ % 10 === 0) this.light(dt * 10);
     this.renderer.render(this.scene, this.camera);
     this.drawArms();
+    if (this.rec) { this.compose(this.rec.cv); if (this.rec.push) this.rec.track.requestFrame(); }
     if (!this.shown) { this.shown = true; v.style.opacity = "0"; }
     this.govern(performance.now() - t0, this.camInt);
   }
@@ -709,20 +712,54 @@ export class TryOn {
     c.globalCompositeOperation = "source-over";
   }
 
-  /** the picture as you see it: the mirror, the tee, your hands */
-  async snapshot(): Promise<Blob> {
-    const W = this.video.videoWidth, H = this.video.videoHeight, out = document.createElement("canvas");
-    out.width = W; out.height = H;
+  /** the picture as you see it, into a canvas: the mirror, the tee, your hands */
+  private compose(out: HTMLCanvasElement) {
+    const W = this.video.videoWidth, H = this.video.videoHeight;
+    if (out.width !== W || out.height !== H) { out.width = W; out.height = H; }
     const c = out.getContext("2d")!;
-    this.renderer.render(this.scene, this.camera);
     c.save(); c.translate(W, 0); c.scale(-1, 1); c.drawImage(this.frameCv, 0, 0, W, H); c.restore();
     c.drawImage(this.canvas, 0, 0, W, H);
     c.save(); c.translate(W, 0); c.scale(-1, 1); c.drawImage(this.arms, 0, 0, W, H); c.restore();
+  }
+
+  /**
+   * Record what you see, as a video: MP4 where the browser can write it (Safari, iPhone, recent Chrome), WebM
+   * otherwise. Like everything here, it stays on this device until you save or share it.
+   */
+  recordStart() {
+    if (this.rec || typeof MediaRecorder === "undefined") return false;
+    const cv = document.createElement("canvas"); this.compose(cv);
+    const type = ["video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm"].find((t) => MediaRecorder.isTypeSupported(t));
+    if (!type) return false;
+    // a frame goes into the clip each time one is drawn, so the clip runs at the try-on's own pace, never repeats or skips
+    // (where a browser can't be handed frames, it samples the canvas at 30 a second instead)
+    const push = typeof CanvasCaptureMediaStreamTrack !== "undefined" && "requestFrame" in CanvasCaptureMediaStreamTrack.prototype;
+    const stream = cv.captureStream(push ? 0 : 30), track = stream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack;
+    const mr = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 6_000_000 }), parts: Blob[] = [];
+    mr.ondataavailable = (e) => { if (e.data.size) parts.push(e.data); };
+    const done = new Promise<Blob>((res) => { mr.onstop = () => { track.stop(); res(new Blob(parts, { type: type.split(";")[0] })); }; });
+    mr.start(500); if (push) track.requestFrame();
+    this.rec = { cv, mr, track, push, done };
+    return true;
+  }
+  async recordStop(): Promise<Blob | null> {
+    const r = this.rec; if (!r) return null;
+    this.rec = null;
+    if (r.mr.state !== "inactive") { r.mr.requestData(); r.mr.stop(); }
+    return r.done;
+  }
+
+  /** the picture as you see it: the mirror, the tee, your hands */
+  async snapshot(): Promise<Blob> {
+    const out = document.createElement("canvas");
+    this.renderer.render(this.scene, this.camera);
+    this.compose(out);
     return new Promise((res, rej) => out.toBlob((b) => (b ? res(b) : rej(new Error("no image"))), "image/jpeg", 0.92));
   }
 
   dispose() {
     this.dead = true;
+    if (this.rec && this.rec.mr.state !== "inactive") this.rec.mr.stop(); this.rec = null;
     const v = this.video as HTMLVideoElement & { cancelVideoFrameCallback?: (h: number) => void };
     if (this.vfc) v.cancelVideoFrameCallback?.(this.vfc);
     cancelAnimationFrame(this.raf);

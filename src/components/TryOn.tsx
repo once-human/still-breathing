@@ -26,7 +26,10 @@ export function TryOn({ design, tee, onClose }: { design: Design; tee: Colour; o
   const [err, setErr] = useState("");
   const [look, setLook] = useState<Design>(design);
   const [size, setSize] = useState<Size>("M");
-  const [shot, setShot] = useState<string | null>(null);
+  // a photo or a clip, once taken: shown over the try-on to save or share
+  const [shot, setShot] = useState<{ url: string; blob: Blob; video: boolean } | null>(null);
+  const [rec, setRec] = useState<number | null>(null);   // when the recording started
+  const [now, setNow] = useState(0);
   // the frame takes the camera's own shape, so the tee lines up with the picture edge to edge
   const [ar, setAr] = useState(4 / 3);
 
@@ -60,10 +63,24 @@ export function TryOn({ design, tee, onClose }: { design: Design; tee: Colour; o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => () => { if (shot) URL.revokeObjectURL(shot); }, [shot]);
+  useEffect(() => () => { if (shot) URL.revokeObjectURL(shot.url); }, [shot]);
 
   const pick = (d: Design) => { setLook(d); eng.current?.setLook(d, DESIGNS[d].colour); };
-  const snap = async () => { const b = await eng.current?.snapshot().catch(() => null); if (b) setShot(URL.createObjectURL(b)); };
+  const show = (b: Blob, video: boolean) => setShot({ url: URL.createObjectURL(b), blob: b, video });
+  const snap = async () => { const b = await eng.current?.snapshot().catch(() => null); if (b) show(b, false); };
+  const stop = async () => { setRec(null); const b = await eng.current?.recordStop(); if (b && b.size) show(b, true); };
+  const record = () => { if (rec !== null) { stop(); return; } if (eng.current?.recordStart()) { setRec(performance.now()); setNow(performance.now()); } };
+  // the clock while recording, and a clip is at most 30 seconds
+  useEffect(() => {
+    if (rec === null) return;
+    const id = setInterval(() => { const t = performance.now(); setNow(t); if (t - rec > 30_000) stop(); }, 250);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rec]);
+  const ext = (b: Blob) => (b.type.includes("mp4") ? "mp4" : b.type.includes("webm") ? "webm" : "jpg");
+  const file = (b: Blob) => new File([b], `still-breathing-${look}.${ext(b)}`, { type: b.type });
+  const canShare = (b: Blob) => typeof navigator !== "undefined" && !!navigator.canShare?.({ files: [file(b)] });
+  const share = (b: Blob) => navigator.share({ files: [file(b)] }).catch(() => {});
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black text-white" role="dialog" aria-modal aria-label="Try it on">
@@ -97,16 +114,24 @@ export function TryOn({ design, tee, onClose }: { design: Design; tee: Colour; o
           ))}
         </span>
         <span className="hidden text-white/50 lg:inline">on this device only, nothing is recorded or sent</span>
-        <button onClick={snap} disabled={status !== "ready"} className="hit ml-auto font-semibold disabled:text-white/40">take a photo</button>
+        <button onClick={snap} disabled={status !== "ready" || rec !== null} className="hit ml-auto font-semibold disabled:text-white/40">take a photo</button>
+        <button onClick={record} disabled={status !== "ready"} className="hit font-semibold tabular-nums disabled:text-white/40" aria-pressed={rec !== null}>
+          {rec === null ? "record" : <><span className="mr-1.5 inline-block size-2 rounded-full bg-red-500 align-middle" />stop {Math.floor((now - rec) / 1000)}s</>}
+        </button>
         <button onClick={onClose} className="hit text-white/70 hover:text-white">close</button>
       </div>
       {shot ? (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/85 p-4" onClick={() => setShot(null)}>
           <div className="flex max-h-full flex-col items-center gap-3" onClick={(e) => e.stopPropagation()}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={shot} alt="You in the tee" className="max-h-[80vh] w-auto max-w-full" />
+            {shot.video ? (
+              <video src={shot.url} autoPlay loop playsInline muted controls className="max-h-[80vh] w-auto max-w-full" />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={shot.url} alt="You in the tee" className="max-h-[80vh] w-auto max-w-full" />
+            )}
             <div className="flex gap-6">
-              <a href={shot} download={`still-breathing-${look}.jpg`} className="font-semibold hover:text-white/70">save</a>
+              {canShare(shot.blob) ? <button onClick={() => share(shot.blob)} className="font-semibold hover:text-white/70">share</button> : null}
+              <a href={shot.url} download={`still-breathing-${look}.${ext(shot.blob)}`} className="font-semibold hover:text-white/70">save</a>
               <button onClick={() => setShot(null)} className="text-white/70 hover:text-white">back</button>
             </div>
           </div>
