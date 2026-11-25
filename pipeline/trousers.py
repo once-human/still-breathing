@@ -1,6 +1,6 @@
 # blender -b --factory-startup -P trousers.py -- <body.blend> <out.blend>
 # Straight-leg trousers for the people who wear the shop tee, hung on the standing body by cloth simulation.
-#   1. a shell round the hips and legs: the body grown out by the ease (1 cm over the hips and seat), joined with
+#   1. a shell round the hips and legs: the body grown out by the ease (8 mm over the hips and seat), joined with
 #      one straight cone per leg from the upper thigh to the hem (40 cm round on him, 36.5 on her), as one volume,
 #      remeshed into one even surface. Where the thighs come close the shell bridges them, as a trouser crotch does
 #   2. cut at the waist (mid rise, 4 cm over the hip joints, under the tee's hem) and at the hem (over the shoe),
@@ -23,21 +23,24 @@ bpy.context.view_layer.update()
 bone = lambda n: rig.matrix_world @ rig.pose.bones[n].head
 HIP = (bone("upperleg01.L").z + bone("upperleg01.R").z) / 2
 ANKLE = (bone("foot.L").z + bone("foot.R").z) / 2
-WAIST, HEM = HIP + 0.04, ANKLE - 0.03
+WAIST, HEM = HIP + 0.04, ANKLE + 0.035      # ankle length: the hem clears the foot, no pooling
 dg = bpy.context.evaluated_depsgraph_get()
 me = bpy.data.meshes.new_from_object(body.evaluated_get(dg), depsgraph=dg)     # helpers stay masked
 me.transform(body.matrix_world)
 P = [v.co.copy() for v in me.vertices]
 TALL = max(p.z for p in P) > 1.7
-HEM_R = 0.064 if TALL else 0.058
+HEM_R = 0.058 if TALL else 0.052            # leg opening 36.5 / 33 cm round, a straight jean
+H = max(p.z for p in P)
 print("hip", round(HIP, 3), "waist", round(WAIST, 3), "hem", round(HEM, 3), flush=True)
 
 # ---------- 1. the shell ----------
 bm = bmesh.new(); bm.from_mesh(me); bm.normal_update()
 for v in bm.verts:
-    v.co += v.normal * 0.010
+    v.co += v.normal * (OUT := 0.025)          # grown out, remeshed, then pulled back IN (a closing): the seat and the
+IN = 0.017                                     # crotch bridge as denim does, 8 mm of ease is left
 legs = [p for p in P if p.z < HIP - 0.06 and abs(p.x) < 0.25]
 crotch = min((p.z for p in P if abs(p.x) < 0.01 and HIP - 0.2 < p.z < HIP), default=HIP - 0.1)   # thighs that touch lower down are not it
+crotch = max(crotch, HIP - 0.05 * H)            # a sculpted groin reaches lower than the trouser's crotch seam sits
 TOPZ = crotch - 0.05
 
 
@@ -52,13 +55,13 @@ def slice_(s, z, d=0.008):
 
 for s in (1, -1):
     c0, r0 = slice_(s, TOPZ); c1, _ = slice_(s, ANKLE + 0.06)
-    r0 += 0.012
+    r0 += 0.012 + IN
     N, K = 48, 24
     rings = []
     for k in range(K + 1):
         z = TOPZ + 0.02 + (HEM - 0.02 - TOPZ - 0.02) * k / K
         u = (z - c1.z) / (c0.z - c1.z); c = c1 + (c0 - c1) * u
-        R = HEM_R + (r0 - HEM_R) * max(0.0, min(1.0, u)) ** 1.4
+        R = HEM_R + IN + (r0 - HEM_R - IN) * max(0.0, min(1.0, u)) ** 1.4
         rings.append([bm.verts.new((c.x + R * math.cos(2 * math.pi * j / N), c.y + R * math.sin(2 * math.pi * j / N), z)) for j in range(N)])
     for k in range(K):
         for j in range(N):
@@ -72,7 +75,9 @@ tm = bpy.data.meshes.new_from_object(sh.evaluated_get(dg), depsgraph=dg)
 bpy.data.objects.remove(sh)
 
 # ---------- 2. cut at the waist and the hem, one piece, smoothed ----------
-bm = bmesh.new(); bm.from_mesh(tm)
+bm = bmesh.new(); bm.from_mesh(tm); bm.normal_update()
+for v in bm.verts:
+    v.co -= v.normal * IN
 for z, cut_below in ((WAIST, False), (HEM, True)):
     g = bm.verts[:] + bm.edges[:] + bm.faces[:]
     bmesh.ops.bisect_plane(bm, geom=g, plane_co=(0, 0, z), plane_no=(0, 0, 1), clear_inner=cut_below, clear_outer=not cut_below)
@@ -103,8 +108,8 @@ print("trouser verts", len(tm.vertices), "crotch", round(crotch, 3), flush=True)
 body.modifiers.new("col", "COLLISION")
 body.collision.thickness_outer = 0.004; body.collision.cloth_friction = 10
 cl = tr.modifiers.new("cloth", "CLOTH"); s = cl.settings; c = cl.collision_settings
-s.quality = 8; s.mass = 0.35; s.air_damping = 2
-s.tension_stiffness = s.compression_stiffness = 40; s.shear_stiffness = 25; s.bending_stiffness = 18   # cotton twill
+s.quality = 8; s.mass = 0.45; s.air_damping = 2                                                        # 13 oz denim
+s.tension_stiffness = s.compression_stiffness = 80; s.shear_stiffness = 40; s.bending_stiffness = 35   # denim holds its shape
 s.vertex_group_mass = "waist"; s.pin_stiffness = 1
 c.distance_min = 0.004; c.collision_quality = 3
 END = 30
