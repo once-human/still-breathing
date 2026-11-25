@@ -6,7 +6,7 @@ import { PRINT_BACK, PRINT_FRONT, type Rect } from "./print";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RectAreaLightTexturesLib } from "three/addons/lights/RectAreaLightTexturesLib.js";
-import { CAMERA, VFOV, ASPECT, SWEEP, FLOOR, KNIT_REPEAT, SCENES, BAND, lightFrame, radiance, type Camera, type Scene, type V3 } from "./scene";
+import { CAMERA, VFOV, ASPECT, SWEEP, FLOOR, KNIT_REPEAT, SCENES, BAND, MOTION, lightFrame, radiance, type Camera, type Scene, type V3 } from "./scene";
 import { ENV_W, projectEnv, turnSH } from "./sh";
 import type { TeeGeometry } from "./pathtracer";
 import { grab, bitmap, type Pixels } from "./grab";
@@ -121,6 +121,11 @@ export class Raster {
   private band: ReturnType<typeof texture> | null = null;
   private bg: THREE.Node | null = null;
   private bandOn = false;
+  /** the place's moving rows (the show's canopy), a video laid over the band where it moves; off: the band alone */
+  private motionNode: ReturnType<typeof texture> | null = null;
+  private motionOn = uniform(0);
+  private motionVideo: HTMLVideoElement | null = null;
+  private motionTex: THREE.VideoTexture | null = null;
   private envYaw = uniform(0);
   private envOn = false;
   lights: THREE.RectAreaLight[] = Array.from({ length: MAX_LIGHTS }, () => new THREE.RectAreaLight(0xffffff, 0, 1, 1));
@@ -240,7 +245,7 @@ export class Raster {
     const band = bandP ? await Promise.race([bandP, Promise.resolve(undefined)]) : null;
     if (band === undefined) void bandP!.then((b) => this.showBand(env.url, b));
     this.envSH = sh; this.bandOn = !!band;
-    if (this.env) { this.env.value = t; if (band) this.band!.value = band; this.showEnv(); return; }
+    if (this.env) { this.env.value = t; if (band) this.band!.value = band; this.applyMotion(); this.showEnv(); return; }
     const d = normalize(normalWorldGeometry);
     const c = cos(this.envYaw), sn = sin(this.envYaw);
     const x = c.mul(d.x).sub(sn.mul(d.z)), z = sn.mul(d.x).add(c.mul(d.z));
@@ -253,7 +258,13 @@ export class Raster {
     const fu = u.mul(T), tile = clamp(fu.floor(), 0, T - 1);
     const bx = clamp(fu.sub(tile), 0.5 / 4096, 1 - 0.5 / 4096), by = tile.add(clamp(vb, 2 / 6560, 1 - 2 / 6560)).div(T);
     const bandN = texture(band ?? t, vec2(bx, by)); this.band = bandN;
-    this.bg = mix(envN, bandN, step(0, vb).mul(step(vb, 1)));
+    // the moving rows: the same tiling over fewer rows; at their foot they ease into the band over a few rows
+    const vm = v.sub(MOTION.v0).div(MOTION.v1 - MOTION.v0);
+    const my = tile.add(clamp(vm, 2 / 1792, 1 - 2 / 1792)).div(T);
+    const motionN = texture(band ?? t, vec2(bx, my)); this.motionNode = motionN;
+    const wm = step(0, vm).mul(clamp(float(1).sub(vm).div(0.04), 0, 1)).mul(this.motionOn);
+    this.bg = mix(mix(envN, bandN, step(0, vb).mul(step(vb, 1))), motionN, wm);
+    this.applyMotion();
     this.showEnv();
   }
   private envTurn = 0;
@@ -301,6 +312,24 @@ export class Raster {
       this.envTex.set(env.url, e);
     }
     return e;
+  }
+  /** the place's moving rows, playing (null: none here, the band stands still) */
+  setMotion(video: HTMLVideoElement | null) {
+    if (video !== this.motionVideo) {
+      this.motionTex?.dispose(); this.motionTex = null; this.motionVideo = video;
+      if (video) {
+        const t = new THREE.VideoTexture(video);
+        t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+        t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter;
+        this.motionTex = t;
+      }
+    }
+    this.applyMotion();
+  }
+  private applyMotion() {
+    const on = !!(this.motionTex && this.motionNode && this.bandOn);
+    if (on) this.motionNode!.value = this.motionTex!;
+    this.motionOn.value = on ? 1 : 0;
   }
   private showEnv() {
     const on = !!(this.env && this.envOn);

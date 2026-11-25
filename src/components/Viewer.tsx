@@ -96,7 +96,7 @@ const TRACE_OVER_LIVE = false;
 // the turntable's own speed, degrees a second: one slow turn in about 51 s
 const SPIN = 7;
 // labels only; the rigs live in lib/viewer/scene.ts (kept out of the page bundle until the viewer loads)
-const SCENE_LIST = [{ id: "studio", label: "studio" }, { id: "window", label: "window" }, { id: "show", label: "the show" }];
+const SCENE_LIST = [{ id: "studio", label: "studio" }, { id: "window", label: "window" }, { id: "show", label: "show" }];
 const PHOTO_SPP = 64;
 // GPU time the background tracer may use per frame, and the full-sample cost past which it isn't worth it
 const TRACE_MS = 3;
@@ -204,7 +204,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         io.observe(stage.current!);
       });
       if (dead) return;
-      const [{ Raster, FABRIC }, { SCENES, CAMERA, BODY_CAMERA, WEAR_CAMERA, sceneFor, bandOf }] = await code;
+      const [{ Raster, FABRIC }, { SCENES, CAMERA, BODY_CAMERA, WEAR_CAMERA, sceneFor, bandOf, motionOf }] = await code;
       const cameraFor = (v: Variant) => (v.body ? BODY_CAMERA[v.pose] : v.person ? WEAR_CAMERA : CAMERA);
       if (dead || !stage.current || !rasterCv.current || !traceCv.current) return;
       const st = stage.current, tc = traceCv.current;
@@ -340,6 +340,27 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         envNow = e; if (pt) void tracerEnv(pt, url);
         if (!bandAsked.has(url)) { bandAsked.add(url); void pixels(bandURL(url)).then((b) => { if (!dead) raster.setBand(url, b); }).catch(() => bandAsked.delete(url)); }
         s.dirty = true; lastSig = "";
+        playMotion();
+      };
+      // what moves in the place (the show's canopy breathing): a looping video over the band's top rows, fetched only
+      // when that place is picked, half size on a phone; it starts from its first frame, the moment the stills show,
+      // and every new frame of it asks for the view to be drawn. Held still for anyone who asks for less motion.
+      let motionVid: HTMLVideoElement | null = null;
+      const playMotion = () => {
+        const url = !still.matches && scene.motion ? motionOf(scene.motion, lite && handheld()) : "";
+        if (motionVid && motionVid.dataset.url !== url) { motionVid.pause(); motionVid.removeAttribute("src"); motionVid.load(); motionVid = null; raster.setMotion(null); }
+        if (!url || motionVid) return;
+        const v = document.createElement("video"), mine = v;
+        v.muted = true; v.loop = true; v.playsInline = true; v.preload = "auto"; v.dataset.url = url; v.src = asset(url);
+        motionVid = v;
+        const tick = () => { if (motionVid !== mine) return; s.dirty = true; v.requestVideoFrameCallback(tick); };
+        v.addEventListener("loadeddata", () => {
+          if (motionVid !== mine || dead) return;
+          raster.setMotion(v); s.dirty = true;
+          void v.play().catch(() => {});
+          if ("requestVideoFrameCallback" in v) v.requestVideoFrameCallback(tick);
+          else { const id = setInterval(() => { if (motionVid !== mine) clearInterval(id); else s.dirty = true; }, 1000 / 24); }
+        }, { once: true });
       };
       /** n display frames from now: whatever was just set up has been drawn */
       const frames = (n = 2) => new Promise<void>((res) => { const f = (k: number) => (k ? requestAnimationFrame(() => f(k - 1)) : res()); f(n); });
@@ -381,7 +402,10 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       const ro = new ResizeObserver(size); ro.observe(st); size();
       // off screen, nothing runs
       let onScreen = true;
-      const vis = new IntersectionObserver((es) => { onScreen = es[0].isIntersecting; if (onScreen) s.dirty = true; });
+      const vis = new IntersectionObserver((es) => {
+        onScreen = es[0].isIntersecting; if (onScreen) s.dirty = true;
+        if (motionVid) { if (onScreen) void motionVid.play().catch(() => {}); else motionVid.pause(); }   // off screen, it rests
+      });
       vis.observe(st);
 
       // ---------- interaction: it turns by itself; hover and it eases to a stop and is yours to turn ----------
@@ -682,6 +706,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         },
         dispose: () => {
           cancelAnimationFrame(raf); ro.disconnect(); vis.disconnect();
+          if (motionVid) { motionVid.pause(); motionVid.removeAttribute("src"); motionVid.load(); motionVid = null; }
           st.removeEventListener("pointerenter", enter); st.removeEventListener("pointerleave", leave);
           st.removeEventListener("pointerdown", down); st.removeEventListener("pointermove", move);
           st.removeEventListener("pointerup", up); st.removeEventListener("pointercancel", up);

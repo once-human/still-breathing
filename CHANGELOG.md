@@ -14,6 +14,9 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 ### Changed
 - Worn, the view takes in the whole face now, from just above the head to the middle of the thighs, instead of cutting at the eyes and showing the legs.
 - The show is the night in the round at Alexandra Palace: a canopy of sheer white cloth hung in rings of swags over the crowd, glowing in the haze, the long low stage in the middle with its desk lamps, people on the stage behind the decks, search lights, beams coming down through the cloth, and the crowd all round you.
+- At the show the canopy breathes: every swag rises and falls on its line in a slow wave that runs round the hall and out from the decks, and the cloth swings and fills as it goes. Held still for anyone who asks for less motion.
+- At the show the crowd is drawn soft, as a fast portrait lens would see them behind you; the hall, the cloth, the lamps and the stage stay sharp.
+- The light is called show, not the show.
 - New title lettering on all four shirts (again.., i am a party, mumbai, bengaluru): a marker hand set straight, every letter the same size on one level line, no tilt. The notes and dates stay as they were.
 - Up close is now on the table: it zooms in closer than before, out just far enough for the whole tee, sleeves and all, and pans only as far as the zoom allows.
 - The print stays at full quality at every zoom, and renders sharper whenever the machine has room for it.

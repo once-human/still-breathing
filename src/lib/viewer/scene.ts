@@ -52,6 +52,8 @@ export type Scene = {
   envLight?: number;
   /** where the lights point (default LIGHT_AIM) */
   aim?: V3;
+  /** what moves in the place: a looping video of the band's top rows (MOTION) */
+  motion?: string;
   /** fit mode (a whole body, a camera further back) keeps the paper sweep: the place's picture is made for the shop shot */
   fit?: Scene;
 };
@@ -65,6 +67,12 @@ export const LIGHT_AIM: V3 = [0, 1.12, 0];
  * stacked top to bottom (pipeline/stage_post.py BAND_ROWS); the -lo copy is half size, for phones.
  */
 export const BAND = { v0: 3368 / 8192, v1: 5008 / 8192, tiles: 4 };
+/**
+ * The show's canopy breathing: the rows of the band it moves in (3368..3816 of 8192, about 16 down to 6.5 degrees up),
+ * a looping video of the same four stacked tiles (pipeline/motion_post.py); everything below them stays the band.
+ */
+export const MOTION = { v0: 3368 / 8192, v1: 3816 / 8192, tiles: 4 };
+export const motionOf = (url: string, lo: boolean) => (lo ? url.replace(/\.mp4$/, "-lo.mp4") : url);
 export const bandOf = (env: string, lo: boolean) => env.replace(/\.webp$/, lo ? "-band-lo.webp" : "-band.webp");
 
 /** the old paper-sweep studio and window, kept for fit mode */
@@ -135,7 +143,7 @@ export const SCENES: Scene[] = [
     env: "/tee/stage/window.webp", envLight: 1, fit: SWEEP_WINDOW,
   },
   {
-    id: "show", label: "the show",
+    id: "show", label: "show",
     // the night in the round at Alexandra Palace under its cloth canopy (pipeline/stage.py): the person is in the
     // crowd facing the decks 6.5 m ahead (+z, behind the camera in the front view). Front light at a show is hard
     // and from high up: a warm par and a cool head on the bar over the front of the stage (3 m out, 5.5 m up), a
@@ -148,7 +156,7 @@ export const SCENES: Scene[] = [
       { name: "foh", pos: [-1.4, 3.5, -3.6], size: [0.8, 0.8], power: 480, tint: [1, 0.86, 0.7] },
     ],
     paper: [0, 0, 0], world: [0.0015, 0.0015, 0.002], creamK: 0.6, open: true, venue: true, aim: CHEST,
-    env: "/tee/stage/show.webp", envLight: 1,
+    env: "/tee/stage/show.webp", envLight: 1, motion: "/tee/stage/show-motion.mp4",
   },
 ];
 
