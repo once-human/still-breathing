@@ -2,6 +2,11 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.16.4 — 2026-11-25
+### Shirts
+- 03 Mumbai map has its new lettering: the note reads we were somewhere in here, i swear, and every arrow has its dark line back.
+- New try-on textures and prints to match.
+
 ## 0.16.3 — 2026-11-25
 ### Shirts
 - 02 i am a party has no mirror ball after all; the title sits centred again.
