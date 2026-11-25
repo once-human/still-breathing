@@ -2,6 +2,7 @@
 // One sample per pixel per dispatch, accumulated in a float buffer, shown through Khronos PBR Neutral.
 
 import { PRINT_BACK, PRINT_FRONT, type Rect } from "./print";
+import { BAND } from "./scene";
 const r4 = (r: Rect) => `vec4f(${r.map((x) => x.toFixed(8)).join(", ")})`;
 
 export const TRACE_WGSL = /* wgsl */ `
@@ -38,6 +39,7 @@ struct U {
 @group(0) @binding(12) var texEnv: texture_2d<f32>;   // the place all round (equirect, sRGB), at a venue
 @group(0) @binding(13) var texSkin: texture_2d<f32>;  // the person's skin colour (sRGB)
 @group(0) @binding(14) var texSkinRN: texture_2d<f32>; // its relief (normal in r, g) and roughness (b)
+@group(0) @binding(15) var texBand: texture_2d<f32>;  // the band of the place the camera sees, sharp (scene.ts BAND); 1 x 1: none
 
 const PI = 3.14159265359;
 const INF = 1e30;
@@ -142,6 +144,21 @@ fn trace(ro: vec3f, rd: vec3f, tmax: f32, any: bool) -> Hit {
 fn envAt(d: vec3f) -> vec3f {
   let o = rotY(d, u.yaw.x, -u.yaw.y);
   let uv = vec2f(0.5 - atan2(o.x, o.z) / (2.0 * PI), 0.5 - asin(clamp(o.y, -1.0, 1.0)) / PI);
+  return textureSampleLevel(texEnv, samp, uv, 0.0).rgb;
+}
+// what is seen straight behind the person: the sharp band where the camera looks, the whole picture above and below
+fn bgAt(d: vec3f) -> vec3f {
+  let o = rotY(d, u.yaw.x, -u.yaw.y);
+  let uv = vec2f(0.5 - atan2(o.x, o.z) / (2.0 * PI), 0.5 - asin(clamp(o.y, -1.0, 1.0)) / PI);
+  let bd = vec2f(textureDimensions(texBand));
+  let vb = (uv.y - ${BAND.v0.toFixed(8)}) / ${(BAND.v1 - BAND.v0).toFixed(8)};
+  if (bd.x > 1.0 && vb >= 0.0 && vb <= 1.0) {
+    let T = ${BAND.tiles.toFixed(1)};
+    let fu = fract(uv.x) * T; let t = min(floor(fu), T - 1.0);
+    let ex = 0.5 / bd.x; let ey = 0.5 * T / bd.y;
+    let b = vec2f(clamp(fu - t, ex, 1.0 - ex), (t + clamp(vb, ey, 1.0 - ey)) / T);
+    return textureSampleLevel(texBand, samp, b, 0.0).rgb;
+  }
   return textureSampleLevel(texEnv, samp, uv, 0.0).rgb;
 }
 
@@ -337,7 +354,7 @@ fn main(@builtin(global_invocation_id) gid3: vec3u) {
       // looked up along the pinhole ray (no second blur from the aperture), and it is its own denoiser albedo
       // (light / albedo = 1), so the denoiser leaves it exactly as it is. Bounced light sees the place too: the
       // cyc's white walls, the sunny room (the lamps' own faces are in it only clipped, so they are not counted twice)
-      if (bounce == 0 && u.env > 0.5) { let e = envAt(pinhole); L += e; gA = max(e, vec3f(0.004)); }
+      if (bounce == 0 && u.env > 0.5) { let e = bgAt(pinhole); L += e; gA = max(e, vec3f(0.004)); }
       else if (u.env > 0.5 && u.yaw.w > 0.0) { L += tp * envAt(rd) * u.yaw.w; }
       else { L += tp * u.world; }
       break;

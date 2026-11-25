@@ -6,7 +6,7 @@ import { PRINT_BACK, PRINT_FRONT, type Rect } from "./print";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RectAreaLightTexturesLib } from "three/addons/lights/RectAreaLightTexturesLib.js";
-import { CAMERA, VFOV, ASPECT, SWEEP, FLOOR, KNIT_REPEAT, SCENES, lightFrame, radiance, type Camera, type Scene, type V3 } from "./scene";
+import { CAMERA, VFOV, ASPECT, SWEEP, FLOOR, KNIT_REPEAT, SCENES, BAND, lightFrame, radiance, type Camera, type Scene, type V3 } from "./scene";
 import { ENV_W, projectEnv, turnSH } from "./sh";
 import type { TeeGeometry } from "./pathtracer";
 import { grab, bitmap, rawImage, type Pixels, type Level } from "./grab";
@@ -35,7 +35,8 @@ function srgbToLinear(hex: number): V3 {
 }
 
 /** a place's picture, ready to draw: the full picture, and its 64 x 32 linear version for the light probe */
-export type Env = { url: string; px: Pixels };
+/** a place's whole picture, and the sharp band of it the camera sees (scene.ts BAND), where there is one */
+export type Env = { url: string; px: Pixels; band?: Pixels };
 
 /**
  * The most lights any place has. The rig is built once with this many and never changes: a light's identity is part
@@ -101,6 +102,10 @@ export class Raster {
   private venue = false;
   /** the place around the person (a 360 degree picture), drawn behind everything at a venue */
   private env: ReturnType<typeof texture> | null = null;
+  /** the band the camera sees, sharp, and the background drawn from it (the whole picture above and below it) */
+  private band: ReturnType<typeof texture> | null = null;
+  private bg: THREE.Node | null = null;
+  private bandOn = false;
   private envYaw = uniform(0);
   private envOn = false;
   lights: THREE.RectAreaLight[] = Array.from({ length: MAX_LIGHTS }, () => new THREE.RectAreaLight(0xffffff, 0, 1, 1));
@@ -111,7 +116,7 @@ export class Raster {
   private envSH: Float64Array | null = null;
   private turnedSH = new Float64Array(27);
   /** each place's picture, uploaded once and kept: going back to a place is only a pointer swap */
-  private envTex = new Map<string, { tex: THREE.Texture; sh: Float64Array }>();
+  private envTex = new Map<string, { tex: THREE.Texture; sh: Float64Array; band: THREE.Texture | null }>();
   private envLight = 0;
   private world: V3 = [0, 0, 0];
   private probeYaw = NaN;
@@ -209,16 +214,23 @@ export class Raster {
    */
   setEnv(env: Env | null) {
     this.probeYaw = NaN;
-    if (!env) { this.envSH = null; this.env = null; this.showEnv(); return; }
-    const { tex: t, sh } = this.prepareEnv(env);
-    this.envSH = sh;
-    if (this.env) { this.env.value = t; this.showEnv(); return; }
+    if (!env) { this.envSH = null; this.env = null; this.bandOn = false; this.showEnv(); return; }
+    const { tex: t, sh, band } = this.prepareEnv(env);
+    this.envSH = sh; this.bandOn = !!band;
+    if (this.env) { this.env.value = t; if (band) this.band!.value = band; this.showEnv(); return; }
     const d = normalize(normalWorldGeometry);
     const c = cos(this.envYaw), sn = sin(this.envYaw);
     const x = c.mul(d.x).sub(sn.mul(d.z)), z = sn.mul(d.x).add(c.mul(d.z));
     const u = float(0.5).sub(atan(x, z).div(2 * Math.PI));
     const v = float(0.5).sub(asin(clamp(d.y, -1, 1)).div(Math.PI));
-    this.env = texture(t, vec2(u, v));
+    const envN = texture(t, vec2(u, v)); this.env = envN;
+    // the band: which of its tiles u falls in, and where in that tile; a tile's edge columns are held at its edge
+    // (half a texel in) so its neighbour in the file never bleeds in where the tiles meet round the sphere
+    const T = BAND.tiles, vb = v.sub(BAND.v0).div(BAND.v1 - BAND.v0);
+    const fu = u.mul(T), tile = clamp(fu.floor(), 0, T - 1);
+    const bx = clamp(fu.sub(tile), 0.5 / 4096, 1 - 0.5 / 4096), by = tile.add(clamp(vb, 2 / 6560, 1 - 2 / 6560)).div(T);
+    const bandN = texture(band ?? t, vec2(bx, by)); this.band = bandN;
+    this.bg = mix(envN, bandN, step(0, vb).mul(step(vb, 1)));
     this.showEnv();
   }
   /**
@@ -235,14 +247,22 @@ export class Raster {
       // no mips: the picture is only ever magnified, and mips would draw a seam where u wraps round
       t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter; t.needsUpdate = true;
       this.renderer.initTexture(t);
-      e = { tex: t, sh: projectEnv(env.px.texels, ENV_W, ENV_W / 2) };
+      let b: THREE.Texture | null = null;
+      if (env.band) {
+        // the sharp band: drawn about one texel to a screen pixel, so no mips; every tile row clamps on its own
+        b = new THREE.DataTexture(env.band.data, env.band.width, env.band.height, THREE.RGBAFormat, THREE.UnsignedByteType);
+        b.flipY = false; b.colorSpace = THREE.SRGBColorSpace; b.wrapS = b.wrapT = THREE.ClampToEdgeWrapping;
+        b.generateMipmaps = false; b.minFilter = THREE.LinearFilter; b.magFilter = THREE.LinearFilter; b.needsUpdate = true;
+        this.renderer.initTexture(b);
+      }
+      e = { tex: t, sh: projectEnv(env.px.texels, ENV_W, ENV_W / 2), band: b };
       this.envTex.set(env.url, e);
     }
     return e;
   }
   private showEnv() {
     const on = !!(this.env && this.envOn);
-    this.scene.backgroundNode = on ? this.env : null;
+    this.scene.backgroundNode = on ? (this.bandOn ? this.bg : this.env) : null;
     this.ambient();
   }
 

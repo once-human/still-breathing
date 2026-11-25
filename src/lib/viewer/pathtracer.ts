@@ -76,6 +76,7 @@ export class PathTracer {
   private skinTex: GPUTexture[] = [];
   /** the venue's 360 degree picture (a 1 x 1 stand-in until it arrives, or where there is none) */
   private envTex: GPUTexture | null = null;
+  private bandTex: GPUTexture | null = null;
   private sampler!: GPUSampler;
   private traceBG: GPUBindGroup | null = null;
   private showBG: GPUBindGroup | null = null;
@@ -180,15 +181,22 @@ export class PathTracer {
   }
 
   /** the place all round (equirect, sRGB); null clears it */
-  setEnv(px: { data: Uint8Array; width: number; height: number } | null) {
-    this.envTex?.destroy(); this.envTex = null;
-    if (px) {
-      // raw bytes (decoded off the page's thread): a plain buffer copy, no image conversion on the way
-      const t = this.device.createTexture({ size: [px.width, px.height], format: "rgba8unorm-srgb", usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
-      this.device.queue.writeTexture({ texture: t }, px.data as Uint8Array<ArrayBuffer>, { bytesPerRow: px.width * 4 }, [px.width, px.height]);
-      this.envTex = t;
-    }
+  /** and the sharp band of it the camera sees (scene.ts BAND), where there is one */
+  setEnv(px: { data: Uint8Array; width: number; height: number } | null, band?: { data: Uint8Array; width: number; height: number }) {
+    this.envTex?.destroy(); this.envTex = null; this.bandTex?.destroy(); this.bandTex = null;
+    // raw bytes (decoded off the page's thread): a plain buffer copy, no image conversion on the way
+    const up = (p: { data: Uint8Array; width: number; height: number }) => {
+      const t = this.device.createTexture({ size: [p.width, p.height], format: "rgba8unorm-srgb", usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+      this.device.queue.writeTexture({ texture: t }, p.data as Uint8Array<ArrayBuffer>, { bytesPerRow: p.width * 4 }, [p.width, p.height]);
+      return t;
+    };
+    if (px) this.envTex = up(px);
+    if (px && band && band.height <= this.device.limits.maxTextureDimension2D) this.bandTex = up(band);
     this.traceBG = null; this.reset();
+  }
+  private bandView() {
+    if (!this.bandTex) this.bandTex = this.device.createTexture({ size: [1, 1], format: "rgba8unorm-srgb", usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+    return this.bandTex.createView();
   }
   private envView() {
     if (!this.envTex) {
@@ -307,6 +315,7 @@ export class PathTracer {
           { binding: 12, resource: this.envView() },
           { binding: 13, resource: this.skinTex[0].createView() },
           { binding: 14, resource: this.skinTex[1].createView() },
+          { binding: 15, resource: this.bandView() },
         ],
       });
     }

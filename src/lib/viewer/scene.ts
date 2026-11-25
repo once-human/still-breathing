@@ -56,6 +56,15 @@ export type Scene = {
 
 export const LIGHT_AIM: V3 = [0, 1.12, 0];
 
+/**
+ * What the viewer draws behind the person: the band of the place its camera can see, sharp, beside the whole
+ * picture (which lights the person and fills the rest of the sphere). The band is rows 3368..5008 of a 16384 x 8192
+ * panorama (about 16 degrees up to 20 down, 45 pixels a degree, as fine as the screen), stored as 4 tiles of 4096
+ * stacked top to bottom (pipeline/stage_post.py BAND_ROWS); the -lo copy is half size, for phones.
+ */
+export const BAND = { v0: 3368 / 8192, v1: 5008 / 8192, tiles: 4 };
+export const bandOf = (env: string, lo: boolean) => env.replace(/\.webp$/, lo ? "-band-lo.webp" : "-band.webp");
+
 /** the old paper-sweep studio and window, kept for fit mode */
 const SWEEP_STUDIO: Scene = {
   id: "studio",

@@ -20,6 +20,7 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 - The actual size button is called artwork.
 
 ### Fixed
+- The places behind the person are sharp: the studio, the window and the show are drawn as finely as the screen shows them, about four times the detail they had, and nothing is blurred on purpose any more. The studio and the window come from photographs four times as large; the show is rendered at that size. Phones get them at half size, still twice what they had.
 - Switching the light (studio, window, the show) is instant and no longer stalls the page: the lights are set, not rebuilt, so nothing has to be recompiled; each place's picture is decoded off the page's thread, its light measured once, and kept, and the other places are got ready while the page is idle.
 - Switching shirts shows the new shirt at once: its studio render (the tee view) or its render in the hall (worn at the show) covers the view at that angle, and the live tee takes over from exactly there and turns on. Elsewhere the last frame stays up and fades into the new one, never a dark gap. A shirt you point at is got ready before you pick it.
 - The cloth is simulated on its own thread, so turning, scrolling and switching stay smooth on slower machines; the light from the place turns with the view at a tiny fraction of the cost.

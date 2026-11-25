@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { COLOURS, DESIGNS, type Colour, type Design } from "@/content/tee";
 import type { Format, Look, PhotoJob } from "@/lib/viewer/photo";
 import type { Variant } from "@/lib/viewer/raster";
-import { pickTier } from "@/lib/viewer/tier";
+import { pickTier, handheld } from "@/lib/viewer/tier";
 import { prefetchTee, bitmap, grab, pixels } from "@/lib/viewer/grab";
 import { printBackURL, printFrontURL } from "@/lib/viewer/print";
 import { asset } from "@/lib/asset";
@@ -204,7 +204,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         io.observe(stage.current!);
       });
       if (dead) return;
-      const [{ Raster, FABRIC }, { SCENES, CAMERA, BODY_CAMERA, WEAR_CAMERA, sceneFor }] = await code;
+      const [{ Raster, FABRIC }, { SCENES, CAMERA, BODY_CAMERA, WEAR_CAMERA, sceneFor, bandOf }] = await code;
       const cameraFor = (v: Variant) => (v.body ? BODY_CAMERA[v.pose] : v.person ? WEAR_CAMERA : CAMERA);
       if (dead || !stage.current || !rasterCv.current || !traceCv.current) return;
       const st = stage.current, tc = traceCv.current;
@@ -301,7 +301,11 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       const envOf = (url: string) => {
         let p = envs.get(url);
         if (!p) {
-          p = pixels(url, lite ? [2048, 1024] : undefined).then((px) => ({ url, px }));
+          // with the sharp band the camera sees (scene.ts BAND): that is what stands behind the person, so it comes
+          // at screen sharpness on every device (half size on a phone); the whole picture only lights and fills in
+          const lo = handheld() || ((navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8) <= 4;
+          p = Promise.all([pixels(url, lite ? [2048, 1024] : undefined), pixels(bandOf(url, lo)).catch(() => undefined)])
+            .then(([px, band]) => ({ url, px, band }));
           p.catch(() => envs.delete(url));
           envs.set(url, p);
         }
@@ -316,7 +320,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         try { e = await envOf(url); } catch { if (envUrl === url) envUrl = ""; return; }   // not there: the dark room
         // another place was picked while this one came in: that one is shown instead
         if (dead || envUrl !== url) return;
-        envNow = e; raster.setEnv(e); pt?.setEnv(e.px);
+        envNow = e; raster.setEnv(e); pt?.setEnv(e.px, e.band);
         s.dirty = true; lastSig = "";
       };
       /** n display frames from now: whatever was just set up has been drawn */
@@ -461,7 +465,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         const PT = await import("@/lib/viewer/pathtracer");
         if (dead || !PT.PathTracer.supported()) return;
         const p = new PT.PathTracer();
-        try { await p.init(tc); size(); p.resize(tc.width, tc.height); await ptLoad(p, s.variant); if (envNow) p.setEnv(envNow.px); } catch (e) { console.warn("path tracer off", e); setCanPhoto(false); return; }
+        try { await p.init(tc); size(); p.resize(tc.width, tc.height); await ptLoad(p, s.variant); if (envNow) p.setEnv(envNow.px, envNow.band); } catch (e) { console.warn("path tracer off", e); setCanPhoto(false); return; }
         if (dead) { p.device.destroy(); return; }
         pt = p; lastSig = "";
       })());
