@@ -1,12 +1,19 @@
 # Changelog
 
-Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
+Versions follow [SemVer](https://semver.org), counted by what a buyer would notice. Changes go live with every push and are noted under Unreleased; a release is cut when a set of them is finished (`npm run release`), and the bump follows from the sections:
+- **Lineup** → MAJOR: a new drop or lineup, or the shop working differently (checkout, prices, a redesign).
+- **New / Changed** → MINOR: a new shirt, colour or feature; new art or lettering on a shirt; a rename.
+- **Fixed** → PATCH: fixes and polish: copy, a render refresh, a layout bug.
+
+The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.Y.Z` and a GitHub release with the studio renders that changed attached.
 
 ## Unreleased
-### Studio
-- The arrows and the little pictures over the 3D view click again (a press on them was taken as the start of a drag).
+### New
 - the tee view zooms in and out like the others (− zoom +, a pinch, a double-click) and slides along the print when close.
-- The back print at full resolution loads in the background once the 3D is up, so zooming in is sharp straight away.
+
+### Fixed
+- The arrows and the little pictures over the 3D view click again (a press on them was taken as the start of a drag).
+- Zooming in is sharp straight away: the back print at full resolution loads in the background once the 3D is up.
 - The air never stops dead: a lull drops to a soft draught, so the cloth keeps moving.
 - While the 3D loads, the tee view shows the tee on its own (the studio render), not someone wearing it; it opens on the back.
 
