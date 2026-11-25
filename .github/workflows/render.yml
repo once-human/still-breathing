@@ -71,6 +71,10 @@ jobs:
         with:
           path: ~/.cache/polyhaven
           key: polyhaven-hall-v1
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/stage
+          key: canopy-${{ hashFiles('pipeline/canopy.py') }}
       - name: Blender ${{ env.BLENDER }}
         run: |
           if [ ! -x ~/blender/blender ]; then
@@ -81,7 +85,12 @@ jobs:
           pip install -q numpy pillow
       - name: Build the hall
         run: |
-          SCENE=hall HALL_SAVE="$PWD/hall.blend" ~/blender/blender -b --factory-startup -P pipeline/render.py -- C black a0 "$PWD/x.png" \
+          # the show's fabric canopy (pipeline/canopy.py), simulated once and cached as stage.yml does
+          if [ ! -s ~/.cache/stage/canopy.npz ]; then
+            mkdir -p ~/.cache/stage
+            ~/blender/blender -b --factory-startup -P pipeline/canopy.py -- ~/.cache/stage/canopy.npz | grep -E "band|saved|Error|Traceback"
+          fi
+          CANOPY=~/.cache/stage/canopy.npz SCENE=hall HALL_SAVE="$PWD/hall.blend" ~/blender/blender -b --factory-startup -P pipeline/render.py -- C black a0 "$PWD/x.png" \
             | grep -E "crowd|hall saved|Error|Traceback"
           test -s hall.blend && ls -la hall.blend
       - uses: actions/upload-artifact@v4
