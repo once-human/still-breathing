@@ -36,6 +36,11 @@ export type TryOnStatus = "model" | "camera" | "look" | "ready" | "nobody";
 
 const NOSE = 0, L_EAR = 7, R_EAR = 8, L_SH = 11, R_SH = 12, L_EL = 13, R_EL = 14, L_WR = 15, R_WR = 16, L_IDX = 19, R_IDX = 20, L_HIP = 23, R_HIP = 24, L_KNEE = 25, R_KNEE = 26;
 const SOLVE = [L_SH, R_SH, L_EL, R_EL, L_HIP, R_HIP, L_EAR, R_EAR, NOSE];
+// The tee's own fit. It is a loose tee and stays its size: on most bodies it hangs off you with room to spare and
+// nothing here moves. Only where you are wider than the tee at some height (read from the segmentation, at these
+// heights down from the shoulders to the hem) is the cloth pushed out to lie on you, and only as far as heavy
+// cotton jersey gives across the body; past that it stays tight, as a size too small would
+const FIT_BANDS = [0.3, 0.42, 0.54, 0.66, 0.78, 0.9], GIVE = 1.1, CLOTH = 0.004;
 const TRACK = [L_SH, R_SH, L_EL, R_EL, L_WR, R_WR, L_HIP, R_HIP, L_EAR, R_EAR, NOSE, L_IDX, R_IDX, L_KNEE, R_KNEE];
 
 /** One Euro filter: heavy smoothing when still, almost none when moving fast (Casiez et al. 2012) */
@@ -98,6 +103,10 @@ export class TryOn {
   private torsoQ = new THREE.Quaternion(); private hipQ = new THREE.Quaternion();
   private teeGeo: THREE.BufferGeometry | null = null; private basePos: Float32Array | null = null;
   private dims = { yTop: 0, zc: 0 };
+  private size: Size = "M";
+  // per vertex how much it belongs to the body of the tee (not the sleeves); the shoulder and hem heights; the tee's
+  // half-width at each band as draped; what you need there, learned; and the stretch now applied
+  private fit: { bw: Float32Array; yS: number; yH: number; half: number[]; need: number[]; g: number[]; at: number } | null = null;
   private mid = new THREE.Vector3();
   // raise your arms and a real tee rides up with them: how far the hem has lifted on each side, and the hem
   // bones' rest offsets it lifts from
@@ -113,7 +122,7 @@ export class TryOn {
   // what every pixel of the frame is (Google's selfie multiclass model: hair, skin, face, clothes, other), so your
   // hands, arms, hair and face are laid over the tee exactly where they are in front of it
   private seg: ImageSegmenter | null = null; private cat: Uint8Array | null = null; private catW = 0; private catH = 0;
-  private lab = { hair: 1, body: 2, face: 3, others: 5 };
+  private lab = { hair: 1, body: 2, face: 3, clothes: 4, others: 5 };
   private segIn = document.createElement("canvas");
   // a recording: the same picture as on screen (the mirror, the tee, your hands), drawn into one canvas per frame
   private rec: { cv: HTMLCanvasElement; mr: MediaRecorder; track: CanvasCaptureMediaStreamTrack; push: boolean; done: Promise<Blob> } | null = null;
@@ -162,7 +171,7 @@ export class TryOn {
     this.pose = pose; this.seg = seg;
     if (seg) {
       const L = seg.getLabels().map((x) => x.toLowerCase()), at = (k: string, d: number) => { const i = L.findIndex((x) => x.includes(k)); return i < 0 ? d : i; };
-      this.lab = { hair: at("hair", 1), body: at("body", 2), face: at("face", 3), others: at("other", 5) };
+      this.lab = { hair: at("hair", 1), body: at("body", 2), face: at("face", 3), clothes: at("cloth", 4), others: at("other", 5) };
     }
     if (this.dead) return;
     // a soft room-like environment; its strength and colour follow the video
@@ -278,6 +287,22 @@ export class TryOn {
     let zs = 0, zn = 0;
     for (let i = 0; i < pa.length; i += 3) { const y = pa[i + 1]; if (y < yTop - 0.08 && y > yTop - 0.16 && Math.abs(pa[i]) < 0.1) { zs += pa[i + 2]; zn++; } }
     this.dims = { yTop, zc: zn ? zs / zn : 0 };
+    {
+      const si = tm.geometry.attributes.skinIndex, sw = tm.geometry.attributes.skinWeight;
+      const arm = tm.skeleton.bones.map((b) => /upperarm|lowerarm|wrist|sleeve|armhole/.test(b.name));
+      const n = pa.length / 3, bw = new Float32Array(n);
+      for (let v = 0; v < n; v++) {
+        let a = 0; for (let k = 0; k < 4; k++) if (arm[si.getComponent(v, k)]) a += sw.getComponent(v, k);
+        bw[v] = Math.max(0, 1 - 2 * a);
+      }
+      let yH = 1e9; for (let v = 0; v < n; v++) if (bw[v] > 0.9) yH = Math.min(yH, pa[3 * v + 1]);
+      const yS = sL.y, half = FIT_BANDS.map((fr) => {
+        const yb = yS - fr * (yS - yH); let mx = 0, mn = 0;
+        for (let v = 0; v < n; v++) if (bw[v] > 0.95 && Math.abs(pa[3 * v + 1] - yb) < 0.012) { mx = Math.max(mx, pa[3 * v]); mn = Math.min(mn, pa[3 * v]); }
+        return (mx - mn) / 2;
+      });
+      this.fit = { bw, yS, yH, half, need: FIT_BANDS.map(() => 0), g: FIT_BANDS.map(() => 1), at: 0 };
+    }
     // round the collar, any surface that faces in toward the body (the inside of the neckband) is never seen on a
     // person: your neck fills it. It's cut, so only the outside shows
     {
@@ -344,6 +369,12 @@ export class TryOn {
   private bone(name: string) { return this.B.get(THREE.PropertyBinding.sanitizeNodeName(name)) ?? this.B.get(name); }
   private bp(name: string) { const b = this.bone(name); return b ? this.restP.get(b.name)!.clone() : new THREE.Vector3(); }
 
+  /** someone new may step in: the tee goes back to hanging as it does */
+  private unfit() {
+    const F = this.fit; if (!F) return;
+    F.need.fill(0); if (F.g.some((x) => x !== 1)) { F.g.fill(1); this.build(); }
+  }
+
   /** a different design on the same tee */
   async setLook(design: string, tee: "black" | "cream") {
     if (!this.colorN || !this.ormN) return;
@@ -352,14 +383,74 @@ export class TryOn {
   }
 
   /** the real garment for that size: wider and longer by the size chart, made from the simulated M on the same body */
-  setSize(sz: Size) {
+  setSize(sz: Size) { this.size = sz; this.build(); }
+  /** the size, and the tee pushed out where your body fills it */
+  private build() {
     const g = this.teeGeo, src = this.basePos; if (!g || !src) return;
-    const w = SIZES[sz].chest_round / SIZES.M.chest_round, l = SIZES[sz].length / SIZES.M.length, { yTop, zc } = this.dims;
+    const sz = this.size, w = SIZES[sz].chest_round / SIZES.M.chest_round, l = SIZES[sz].length / SIZES.M.length, { yTop, zc } = this.dims;
+    const F = this.fit, stretched = !!F && F.g.some((x) => x > 1);
+    // the stretch at a height: none at the armpits, through each band, held from the last band to the hem
+    const fr = [0.18, ...FIT_BANDS], gs = F ? [1, ...F.g] : [];
+    const at = (y: number) => {
+      const t = (F!.yS - y) / (F!.yS - F!.yH);
+      if (t <= fr[0]) return 1;
+      for (let k = 1; k < fr.length; k++) if (t < fr[k]) { const u = (t - fr[k - 1]) / (fr[k] - fr[k - 1]); return gs[k - 1] + (gs[k] - gs[k - 1]) * u; }
+      return gs[gs.length - 1];
+    };
     const dst = g.attributes.position.array as Float32Array;
-    for (let i = 0; i < src.length; i += 3) {
-      dst[i] = src[i] * w; dst[i + 1] = yTop - (yTop - src[i + 1]) * l; dst[i + 2] = zc + (src[i + 2] - zc) * w;
+    for (let i = 0, v = 0; i < src.length; i += 3, v++) {
+      const k = stretched ? w * (1 + (at(src[i + 1]) - 1) * F!.bw[v]) : w;
+      dst[i] = src[i] * k; dst[i + 1] = yTop - (yTop - src[i + 1]) * l; dst[i + 2] = zc + (src[i + 2] - zc) * k;
     }
     g.attributes.position.needsUpdate = true;
+  }
+
+  /**
+   * How wide you are at each band, against the tee there. Read only when you face the camera, torso upright: along
+   * a line across your body at that height, out from the middle until your outline ends. Your arms are left out
+   * (a line that reaches one stops there, and counts only as "at least this wide"); hair, a bag, anything held
+   * stops it uncounted. Learned over a second or so and held, since your body doesn't change while you stand there
+   */
+  private measure(l: NormalizedLandmark[], frontal: boolean, t: number, dt: number) {
+    const F = this.fit, cat = this.cat; if (!F || !cat || !this.catW || !frontal) return;
+    const w = this.catW, h = this.catH, W = this.video.videoWidth, { body: bd, clothes, background } = { ...this.lab, background: 0 };
+    const sh = { x: ((l[L_SH].x + l[R_SH].x) / 2) * w, y: ((l[L_SH].y + l[R_SH].y) / 2) * h };
+    const hp = { x: ((l[L_HIP].x + l[R_HIP].x) / 2) * w, y: ((l[L_HIP].y + l[R_HIP].y) / 2) * h };
+    let ux = sh.x - hp.x, uy = sh.y - hp.y; const ul = Math.hypot(ux, uy); if (ul < 8) return; ux /= ul; uy /= ul;
+    const Zc = -this.mid.z, pxm = (this.f / Zc) * (w / W);      // mask pixels per metre at your depth
+    const wS = SIZES[this.size].chest_round / SIZES.M.chest_round, lS = SIZES[this.size].length / SIZES.M.length;
+    const sw = Math.hypot((l[L_SH].x - l[R_SH].x) * w, (l[L_SH].y - l[R_SH].y) * h), r = sw * 0.14;
+    const segs = [[L_SH, L_EL], [L_EL, L_WR], [R_SH, R_EL], [R_EL, R_WR]].filter(([a, b]) => (l[a].visibility ?? 0) > 0.5 && (l[b].visibility ?? 0) > 0.5)
+      .map(([a, b]) => [l[a].x * w, l[a].y * h, l[b].x * w, l[b].y * h]);
+    const onArm = (x: number, y: number) => segs.some(([ax, ay, bx, by]) => {
+      const dx = bx - ax, dy = by - ay, q = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1)));
+      return Math.hypot(x - ax - q * dx, y - ay - q * dy) < r;
+    });
+    const k = 1 - Math.exp(-dt / 1.2);
+    FIT_BANDS.forEach((fr, b) => {
+      const tee = F.half[b] * wS * this.body * pxm; if (!(tee > 4)) return;
+      const d = fr * (F.yS - F.yH) * this.body * lS * pxm, cx = sh.x - ux * d, cy = sh.y - uy * d;
+      const cell = (x: number, y: number) => { const X = Math.round(x), Y = Math.round(y); return X < 0 || Y < 0 || X >= w || Y >= h ? background : cat[Y * w + X]; };
+      const c0 = cell(cx, cy); if (c0 !== bd && c0 !== clothes) return;
+      const got: number[] = [];
+      for (const sgn of [1, -1]) {
+        const px = -uy * sgn, py = ux * sgn; let last = 0, gap = 0;
+        for (let s = 1; s < tee * 1.6; s++) {
+          const x = cx + px * s, y = cy + py * s;
+          if (onArm(x, y)) { if (last > tee) got.push(last); last = -1; break; }
+          const c = cell(x, y);
+          if (c === bd || c === clothes) { last = s; gap = 0; continue; }
+          if (c !== background) { last = -1; break; }
+          if (++gap > 2) break;
+        }
+        if (last > 0 && gap > 2) got.push(last);
+      }
+      if (!got.length) return;
+      const m = Math.min(1.3, (got.reduce((a, x) => a + x, 0) / got.length + CLOTH * pxm) / tee);
+      F.need[b] = F.need[b] ? F.need[b] + (m - F.need[b]) * k : m;
+    });
+    const g = F.need.map((n) => Math.min(GIVE, Math.max(1, n)));
+    if (t - F.at > 0.3 && g.some((x, i) => Math.abs(x - F.g[i]) > 0.004)) { F.g = g; F.at = t; this.build(); }
   }
 
   /**
@@ -463,7 +554,7 @@ export class TryOn {
   private place(l: NormalizedLandmark[] | null, w: Landmark[] | null, t: number, dt: number) {
     const ok = l && w && (l[L_SH].visibility ?? 0) > 0.55 && (l[R_SH].visibility ?? 0) > 0.55;
     if (!ok) {
-      if (++this.lost > 6) { this.rig.visible = false; this.placed = false; this.hem.forEach((h) => (h.live = false)); this.lms = null; this.filt.forEach((f) => f.reset()); this.tFilt.reset(); this.midU.reset(); this.midV.reset(); this.body = 0; this.onStatus("nobody"); }
+      if (++this.lost > 6) { this.rig.visible = false; this.placed = false; this.hem.forEach((h) => (h.live = false)); this.lms = null; this.filt.forEach((f) => f.reset()); this.tFilt.reset(); this.midU.reset(); this.midV.reset(); this.body = 0; this.unfit(); this.onStatus("nobody"); }
       return;
     }
     this.lost = 0;
@@ -636,6 +727,8 @@ export class TryOn {
     this.rig.updateMatrixWorld(true);
     this.key.target.position.copy(mid); this.key.position.copy(mid).add(this.keyOff);
     this.hang(dt);
+    // facing the camera (shoulders within 20 degrees of square to it) and upright toward it, hips in the picture
+    this.measure(l!, hips && Math.abs(xT.z) < 0.34 && Math.abs(up.z) < 0.3, t, dt);
 
     this.placed = true;
     if (!this.rig.visible) { this.rig.visible = true; this.onStatus("ready"); }

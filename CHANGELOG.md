@@ -2,6 +2,13 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.14.1 — 2026-11-25
+The tee fills out on a bigger body, the way cotton does.
+
+### Try-on
+- The tee keeps its size and its loose fit. Where your body is wider than the tee at some height, the cloth is pushed out to lie on you, only there and only as far as heavy jersey gives; on most bodies it hangs free and nothing changes.
+- Past what the cloth can give it stays tight, the way a size too small would look on you.
+
 ## 0.14.0 — 2026-11-25
 Record yourself in the tee.
 
