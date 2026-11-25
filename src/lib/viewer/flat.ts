@@ -197,9 +197,29 @@ const TABLE = 4;            // m: the table runs well past any frame
 /** the table's distance from the lens, against the form's (Viewer's spots are framed for it) */
 export const FAR = 1.25;
 const WOOD_CM = 180;        // the scan covers 1.8 m
-const IN_SIDE: V2 = [-0.74, 0.36];   // the window: to the left, a little ahead
+const IN_SIDE: V2 = [0.74, 0.36];    // the window: to the right (the air comes in through it too), a little ahead
 const IN_UP = 0.42;                  // and low: the light rakes across the cotton at about 25 degrees
 type V2 = [number, number];
+
+/** the window's light as it falls: the opening's soft-edged patch, crossed by the soft shadows of its frame's bars
+ *  (soft because the sky behind them is wide); the frame lands toward the edges of the view, clear of the print */
+function windowLight() {
+  const N = 256, d = new Uint8Array(N * N * 4);
+  const ss = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const u = (i + 0.5) / N, v = (j + 0.5) / N;
+    const open = ss(0.06, 0.16, u) * ss(0.94, 0.84, u) * ss(0.04, 0.14, v) * ss(0.96, 0.86, v);
+    const bar = (x: number, c: number, w: number) => 1 - 0.5 * Math.exp(-(((x - c) / w) ** 2));
+    // (and a little brighter toward the window, falling off across the room)
+    const near = 0.86 + 0.28 * Math.min(1, Math.max(0, (u - 0.4) / 0.2));
+    const k = Math.min(1, open * near * bar(u, 0.578, 0.011) * bar(v, 0.686, 0.011));
+    const o = 4 * (j * N + i), c = Math.round(255 * k);
+    d[o] = c; d[o + 1] = c; d[o + 2] = c; d[o + 3] = 255;
+  }
+  const t = new THREE.DataTexture(d, N, N, THREE.RGBAFormat);
+  t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearFilter; t.needsUpdate = true;
+  return t;
+}
 
 export class FlatLay {
   group = new THREE.Group();
@@ -216,6 +236,7 @@ export class FlatLay {
   private t = 0;
   private wind = new Wind();
   private air: Air;
+  private sunL: THREE.Vector3;
   private still = false;
   side: Side | null = null;
   private ready: Promise<void> | null = null;
@@ -242,7 +263,9 @@ export class FlatLay {
     const room = new THREE.HemisphereLight(new THREE.Color().setRGB(0.93, 0.95, 1, THREE.SRGBColorSpace), new THREE.Color(0x6b655c), 0.62);
     room.position.set(0, 0, 1);
     this.group.add(room);
-    this.air = new Air(aniso);
+    sun.map = windowLight();
+    this.air = new Air(aniso, sunColour);
+    this.sunL = new THREE.Vector3(IN_SIDE[0], IN_SIDE[1], IN_UP).normalize();
     this.group.add(this.air.group);
   }
 
@@ -391,6 +414,8 @@ export class FlatLay {
     // the table a little further off than the form stands, so the lens takes in the whole tee at its widest
     this.group.position.copy(cam.target).sub(cam.pos).multiplyScalar(FAR).add(cam.pos);
     this.group.lookAt(cam.pos);
+    this.group.updateMatrixWorld(true);
+    this.air.sunDir.value.copy(this.sunL).transformDirection(this.group.matrixWorld);
     this.side = side;
     this.amp.value = still ? 0 : 0.0075; this.live.value = still ? 0 : 1;
     this.still = still; this.air.reset(this.wind); this.air.group.visible = !still;

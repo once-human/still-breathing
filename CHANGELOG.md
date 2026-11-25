@@ -9,7 +9,7 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 
 ## Unreleased
 ### New
-- On the table: the tee laid flat on a worn wooden table by a window, with real shadows. A soft draught comes in from the right; now and then a dry leaf (rarely a tuft of fluff, a thread, a hair) drifts down or skates in, lands, settles, shivers as a puff builds and slides on. The cotton breathes with the air.
+- On the table: the tee laid flat on a worn wooden table, lit by a window on the right whose frame throws a soft shadow across the boards. Air comes in through it, never quite straight: it dies away, breezes, builds slowly or bursts. Now and then a dry leaf (rarely a thread or a hair) drifts down or skates in; it has weight, holding until a puff beats its grip, then breaking loose, skidding and stopping again. Leaves glow a little with the light behind them. The cotton breathes with the air.
 
 ### Changed
 - Up close is now on the table, and zooms out only a little.
