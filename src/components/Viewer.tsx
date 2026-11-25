@@ -5,7 +5,7 @@ import { COLOURS, DESIGNS, type Colour, type Design } from "@/content/tee";
 import type { Format, Look, PhotoJob } from "@/lib/viewer/photo";
 import type { Variant } from "@/lib/viewer/raster";
 import { pickTier } from "@/lib/viewer/tier";
-import { prefetchTee, bitmap } from "@/lib/viewer/grab";
+import { prefetchTee, bitmap, grab, pixels } from "@/lib/viewer/grab";
 import { printBackURL, printFrontURL } from "@/lib/viewer/print";
 import { asset } from "@/lib/asset";
 import { word, type WordKind } from "@/lib/words";
@@ -15,6 +15,10 @@ import dynamic from "next/dynamic";
 const TryOn = dynamic(() => import("@/components/TryOn").then((m) => m.TryOn), { ssr: false });
 
 type Engine = {
+  /** freeze what's on screen now into the hold picture, which covers the view while a change is got ready */
+  hold: () => void;
+  yaw: () => number;
+  setYaw: (deg: number) => void;
   setLook: (d: Design, t: Colour) => Promise<void>;
   turnTo: (deg: number) => void;
   /** zoom by a factor (around the middle of the view); 0 resets */
@@ -105,6 +109,19 @@ const nearestTee = (yaw: number) => {
   const gap = (a: number) => Math.abs(((((yaw - a) % 360) + 540) % 360) - 180);
   return TEE_STILLS.reduce((m, x) => (gap(x.a) < gap(m.a) ? x : m)).v;
 };
+const nearest = (yaw: number) => ((Math.round(yaw / 30) * 30) % 360 + 360) % 360;
+/** the angle the tee is seen at now, so a shirt about to be picked can have its rendered frame ready */
+let seenAt = 0;
+const warmed = new Set<string>();
+/**
+ * Get a shirt ready before it's picked (the pointer is on its name): its rendered frame at the angle the tee is seen
+ * at now, decoded, and its print's bytes, so the switch shows the new shirt at once.
+ */
+export function warmDesign(d: Design) {
+  for (const url of [TEE_STILL(d, nearestTee(seenAt)), STILL(d, nearest(seenAt))])
+    if (!warmed.has(url)) { warmed.add(url); const im = new Image(); im.src = url; im.decode().catch(() => warmed.delete(url)); }
+  grab(printBackURL(d, DESIGNS[d].colour)).catch(() => {});
+}
 const ANGLES = Array.from({ length: 12 }, (_, i) => i * 30);
 const FORMAT_LIST: { id: Format; label: string }[] = [{ id: "story", label: "story 9:16" }, { id: "post", label: "post 4:5" }];
 const LOOK_LIST: Look[] = ["clean", "film"];
@@ -151,7 +168,11 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
   const [veil, setVeil] = useState(false);
   // and the word under the breathing dot for that change, picked for each one
   const [veilWord, setVeilWord] = useState("");
+  // what covers the view while it's got ready: the frame that was on screen (hold), or the new shirt's rendered frame
+  const holdCv = useRef<HTMLCanvasElement>(null);
+  const [poster, setPoster] = useState<string | null>(null);
   const veilTurn = useRef(0);
+  const veilRef = useRef(false);
   // each view's own little picture for the strip, taken from the live view once it has been seen
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   // which edge of the stage the pointer is near: that side's way to the next view shows
@@ -245,6 +266,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       const normals: Record<string, Promise<ImageBitmap>> = {};
       let knitB: ImageBitmap | null = null;
       let geo: Awaited<ReturnType<typeof raster.load>> | null = null;
+      type Env = import("@/lib/viewer/raster").Env;
       /** hands the current tee to the path tracer (it builds its own acceleration structure in a worker) */
       const ptLoad = async (p: PathTracer, v: Variant) => {
         if (!geo) return;
@@ -252,7 +274,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         const [[c, o], nrm] = await Promise.all([colourMaps(s.design, s.tee), (normals[v.size] ??= bitmap(`/tee/fit/tex/normal-${v.size}.png`))]);
         knitB ??= await bitmap("/tee/fit/tex/knit-normal.png");
         p.imgNormal = nrm; p.imgKnit = knitB;
-        await p.setGeometry(geo);
+        await p.setGeometry(geo());
         p.setImages({ back: c, front: o, normal: nrm, knit: knitB });
         if (v.skin) p.skin = v.skin;
         p.setCamera(cam);
@@ -272,17 +294,29 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         } finally { s.loading = false; s.dirty = true; lastSig = ""; }
       };
       let busy = false, lastSig = "", wornYaw = 0;
-      // the place around the person (one picture of the whole hall): fetched only once the tee is on screen
-      let envBmp: ImageBitmap | null = null, envUrl = "";
+      // The places around the person, one 360 picture each: fetched, decoded (by the browser, off the main thread)
+      // and their light measured once, then kept, so a place seen before comes back with only a pointer swap. A
+      // phone gets the picture at half size: on its screen it is still magnified less than a desktop's full one.
+      const envs = new Map<string, Promise<Env>>();
+      const envOf = (url: string) => {
+        let p = envs.get(url);
+        if (!p) {
+          p = pixels(url, lite ? [2048, 1024] : undefined).then((px) => ({ url, px }));
+          p.catch(() => envs.delete(url));
+          envs.set(url, p);
+        }
+        return p;
+      };
+      let envNow: Env | null = null, envUrl = "";
       const loadEnv = async () => {
         const url = scene.env;
         if (!url || url === envUrl) return;
-        // another place: its own picture, never the last place's while this one loads
-        if (envBmp) { envBmp = null; raster.setEnv(null); pt?.setEnv(null); }
         envUrl = url;
-        try { envBmp = await bitmap(url); } catch { envUrl = ""; return; }   // not there: the dark room
-        if (dead) return;
-        raster.setEnv(envBmp); pt?.setEnv(envBmp);
+        let e: Env;
+        try { e = await envOf(url); } catch { if (envUrl === url) envUrl = ""; return; }   // not there: the dark room
+        // another place was picked while this one came in: that one is shown instead
+        if (dead || envUrl !== url) return;
+        envNow = e; raster.setEnv(e); pt?.setEnv(e.px);
         s.dirty = true; lastSig = "";
       };
       /** n display frames from now: whatever was just set up has been drawn */
@@ -414,9 +448,11 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       addEventListener("scroll", onPageScroll, { passive: true });
       addEventListener("wheel", onScroll, { passive: true });
       const quiet = (now: number) => now - lastScroll > 450 && document.visibilityState === "visible" && onScreen;
-      const startTracer = async () => {
+      // only made when a photo is asked for: it isn't laid over the live view, so nothing else needs it
+      let tracing: Promise<void> | null = null;
+      const startTracer = (now = false) => (tracing ??= (async () => {
         // wait for a calm moment before even creating the device
-        for (;;) {
+        for (; !now;) {
           await new Promise<void>((r) => ("requestIdleCallback" in window ? requestIdleCallback(() => r(), { timeout: 4000 }) : setTimeout(r, 1500)));
           if (dead) return;
           if (quiet(performance.now())) break;
@@ -425,10 +461,11 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         const PT = await import("@/lib/viewer/pathtracer");
         if (dead || !PT.PathTracer.supported()) return;
         const p = new PT.PathTracer();
-        try { await p.init(tc); size(); p.resize(tc.width, tc.height); await ptLoad(p, s.variant); if (envBmp) p.setEnv(envBmp); } catch (e) { console.warn("path tracer off", e); return; }
+        try { await p.init(tc); size(); p.resize(tc.width, tc.height); await ptLoad(p, s.variant); if (envNow) p.setEnv(envNow.px); } catch (e) { console.warn("path tracer off", e); setCanPhoto(false); return; }
         if (dead) { p.device.destroy(); return; }
-        pt = p; setCanPhoto(true); lastSig = "";
-      };
+        pt = p; lastSig = "";
+      })());
+      setCanPhoto(!lite && "gpu" in navigator);
 
       // ---------- loop ----------
       let raf = 0, shown = -1, firstFrame = true, prevT = 0, traced = false;
@@ -456,6 +493,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         }
         prevT = now;
         if (firstFrame) s.yaw = angRef.current;   // pick up wherever the photos were turned to while this loaded
+        seenAt = s.yaw;
         // auto-turn: eases out when the pointer comes over the tee (or it's being turned, or a view was picked)
         const want = !shotRef.current.spin || still.matches || hover || s.drag || s.goal !== null || s.photo || now < holdUntil || zm.zt > 1.01 ? 0 : SPIN;
         spin += (want - spin) * (1 - Math.exp(-dt / 0.45));
@@ -493,9 +531,24 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
               if (dead) return;
               await loadEnv(); s.dirty = true; await frames(2);
               if (dead) return;
-              setMode("3d"); setStatus(""); if (!lite) void startTracer();
+              setMode("3d"); setStatus("");
               // then, in a quiet moment, the back print at full resolution: close in it's sharp straight away
               if (!lite) ("requestIdleCallback" in window ? requestIdleCallback : (f: () => void) => setTimeout(f, 1500))(() => { if (!dead) void sharpen(); });
+              // then, when the page is idle, the likely next things: the worn view's person and each place's picture
+              // (smallest first), decoded and on the graphics card, one per idle moment
+              void (async () => {
+                const idle = () => new Promise<void>((r) => ("requestIdleCallback" in window ? requestIdleCallback(() => r(), { timeout: 3000 }) : setTimeout(r, 800)));
+                const calm = async () => { do await idle(); while (!dead && !quiet(performance.now())); };
+                await calm(); if (dead) return;
+                prefetchTee(variantRef.current, s.design, s.tee);
+                for (const id of ["show", "studio", "window"]) {
+                  const url = SCENES.find((x) => x.id === id)?.env; if (!url) continue;
+                  await calm(); if (dead) return;
+                  const e = await envOf(url).catch(() => null);
+                  await calm(); if (dead) return;
+                  if (e) raster.prepareEnv(e);
+                }
+              })();
             }));
           }
         }
@@ -533,6 +586,15 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       raf = requestAnimationFrame(loop);
 
       engine.current = {
+        hold: () => {
+          const h = holdCv.current, cv = rasterCv.current; if (!h || !cv) return;
+          // drawn again now and copied in the same task (a WebGPU canvas is only readable until it's shown)
+          raster.setView(s.yaw, [zm.cx, zm.cy, zm.z], st.clientWidth, st.clientHeight); raster.render();
+          if (h.width !== cv.width || h.height !== cv.height) { h.width = cv.width; h.height = cv.height; }
+          h.getContext("2d")?.drawImage(cv, 0, 0);
+        },
+        yaw: () => s.yaw,
+        setYaw: (deg) => { s.yaw = deg; s.goal = null; s.dirty = true; },
         setLook: async (d, t) => {
           const [c, o] = await Promise.all([pt ? colourMaps(d, t) : Promise.resolve(null), raster.setLook(d, t)]).then(([m]) => m ?? [null, null]);
           s.design = d; s.tee = t; raster.setScene(scene, t === "cream");
@@ -554,6 +616,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         },
         snap: () => new Promise<string>((res) => { snapCb = res; s.dirty = true; }),
         photo: async (job) => {
+          if (!pt) await startTracer(true);
           if (!pt) throw new Error("photos need WebGPU");
           s.photo = true;
           while (busy) await new Promise((r) => setTimeout(r, 16));
@@ -591,7 +654,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           st.removeEventListener("pointerup", up); st.removeEventListener("pointercancel", up);
           st.removeEventListener("dblclick", dbl); st.removeEventListener("wheel", wheel);
           removeEventListener("scroll", onPageScroll); removeEventListener("wheel", onScroll);
-          raster.renderer.dispose(); pt?.device.destroy();
+          raster.renderer.dispose(); raster.cloth?.dispose(); pt?.device.destroy();
         },
       };
       if (shotRef.current.who === "worn" && JSON.stringify(variantRef.current) !== JSON.stringify(s.variant)) engine.current.setVariant(variantRef.current);
@@ -601,12 +664,19 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
     return () => { dead = true; engine.current?.dispose(); engine.current = null; };
   }, []);
 
-  /** do a change behind the veil: the view fades out, the change is made and drawn whole, then it fades back in */
-  const veiled = async (kind: WordKind, change: () => Promise<void>) => {
+  /**
+   * Do a change behind a still picture, never on screen half made: the frame on screen now is frozen over the view
+   * at once (or, for a new shirt, its own rendered frame at this angle), the change is made and drawn whole
+   * underneath while the page stays free, then the picture fades away into the live view.
+   */
+  const veiled = async (kind: WordKind, change: () => Promise<void>, still: string | null = null) => {
     const turn = ++veilTurn.current;
-    setVeilWord(word(kind)); setVeil(true); setSwitching(true);
-    await new Promise((res) => setTimeout(res, 160));
-    try { await change(); } finally { if (turn === veilTurn.current) { setVeil(false); setSwitching(false); } }
+    // a change on top of one still being made keeps the picture already up (the view under it is half changed)
+    const was = veilRef.current;
+    if (!was) engine.current?.hold();
+    veilRef.current = true;
+    setPoster((p) => still ?? (was ? p : null)); setVeilWord(word(kind)); setVeil(true); setSwitching(true);
+    try { await change(); } finally { if (turn === veilTurn.current) { veilRef.current = false; setVeil(false); setSwitching(false); } }
     return turn === veilTurn.current;
   };
   /** the current view's picture for the strip (on the table, only its first framing) */
@@ -619,7 +689,15 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
   useEffect(() => {
     lookRef.current = { design, tee };
     const e = engine.current; if (!e) return;
-    void veiled("shirt", () => e.setLook(design, tee)).then((last) => { if (last) void capture(); });
+    // the new shirt's rendered frame shows at once where one matches the view, and the live tee takes over from
+    // exactly that angle, turning on from there: the tee on the paper (front, 3/4, back), or worn at the show (every
+    // 30 degrees, the person standing in the hall)
+    const sh = shotRef.current, v = variantRef.current;
+    let still: string | null = null, a: number | null = null;
+    if (sh.id === "tee") { const x = nearestTee(e.yaw()); a = TEE_STILLS.find((t) => t.v === x)!.a; still = TEE_STILL(design, x); }
+    else if (sh.id === "worn" && sceneRef.current === "show" && v.person && !v.body) { a = nearest(e.yaw()); still = STILL(design, a); }
+    void veiled("shirt", async () => { await e.setLook(design, tee); if (a !== null) e.setYaw(a); }, still)
+      .then((last) => { if (last) void capture(); });
   }, [design, tee]); // eslint-disable-line react-hooks/exhaustive-deps
   // the opening view's picture, the moment the 3D takes over
   useEffect(() => { if (mode === "3d") void capture(); }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -651,7 +729,6 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
 
   const shot = SHOTS[shotI];
   const spot = shot.spots?.[Math.max(0, spotI)];
-  const nearest = (yaw: number) => ((Math.round(yaw / 30) * 30) % 360 + 360) % 360;
   const showAngle = (yaw: number) => { const a = nearest(yaw); angRef.current = a; setAng(a); };
   /** a view, and on the table which print it frames */
   const goShot = async (i: number, sp = 0) => {
@@ -733,6 +810,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         className={`group relative aspect-[880/1120] w-full touch-none overflow-hidden ${dark ? "bg-[#0b0a0a]" : "bg-studio"} select-none ${shot.turn || shot.pan ? "cursor-grab active:cursor-grabbing" : ""}`}
         aria-label={`The tee, view ${shotI + 1} of ${SHOTS.length}: ${shot.label}`}
         aria-roledescription="carousel"
+        data-mode={mode}
         tabIndex={0}
         onPointerMove={(e) => {
           if (e.pointerType === "touch") return;
@@ -745,10 +823,18 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         onPointerLeave={() => { setEdge(null); setLow(false); }}
         onKeyDown={(e) => { if (e.key === "ArrowRight") void goShot(shotI + 1); else if (e.key === "ArrowLeft") void goShot(shotI - 1); }}
       >
-        {/* the last view stays up while the next one loads (never an empty stage in between) */}
-        <div className={`absolute inset-0 transition-opacity ease-out ${veil ? "opacity-0 duration-150" : "opacity-100 duration-300"}`} aria-busy={switching}>
+        <div className="absolute inset-0" aria-busy={switching}>
           <canvas ref={rasterCv} className="absolute inset-0 h-full w-full" />
           <canvas ref={traceCv} className="absolute inset-0 h-full w-full opacity-0 transition-opacity duration-500" />
+        </div>
+        {/* the last view stays up, frozen, while the next one is got ready (never an empty stage in between), then
+            fades into it. For a new shirt its own rendered frame lies over that, so it shows at once */}
+        <div aria-hidden className={`pointer-events-none absolute inset-0 transition-opacity ease-out ${veil ? "opacity-100 duration-0" : "opacity-0 duration-[400ms]"}`}>
+          <canvas ref={holdCv} className="absolute inset-0 h-full w-full" />
+          {poster ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={poster} alt="" draggable={false} decoding="sync" className="absolute inset-0 h-full w-full" />
+          ) : null}
         </div>
         {/* the rendered frames: all twelve stacked and loaded together, so turning only changes which one shows
             (never a blank while the next one decodes). Shown while the 3D loads, and for good without it. */}
@@ -762,7 +848,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           }}
           onPointerUp={() => { flatDrag.current = null; }}
         >
-          {shot.who === "alone"
+          {mode === "3d" ? null : shot.who === "alone"
             ? TEE_STILLS.map((x) => (
               // eslint-disable-next-line @next/next/no-img-element
               <img

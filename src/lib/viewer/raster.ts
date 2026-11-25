@@ -6,10 +6,11 @@ import { PRINT_BACK, PRINT_FRONT, type Rect } from "./print";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { RectAreaLightTexturesLib } from "three/addons/lights/RectAreaLightTexturesLib.js";
-import { CAMERA, VFOV, ASPECT, SWEEP, FLOOR, KNIT_REPEAT, lightFrame, radiance, type Camera, type Scene, type V3 } from "./scene";
+import { CAMERA, VFOV, ASPECT, SWEEP, FLOOR, KNIT_REPEAT, SCENES, lightFrame, radiance, type Camera, type Scene, type V3 } from "./scene";
+import { ENV_W, projectEnv, turnSH } from "./sh";
 import type { TeeGeometry } from "./pathtracer";
-import { grab, bitmap } from "./grab";
-import { Cloth, buildNetAsync, offsetTexture, slopeTextures, clothNodes } from "./cloth";
+import { grab, bitmap, type Pixels } from "./grab";
+import { ClothLink, offsetTexture, slopeTextures, clothNodes } from "./cloth";
 import type { FlatLay, LookNodes, Side } from "./flat";
 
 export const ASSET = "/tee/fit/";
@@ -27,20 +28,15 @@ function srgbToLinear(hex: number): V3 {
   return [c.r, c.g, c.b];
 }
 
-/** the probe's view of the place: 64 x 32 texels, linear radiance (the canvas averages in sRGB; close enough for light) */
-const ENV_W = 64;
-function envTexels(bmp: ImageBitmap) {
-  const W = ENV_W, H = ENV_W / 2;
-  const cv = new OffscreenCanvas(W, H), cx = cv.getContext("2d")!;
-  cx.imageSmoothingQuality = "high"; cx.drawImage(bmp, 0, 0, W, H);
-  const px = cx.getImageData(0, 0, W, H).data, out = new Float32Array(W * H * 3);
-  for (let i = 0; i < W * H; i++)
-    for (let c = 0; c < 3; c++) {
-      const v = px[i * 4 + c] / 255;
-      out[i * 3 + c] = v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
-    }
-  return out;
-}
+/** a place's picture, ready to draw: the full picture, and its 64 x 32 linear version for the light probe */
+export type Env = { url: string; px: Pixels };
+
+/**
+ * The most lights any place has. The rig is built once with this many and never changes: a light's identity is part
+ * of every lit shader, so new lights (another place, another shirt) would rebuild them all. A place sets as many as
+ * it has and leaves the rest dark.
+ */
+const MAX_LIGHTS = Math.max(...SCENES.flatMap((sc) => [sc, sc.fit]).map((sc) => sc?.lights.length ?? 0));
 
 /** Seamless sweep mesh, the same shape the path tracer intersects analytically. */
 function sweepGeometry() {
@@ -62,6 +58,31 @@ function sweepGeometry() {
   return g;
 }
 
+/** the scene as one triangle soup for the path tracer, in typed arrays sized up front */
+function soupOf(parts: { mesh: THREE.Mesh; mw: THREE.Matrix4; id: number; person: boolean }[], lift: number, skin: TeeGeometry["skin"]): TeeGeometry {
+  let nv = 0, ni = 0;
+  for (const { mesh: { geometry: g } } of parts) { nv += g.attributes.position.count; ni += g.index ? g.index.count : g.attributes.position.count; }
+  const pos = new Float32Array(3 * nv), nrm = new Float32Array(3 * nv), uv = new Float32Array(2 * nv), col = new Float32Array(3 * nv).fill(1);
+  const idx = new Uint32Array(ni), mat = new Uint8Array(ni / 3), vv = new THREE.Vector3();
+  let vb = 0, ib = 0;
+  for (const { mesh, mw, id, person } of parts) {
+    const g = mesh.geometry, pa = g.attributes.position, na = g.attributes.normal, ua = g.attributes.uv, ca = g.attributes.color;
+    const nm = new THREE.Matrix3().getNormalMatrix(mw);
+    for (let i = 0; i < pa.count; i++) {
+      const o = 3 * (vb + i);
+      vv.fromBufferAttribute(pa, i).applyMatrix4(mw); pos[o] = vv.x; pos[o + 1] = vv.y + lift; pos[o + 2] = vv.z;
+      vv.fromBufferAttribute(na, i).applyMatrix3(nm).normalize(); nrm[o] = vv.x; nrm[o + 1] = vv.y; nrm[o + 2] = vv.z;
+      if (ua) { uv[2 * (vb + i)] = ua.getX(i); uv[2 * (vb + i) + 1] = ua.getY(i); }
+      if (person && ca) { col[o] = ca.getX(i); col[o + 1] = ca.getY(i); col[o + 2] = ca.getZ(i); }
+    }
+    const ix = g.index?.array, cnt = ix ? ix.length : pa.count;
+    for (let j = 0; j < cnt; j++) idx[ib + j] = (ix ? ix[j] : j) + vb;
+    mat.fill(id, ib / 3, (ib + cnt) / 3);
+    vb += pa.count; ib += cnt;
+  }
+  return { pos, nrm, uv, idx, mat, col, skin };
+}
+
 export class Raster {
   renderer: THREE.WebGPURenderer;
   scene = new THREE.Scene();
@@ -74,12 +95,15 @@ export class Raster {
   private env: ReturnType<typeof texture> | null = null;
   private envYaw = uniform(0);
   private envOn = false;
-  lights: THREE.RectAreaLight[] = [];
+  lights: THREE.RectAreaLight[] = Array.from({ length: MAX_LIGHTS }, () => new THREE.RectAreaLight(0xffffff, 0, 1, 1));
   hemi = new THREE.HemisphereLight(0xf4f2ee, 0x6d6a64, 0.15);
   /** the place's picture as light on the person (its spherical harmonics, turned with the place) */
   probe = new THREE.LightProbe(undefined, 0);
-  /** the picture, small and linear, for the probe: radiance per texel, rows from straight up */
-  private envPix: Float32Array | null = null;
+  /** the picture's light, unturned (9 x rgb spherical harmonics), and the same turned with the place */
+  private envSH: Float64Array | null = null;
+  private turnedSH = new Float64Array(27);
+  /** each place's picture, uploaded once and kept: going back to a place is only a pointer swap */
+  private envTex = new Map<string, { tex: THREE.Texture; sh: Float64Array }>();
   private envLight = 0;
   private world: V3 = [0, 0, 0];
   private probeYaw = NaN;
@@ -91,8 +115,8 @@ export class Raster {
   offsets = offsetTexture();
   /** per-particle slope of the cloth (how it tilts the light), read in the vertex shader */
   slopes = slopeTextures();
-  private loadToken = 0;
-  cloth: Cloth | null = null;
+  /** the cloth, simulated in its own Worker (made with the first tee) */
+  cloth: ClothLink | null = null;
   maxAniso = 8;
   knit = uniform(0.55);
   backTex: Record<string, THREE.Texture> = {};
@@ -108,6 +132,7 @@ export class Raster {
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.scene.add(this.pivot, this.rig, this.hemi, this.probe);
+    this.rig.add(...this.lights);
     this.sweep = new THREE.Mesh(sweepGeometry(), this.paperMat); this.scene.add(this.sweep);
     this.camera.position.set(...CAMERA.pos);
     this.camera.lookAt(...CAMERA.target);
@@ -124,21 +149,23 @@ export class Raster {
   private clothed() { return clothNodes(this.offsets, this.slopes).position; }
 
   setScene(s: Scene, cream: boolean) {
-    for (const l of this.lights) this.rig.remove(l);
     this.venue = !!s.venue; this.rig.rotation.y = this.venue ? this.pivot.rotation.y : 0;
     const k = cream ? s.creamK : 1;
-    this.lights = s.lights.map((l) => {
+    // the same lights every time, moved and set (never new ones: see MAX_LIGHTS)
+    this.lights.forEach((rl, i) => {
+      const l = s.lights[i];
+      if (!l) { rl.intensity = 0; return; }
       const fr = lightFrame(l, s.aim), L = radiance(l, k);
       const peak = Math.max(...L);
-      const rl = new THREE.RectAreaLight(new THREE.Color(L[0] / peak, L[1] / peak, L[2] / peak), peak, l.size[0], l.size[1]);
+      rl.color.setRGB(L[0] / peak, L[1] / peak, L[2] / peak); rl.intensity = peak;
+      rl.width = l.size[0]; rl.height = l.size[1];
       rl.position.set(...l.pos);
       rl.lookAt(l.pos[0] + fr.n[0], l.pos[1] + fr.n[1], l.pos[2] + fr.n[2]);
-      this.rig.add(rl);
-      return rl;
     });
     this.paperMat.color.setRGB(...s.paper, THREE.LinearSRGBColorSpace);
     this.sweepOn = !s.open; this.sweep.visible = this.sweepOn && !this.flat?.side;
-    this.scene.background = new THREE.Color().setRGB(...s.world, THREE.LinearSRGBColorSpace);
+    (this.scene.background as THREE.Color | null)?.isColor ? (this.scene.background as THREE.Color).setRGB(...s.world, THREE.LinearSRGBColorSpace)
+      : (this.scene.background = new THREE.Color().setRGB(...s.world, THREE.LinearSRGBColorSpace));
     this.envOn = !!s.env; this.envLight = s.envLight ?? 0; this.world = s.world; this.showEnv();
   }
 
@@ -147,7 +174,7 @@ export class Raster {
    * three.js turns into the irradiance a surface facing each way receives), otherwise the uniform world light.
    */
   private ambient() {
-    const pix = this.envPix, lit = !!(pix && this.envOn && this.envLight > 0);
+    const sh0 = this.envSH, lit = !!(sh0 && this.envOn && this.envLight > 0);
     if (!lit) {
       this.probe.intensity = 0; this.probeYaw = NaN;
       // uniform world light: irradiance pi * W, as the path tracer integrates it
@@ -161,23 +188,9 @@ export class Raster {
     const yaw = this.rig.rotation.y;
     if (yaw === this.probeYaw) return;
     this.probeYaw = yaw;
-    const sh = this.probe.sh; sh.zero();
-    const c = Math.cos(yaw), sn = Math.sin(yaw), W = ENV_W, H = ENV_W / 2, basis = new Array<number>(9).fill(0);
-    const d = new THREE.Vector3(), dw = (2 * Math.PI / W) * (Math.PI / H);
-    for (let j = 0; j < H; j++) {
-      const lat = Math.PI / 2 - ((j + 0.5) / H) * Math.PI, cl = Math.cos(lat), y = Math.sin(lat), dO = dw * cl;
-      for (let i = 0; i < W; i++) {
-        // the texel's direction in the place (u = 0.5 - atan2(x, z) / 2pi), then turned into the world with the place
-        const a = (0.5 - (i + 0.5) / W) * 2 * Math.PI, px = Math.sin(a) * cl, pz = Math.cos(a) * cl;
-        d.set(c * px + sn * pz, y, -sn * px + c * pz);
-        THREE.SphericalHarmonics3.getBasisAt(d, basis);
-        const o = (j * W + i) * 3;
-        for (let k = 0; k < 9; k++) {
-          const b = basis[k] * dO;
-          sh.coefficients[k].x += pix![o] * b; sh.coefficients[k].y += pix![o + 1] * b; sh.coefficients[k].z += pix![o + 2] * b;
-        }
-      }
-    }
+    // projected once per picture; turning it with the place is two small matrix products (sh.ts)
+    const c = turnSH(sh0!, yaw, this.turnedSH), co = this.probe.sh.coefficients;
+    for (let k = 0; k < 9; k++) co[k].set(c[3 * k], c[3 * k + 1], c[3 * k + 2]);
     this.probe.intensity = this.envLight;
   }
 
@@ -186,13 +199,11 @@ export class Raster {
    * same way the path tracer does: u = 0.5 - atan2(x, z) / 2pi (the stage, +z, in the middle), v = 0 straight up.
    * It turns with the person, as the lights do (a game camera walking round a place that stays put).
    */
-  setEnv(bmp: ImageBitmap | null) {
-    this.envPix = bmp ? envTexels(bmp) : null; this.probeYaw = NaN;
-    if (!bmp) { this.env = null; this.showEnv(); return; }
-    const t = new THREE.Texture(bmp);
-    t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.ClampToEdgeWrapping;
-    // no mips: the picture is only ever magnified, and mips would draw a seam where u wraps round
-    t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter; t.needsUpdate = true;
+  setEnv(env: Env | null) {
+    this.probeYaw = NaN;
+    if (!env) { this.envSH = null; this.env = null; this.showEnv(); return; }
+    const { tex: t, sh } = this.prepareEnv(env);
+    this.envSH = sh;
     if (this.env) { this.env.value = t; this.showEnv(); return; }
     const d = normalize(normalWorldGeometry);
     const c = cos(this.envYaw), sn = sin(this.envYaw);
@@ -201,6 +212,25 @@ export class Raster {
     const v = float(0.5).sub(asin(clamp(d.y, -1, 1)).div(Math.PI));
     this.env = texture(t, vec2(u, v));
     this.showEnv();
+  }
+  /**
+   * A place's picture on the graphics card, ahead of being shown (done once per place, when the page is idle): the
+   * switch to that place then only points the background at it. Same filters for every place, so the background's
+   * shader never changes either.
+   */
+  prepareEnv(env: Env) {
+    let e = this.envTex.get(env.url);
+    if (!e) {
+      // raw bytes decoded in a worker: uploaded as a plain buffer copy (an image upload can stall on the graphics process)
+      const t = new THREE.DataTexture(env.px.data, env.px.width, env.px.height, THREE.RGBAFormat, THREE.UnsignedByteType);
+      t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.ClampToEdgeWrapping;
+      // no mips: the picture is only ever magnified, and mips would draw a seam where u wraps round
+      t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter; t.needsUpdate = true;
+      this.renderer.initTexture(t);
+      e = { tex: t, sh: projectEnv(env.px.texels, ENV_W, ENV_W / 2) };
+      this.envTex.set(env.url, e);
+    }
+    return e;
   }
   private showEnv() {
     const on = !!(this.env && this.envOn);
@@ -299,13 +329,14 @@ export class Raster {
     m.sheen = 1; m.sheenRoughness = 0.5; m.sheenColor = new THREE.Color().setRGB(0.16, 0.07, 0.045, THREE.LinearSRGBColorSpace);
     return m;
   }
+  private skinMats = new Map<string, THREE.MeshPhysicalNodeMaterial>();
   stoolMat = new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0, color: new THREE.Color(0.05, 0.045, 0.04) });
 
   /**
    * Loads one simulated tee (a body + size + pose from the fit pipeline, or the shop tee on its ghost form),
    * and the body itself in fit mode; hands back the triangle soup for the path tracer.
    */
-  async load(design: string, tee: "black" | "cream", v: Variant): Promise<TeeGeometry> {
+  async load(design: string, tee: "black" | "cream", v: Variant): Promise<() => TeeGeometry> {
     this.gl ??= new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath("/draco/"));
     const gl = this.gl;
     const glb = async (f: string) => gl.parseAsync(await (await grab(ASSET + f)).arrayBuffer(), ASSET + v.dir + "/");
@@ -371,10 +402,13 @@ export class Raster {
     const lift = v.body || v.person ? FLOOR : 0;
     this.pivot.position.y = lift;
 
-    const P: number[] = [], N: number[] = [], UV: number[] = [], I: number[] = [], M: number[] = [], C: number[] = [];
+    // The path tracer wants the whole scene as one triangle soup; it is only built when it asks (a photo), from
+    // what each mesh was when taken: a load only walks what the cloth needs (the tee, the skin under it).
+    const parts: { mesh: THREE.Mesh; mw: THREE.Matrix4; id: number; person: boolean }[] = [];
     const teeMeshes: { mesh: THREE.Mesh; pos: Float32Array; idx: ArrayLike<number>; plain: boolean }[] = [];
     // the body inside the tee, for the cloth to rest on (garment frame: no lift); not the eyes
     const skinP: number[] = [], skinN: number[] = [];
+    let triCount = 0;
     const take = (root: THREE.Object3D, kind: "tee" | "body" | "stool" | "person") => {
       root.updateMatrixWorld(true);
       root.traverse((o) => {
@@ -386,38 +420,32 @@ export class Raster {
         const pid = /jeans/i.test(mname) ? 5 : /eye/i.test(mname) ? 6 : 4;
         mesh.material = kind === "person" ? [this.personSkin, this.personDenim, this.personEyes][pid - 4]
           : kind === "body" ? this.skinMat : kind === "stool" ? this.stoolMat : isInner ? this.inner : this.outer!;
-        const g = mesh.geometry, pa = g.attributes.position, na = g.attributes.normal, ua = g.attributes.uv, ca = g.attributes.color;
-        const base = P.length / 3, mw = mesh.matrixWorld, nm = new THREE.Matrix3().getNormalMatrix(mw);
+        const g = mesh.geometry, pa = g.attributes.position, na = g.attributes.normal, mw = mesh.matrixWorld.clone();
+        const id = kind === "person" ? pid : kind === "body" ? 2 : kind === "stool" ? 3 : isInner ? 1 : 0;
+        parts.push({ mesh, mw, id, person: kind === "person" });
+        triCount += (g.index ? g.index.count : pa.count) / 3;
         const vv = new THREE.Vector3();
-        for (let i = 0; i < pa.count; i++) {
-          vv.fromBufferAttribute(pa, i).applyMatrix4(mw); P.push(vv.x, vv.y + lift, vv.z);
-          vv.fromBufferAttribute(na, i).applyMatrix3(nm).normalize(); N.push(vv.x, vv.y, vv.z);
-          UV.push(ua ? ua.getX(i) : 0, ua ? ua.getY(i) : 0);
-          if (kind === "person" && ca) C.push(ca.getX(i), ca.getY(i), ca.getZ(i)); else C.push(1, 1, 1);
-          if ((kind === "body" || (kind === "person" && pid !== 6))) {
-            skinP.push(P[P.length - 3], P[P.length - 2] - lift, P[P.length - 1]);
-            skinN.push(N[N.length - 3], N[N.length - 2], N[N.length - 1]);
-          }
-        }
-        const ix = g.index ? Array.from(g.index.array) : Array.from({ length: pa.count }, (_, i) => i);
-        for (let i = 0; i < ix.length; i++) I.push(ix[i] + base);
         if (kind === "tee") {
           // the cloth works in the pivot's frame; it needs the mesh's own frame to be that frame turned by nothing
           const e = mw.elements, plain = Math.abs(e[0] - 1) + Math.abs(e[5] - 1) + Math.abs(e[10] - 1) + Math.abs(e[1]) + Math.abs(e[2]) + Math.abs(e[4]) + Math.abs(e[6]) + Math.abs(e[8]) + Math.abs(e[9]) < 1e-4;
           const pos = new Float32Array(pa.count * 3);
-          for (let i = 0; i < pa.count; i++) { pos[3 * i] = P[3 * (base + i)]; pos[3 * i + 1] = P[3 * (base + i) + 1] - lift; pos[3 * i + 2] = P[3 * (base + i) + 2]; }
-          teeMeshes.push({ mesh, pos, idx: ix, plain });
+          for (let i = 0; i < pa.count; i++) { vv.fromBufferAttribute(pa, i).applyMatrix4(mw); pos[3 * i] = vv.x; pos[3 * i + 1] = vv.y; pos[3 * i + 2] = vv.z; }
+          teeMeshes.push({ mesh, pos, idx: g.index ? g.index.array : Array.from({ length: pa.count }, (_, i) => i), plain });
         }
-        const id = kind === "person" ? pid : kind === "body" ? 2 : kind === "stool" ? 3 : isInner ? 1 : 0;
-        for (let i = 0; i < ix.length / 3; i++) M.push(id);
+        if (kind === "body" || (kind === "person" && pid !== 6)) {
+          const nm = new THREE.Matrix3().getNormalMatrix(mw);
+          for (let i = 0; i < pa.count; i++) {
+            vv.fromBufferAttribute(pa, i).applyMatrix4(mw); skinP.push(vv.x, vv.y, vv.z);
+            vv.fromBufferAttribute(na, i).applyMatrix3(nm).normalize(); skinN.push(vv.x, vv.y, vv.z);
+          }
+        }
       });
       this.pivot.add(root); this.loaded.push(root);
     };
     take(gltf.scene, "tee");
     // the cloth: on the shop form and on a standing body (raised arms and sitting stay as simulated).
     // The tee goes on screen at once, at rest; the net is built in a worker and takes over when it's ready.
-    this.cloth = null;
-    const token = ++this.loadToken;
+    this.cloth?.stop();
     const skins: THREE.BufferAttribute[][] = [];
     for (const t of teeMeshes) {
       const g = t.mesh.geometry, nv = t.pos.length / 3;
@@ -426,21 +454,10 @@ export class Raster {
     }
     (this.offsets.image.data as Float32Array).fill(0); this.offsets.needsUpdate = true;
     for (const t of this.slopes) { (t.image.data as Float32Array).fill(0); t.needsUpdate = true; }
-    if (v.pose === "stand" && teeMeshes.every((t) => t.plain)) {
-      buildNetAsync(teeMeshes.map((t) => ({ pos: t.pos, idx: Uint32Array.from(t.idx) }))).then((net) => {
-        if (token !== this.loadToken) return;
-        net.skins.forEach((sk, i) => {
-          const [I, W] = skins[i];
-          (I.array as Float32Array).set(sk.I); (W.array as Float32Array).set(sk.W); I.needsUpdate = true; W.needsUpdate = true;
-        });
-        const cloth = new Cloth(net, this.offsets, this.slopes);
-        if (skinP.length) cloth.setBody(new Float32Array(skinP), new Float32Array(skinN));
-        cloth.wind = !matchMedia("(prefers-reduced-motion: reduce)").matches;
-        this.cloth = cloth;
-      }).catch((e) => console.info("cloth off", e));
-    }
+    const clothOn = v.pose === "stand" && teeMeshes.every((t) => t.plain);
     const skinMaps = skinMapsP ? await skinMapsP : null;
-    if (skinMaps) this.personSkin = this.skinFrom(skinMaps[0], skinMaps[1]);
+    // one skin material per person, made once (a new material is a new shader to build)
+    if (skinMaps && v.person) this.personSkin = this.skinMats.get(v.person) ?? this.skinMats.set(v.person, this.skinFrom(skinMaps[0], skinMaps[1])).get(v.person)!;
     if (bodyGltf) take(bodyGltf.scene, v.person ? "person" : "body");
     if (v.body && v.pose === "sit" && v.seat) {
       // a plain stool, its top where the simulation's seat was (Blender y forward -> three z back)
@@ -448,11 +465,19 @@ export class Raster {
       box.position.set(0, v.seat / 2, -0.04);
       const grp = new THREE.Group(); grp.add(box); take(grp, "stool");
     }
-    this.tris = I.length / 3;
-    return {
-      pos: new Float32Array(P), nrm: new Float32Array(N), uv: new Float32Array(UV), idx: new Uint32Array(I), mat: new Uint8Array(M), col: new Float32Array(C),
-      skin: skinMaps ? { albedo: skinMaps[0], rn: skinMaps[1] } : undefined,
-    };
+    // the net and the cloth on their own thread, once the skin under the tee is known (the tee is on screen and
+    // turning meanwhile, at rest; the cloth takes over when the net is ready)
+    if (clothOn) {
+      this.cloth ??= new ClothLink(this.offsets, this.slopes);
+      this.cloth.start(teeMeshes.map((t) => ({ pos: t.pos, idx: Uint32Array.from(t.idx) })), skinP.length ? { pos: new Float32Array(skinP), nrm: new Float32Array(skinN) } : null,
+        lift, !matchMedia("(prefers-reduced-motion: reduce)").matches, (sk) => sk.forEach((x, i) => {
+          const [I, W] = skins[i];
+          (I.array as Float32Array).set(x.I); (W.array as Float32Array).set(x.W); I.needsUpdate = true; W.needsUpdate = true;
+        }));
+    }
+    this.tris = triCount;
+    let built: TeeGeometry | null = null;
+    return () => (built ??= soupOf(parts, lift, skinMaps ? { albedo: skinMaps[0], rn: skinMaps[1] } : undefined));
   }
 
   setCamera(c: Camera) {
@@ -481,13 +506,10 @@ export class Raster {
     this.camera.updateProjectionMatrix();
   }
 
-  private still = new THREE.Matrix3();
   /** advance the cloth (the person stands still while the camera goes round: only the air moves it); true while it moves */
   simulate(dt: number) {
     if (this.flat?.side) return this.flat.tick(dt);
-    if (!this.cloth) return false;
-    this.cloth.setPose(this.still, this.pivot.position, 1, dt);
-    return this.cloth.step(dt);
+    return this.cloth ? this.cloth.step(dt) : false;
   }
 
   /**

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { setFocusCity } from "@/lib/city";
-import { Viewer } from "@/components/Viewer";
+import { Viewer, warmDesign } from "@/components/Viewer";
 import { Countdown } from "@/components/Countdown";
 import { Fit, SHOP } from "@/components/Fit";
 import type { Variant } from "@/lib/viewer/raster";
@@ -32,7 +32,7 @@ export function Product() {
               <div key={c ?? "tour"} className="flex flex-wrap items-baseline gap-x-5 gap-y-1">
                 <span className="w-[5.5rem] text-[13px] text-quiet">{c ?? "the tour"}</span>
                 {(Object.keys(DESIGNS) as Design[]).filter((d) => DESIGNS[d].city === c).map((d) => (
-                  <button key={d} onClick={() => setDesign(d)} aria-pressed={d === design} className={`hit flex items-baseline gap-1.5 ${d === design ? "text-ink" : "text-quiet hover:text-ink"}`}>
+                  <button key={d} onClick={() => setDesign(d)} onPointerEnter={() => warmDesign(d)} onFocus={() => warmDesign(d)} aria-pressed={d === design} className={`hit flex items-baseline gap-1.5 ${d === design ? "text-ink" : "text-quiet hover:text-ink"}`}>
                     <span className="text-[11px] tnum">{DESIGNS[d].no}</span>
                     <span className={d === design ? "border-b border-blue font-semibold" : ""}>{DESIGNS[d].name}</span>
                   </button>

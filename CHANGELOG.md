@@ -18,6 +18,12 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 - Every load says something different: a word in hand picked at random from twenty or more for that kind of load (dressing it.., lights down.., closer.., swapping shirts.., in the darkroom.., tape out.. and the rest), never the same twice in a row. No more breathing in..
 - The actual size button is called artwork.
 
+### Fixed
+- Switching the light (studio, window, the show) is instant and no longer stalls the page: the lights are set, not rebuilt, so nothing has to be recompiled; each place's picture is decoded off the page's thread, its light measured once, and kept, and the other places are got ready while the page is idle.
+- Switching shirts shows the new shirt at once: its studio render (the tee view) or its render in the hall (worn at the show) covers the view at that angle, and the live tee takes over from exactly there and turns on. Elsewhere the last frame stays up and fades into the new one, never a dark gap. A shirt you point at is got ready before you pick it.
+- The cloth is simulated on its own thread, so turning, scrolling and switching stay smooth on slower machines; the light from the place turns with the view at a tiny fraction of the cost.
+- The photo renderer only loads when a photo is asked for, and the rendered frames under the 3D are dropped once it's up.
+
 ## 0.18.0 — 2026-11-25
 ### New
 - the tee view zooms in and out like the others (− zoom +, a pinch, a double-click) and slides along the print when close.

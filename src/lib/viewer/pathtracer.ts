@@ -180,11 +180,12 @@ export class PathTracer {
   }
 
   /** the place all round (equirect, sRGB); null clears it */
-  setEnv(bmp: ImageBitmap | null) {
+  setEnv(px: { data: Uint8Array; width: number; height: number } | null) {
     this.envTex?.destroy(); this.envTex = null;
-    if (bmp) {
-      const t = this.device.createTexture({ size: [bmp.width, bmp.height], format: "rgba8unorm-srgb", usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT });
-      this.device.queue.copyExternalImageToTexture({ source: bmp }, { texture: t }, [bmp.width, bmp.height]);
+    if (px) {
+      // raw bytes (decoded off the page's thread): a plain buffer copy, no image conversion on the way
+      const t = this.device.createTexture({ size: [px.width, px.height], format: "rgba8unorm-srgb", usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+      this.device.queue.writeTexture({ texture: t }, px.data as Uint8Array<ArrayBuffer>, { bytesPerRow: px.width * 4 }, [px.width, px.height]);
       this.envTex = t;
     }
     this.traceBG = null; this.reset();
