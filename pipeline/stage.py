@@ -961,6 +961,14 @@ def build_show():
         box(p.x, p.y, 0.2, 0.4, 0.4, 0.4, M_CASE)
         light("SPOT", p, (CX + (r - 3) * math.cos(a_), CY + (r - 3) * math.sin(a_), 5.5), 900, (0.25, 0.42, 1.0), size=0.15, spot=60, blend=0.8)
 
+    for i in range(12):                                                 # the stage's light out onto the faces round it
+        a_ = 2 * math.pi * (i + 0.5) / 12
+        p = Vector((CX + (SX + 0.2) * math.cos(a_), CY + (SY + 0.2) * math.sin(a_), SZ + 0.3))
+        box(p.x, p.y, p.z - 0.1, 0.3, 0.3, 0.2, M_CASE)
+        light("SPOT", p, (CX + 16 * math.cos(a_), CY + 16 * math.sin(a_), 1.7), 1400, (1.0, 0.78, 0.55), size=0.12, spot=38, blend=0.75)
+    for x in (-1.2, 1.2):                                               # and from the front bar onto the crowd behind
+        light("SPOT", (CX + x, -3.1, 5.6), (x * 2, 13.0, 1.6), 2600, (1.0, 0.82, 0.62), size=0.15, spot=36, blend=0.75)
+
     # ---------- the bar over the front of the stage the person's front lights hang on ----------
     yb = -3.1
     cyl((CX - 3.2, yb, 5.85), (CX + 3.2, yb, 5.85), 0.05, M_BLACK, 8)
