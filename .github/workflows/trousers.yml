@@ -1,0 +1,65 @@
+# Trousers for the people who wear the shop tee: pipeline/trousers.py hangs straight-leg trousers on each body by
+# cloth simulation (~5 min a body) and commits pipeline/people/<body>-trousers.blend for render.py (TROUSERS=).
+name: trousers
+on:
+  workflow_dispatch:
+    inputs:
+      bodies:
+        description: "bodies in pipeline/bodies, comma separated"
+        default: "hm175,hf163"
+
+permissions:
+  contents: write
+
+env:
+  BLENDER: "5.3.0"
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - id: m
+        run: python3 -c "import json; print('matrix=' + json.dumps({'body': [b.strip() for b in '${{ inputs.bodies }}'.split(',') if b.strip()]}))" >> $GITHUB_OUTPUT
+  hang:
+    needs: plan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/blender
+          key: blender-${{ env.BLENDER }}
+      - name: Blender ${{ env.BLENDER }}
+        run: |
+          if [ ! -x ~/blender/blender ]; then
+            mkdir -p ~/blender
+            curl -sSL "https://download.blender.org/release/Blender${BLENDER%.*}/blender-${BLENDER}-linux-x64.tar.xz" | tar -xJ -C ~/blender --strip-components=1
+          fi
+      - name: Hang the trousers on ${{ matrix.body }}
+        run: |
+          mkdir -p out
+          ~/blender/blender -b --factory-startup -P pipeline/trousers.py -- "$PWD/pipeline/bodies/${{ matrix.body }}.blend" "$PWD/out/${{ matrix.body }}-trousers.blend"
+      - uses: actions/upload-artifact@v4
+        with: { name: "trousers-${{ matrix.body }}", path: out, retention-days: 3 }
+  commit:
+    needs: hang
+    if: always() && needs.hang.result != 'cancelled'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { path: got, pattern: trousers-*, merge-multiple: true }
+      - name: Commit
+        run: |
+          mkdir -p pipeline/people; cp got/*.blend pipeline/people/
+          git config user.name "once-human"
+          git config user.email "121476278+once-human@users.noreply.github.com"
+          git add pipeline/people/*-trousers.blend
+          git diff --cached --quiet && { echo "nothing new"; exit 0; }
+          git commit -m "Trousers: hung on $(cd got && ls *.blend | sed 's/-trousers.blend//' | paste -sd, -)"
+          git pull --rebase -q && git push
