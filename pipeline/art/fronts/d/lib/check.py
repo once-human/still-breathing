@@ -57,7 +57,9 @@ def verify(path, min_px=10, margin_px=40):
     print('binary alpha:', 'ok' if partial == 0 else f'FAIL ({partial} partial pixels)')
     m = img.getchannel('A').point(lambda p: 255 if p >= 128 else 0)
     k = int(min_px) if int(min_px) % 2 else int(min_px) - 1
-    opened = m.filter(ImageFilter.MinFilter(k)).filter(ImageFilter.MaxFilter(k))
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from hand import clean
+    opened = clean(m, k)   # octagon opening: a 1 mm line passes at any angle
     closed = m.filter(ImageFilter.MaxFilter(k)).filter(ImageFilter.MinFilter(k))
     thin = int((np.asarray(m) > np.asarray(opened)).sum())
     gaps = int((np.asarray(closed) > np.asarray(m)).sum())

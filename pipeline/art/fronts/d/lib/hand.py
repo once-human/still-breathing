@@ -443,11 +443,28 @@ def _kernel():
     return k if k % 2 else k - 1
 
 
+def _oct(a, k, op):
+    """erode (op=np.minimum) or dilate (np.maximum) by an octagon about k px across: a square then a diamond, so a
+    1 mm stroke survives at any angle (a square kernel eats diagonal strokes that are legally 1 mm wide)"""
+    s = max(1, k - 4) | 1
+    img = Image.fromarray(a)
+    img = img.filter(ImageFilter.MinFilter(s) if op is np.minimum else ImageFilter.MaxFilter(s))
+    a = np.asarray(img).copy()
+    for _ in range((k - s) // 2):
+        b = a.copy()
+        b[1:] = op(b[1:], a[:-1]); b[:-1] = op(b[:-1], a[1:])
+        b[:, 1:] = op(b[:, 1:], a[:, :-1]); b[:, :-1] = op(b[:, :-1], a[:, 1:])
+        a = b
+    return a
+
+
 def clean(mask, k=None):
-    """morphological opening a little under the minimum feature: removes specks and slivers the printer cannot hold"""
+    """morphological opening (octagon) a little under the minimum feature: removes specks and slivers the printer
+    cannot hold, keeps legal strokes at every angle"""
     k = k or _kernel()
-    m = mask.filter(ImageFilter.MinFilter(k)).filter(ImageFilter.MaxFilter(k))
-    return m
+    a = np.asarray(mask.convert('L'))
+    a = _oct(_oct(a, k, np.minimum), k, np.maximum)
+    return Image.fromarray(a)
 
 
 def misregister(mask, dx_u, dy_u):
@@ -459,7 +476,7 @@ def misregister(mask, dx_u, dy_u):
 def margin(mask, px=None):
     px = px if px is not None else int(round(40 * R / 3))
     m = Image.new('L', mask.size, 0)
-    ImageDraw.Draw(m).rectangle([px, px, mask.width - px, mask.height - px], fill=255)
+    ImageDraw.Draw(m).rectangle([px, px, mask.width - px - 1, mask.height - px - 1], fill=255)
     return ImageChops.multiply(mask, m)
 
 
