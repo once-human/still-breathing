@@ -2,6 +2,14 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## Unreleased
+### Studio
+- The arrows and the little pictures over the 3D view click again (a press on them was taken as the start of a drag).
+- the tee view zooms in and out like the others (− zoom +, a pinch, a double-click) and slides along the print when close.
+- The back print at full resolution loads in the background once the 3D is up, so zooming in is sharp straight away.
+- The air never stops dead: a lull drops to a soft draught, so the cloth keeps moving.
+- While the 3D loads, the tee view shows the tee on its own (the studio render), not someone wearing it; it opens on the back.
+
 ## 0.17.0 — 2026-11-25
 ### Studio
 - up close has an actual size button: the print opens as big as it is on the shirt, on the shirt's own colour, to drag around. A dashed bank card outline checks the screen's scale; − and + set it right, and it's kept for next time.

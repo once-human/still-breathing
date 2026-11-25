@@ -10,7 +10,7 @@
 // does through real knit. The simulation runs in world space while the garment is turned, so inertia is real.
 //
 // Wind: light air (a room with the door open) moves through it. Gusts travel across the cloth as waves (so a ripple runs from
-// one side seam to the other), the direction drifts, and there are real lulls when the air goes still. The
+// one side seam to the other), the direction drifts, and there are lulls when it drops to a soft draught (it never stops dead). The
 // push is aerodynamic: it acts along each patch's normal and against the patch's own velocity, so a panel
 // facing the breeze bellies, one edge-on barely moves, and fast swings are damped by the air.
 //
@@ -412,7 +412,8 @@ export class Cloth {
     const TAU = 2 * Math.PI;
     const g = 0.5 + 0.22 * Math.sin(TAU * t / 29 + 1) + 0.18 * Math.sin(TAU * t / 17.3) + 0.1 * Math.sin(TAU * t / 7.1 + 2);
     const u = Math.min(1, Math.max(0, (g - 0.22) / 0.5));
-    return u * u * (3 - 2 * u);
+    // the air never stops dead indoors: a lull drops to a soft draught (a quarter of a gust), not to nothing
+    return 0.25 + 0.75 * u * u * (3 - 2 * u);
   }
 
   /**

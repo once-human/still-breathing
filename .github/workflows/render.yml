@@ -170,7 +170,11 @@ jobs:
             if [ "${{ inputs.kind }}" = "turntable" ]; then d=public/tee/still/$(echo $design | tr A-Z a-z)${label:+/$label}; mkdir -p $d
               # the web gets WebP: ~35 KB a frame instead of ~1 MB (84 looks the same as 90 over the soft hall, ~23 % smaller)
               python3 -c "import sys; from PIL import Image; Image.open(sys.argv[1]).save(sys.argv[2], 'WEBP', quality=84, method=6)" "$f" $d/$view.webp
-            else d=previews; mkdir -p $d; cp "$f" $d/3d-$b.png; fi
+            else d=previews; mkdir -p $d; cp "$f" $d/3d-$b.png
+              # and for the site: the opening "the tee" view shows these while its 3D loads (and for good without 3D)
+              w=public/tee/still/$(echo $design | tr A-Z a-z)/tee; mkdir -p $w
+              python3 -c "import sys; from PIL import Image; Image.open(sys.argv[1]).convert('RGB').resize((880, 1120), Image.LANCZOS).save(sys.argv[2], 'WEBP', quality=84, method=6)" "$f" $w/$view.webp
+            fi
             n=$((n+1))
           done
           git config user.name "once-human"

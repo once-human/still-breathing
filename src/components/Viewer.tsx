@@ -55,7 +55,7 @@ type Shot = {
   thumb: { a: number; crop: [number, number, number] };
 };
 const SHOTS: Shot[] = [
-  { id: "tee", label: "the tee", who: "alone", paper: true, yaw: 210, turn: true, spin: true, zoom: [1, 1], pan: false, thumb: { a: 210, crop: [1.35, 0, 0.1] } },
+  { id: "tee", label: "the tee", who: "alone", paper: true, yaw: 180, turn: true, spin: true, zoom: [1, 5], pan: true, thumb: { a: 180, crop: [1.35, 0, 0.1] } },
   { id: "worn", label: "worn", who: "worn", paper: false, yaw: null, turn: true, spin: true, zoom: [1, 5], pan: true, thumb: { a: 0, crop: [1, 0, 0] } },
   {
     id: "close", label: "up close", who: "alone", paper: true, yaw: 180, turn: false, spin: false, zoom: [1.85, 7], pan: true, thumb: { a: 180, crop: [1.85, 0, 0.07] },
@@ -94,6 +94,13 @@ const PHOTO_SPP = 64;
 const TRACE_MS = 3;
 const SLOW_MS = 600;
 const STILL = (d: string, a: number) => asset(`/tee/still/${d}/a${a}.webp`);
+/** the tee on its own on the paper (the studio stills: front, ¾ at 35°, back), for the views without a person */
+const TEE_STILLS = [{ v: "front", a: 0 }, { v: "q", a: 35 }, { v: "back", a: 180 }];
+const TEE_STILL = (d: string, v: string) => asset(`/tee/still/${d}/tee/${v}.webp`);
+const nearestTee = (yaw: number) => {
+  const gap = (a: number) => Math.abs(((((yaw - a) % 360) + 540) % 360) - 180);
+  return TEE_STILLS.reduce((m, x) => (gap(x.a) < gap(m.a) ? x : m)).v;
+};
 const ANGLES = Array.from({ length: 12 }, (_, i) => i * 30);
 const FORMAT_LIST: { id: Format; label: string }[] = [{ id: "story", label: "story 9:16" }, { id: "post", label: "post 4:5" }];
 const LOOK_LIST: Look[] = ["clean", "film"];
@@ -318,6 +325,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       let pinch: { d: number; z: number; mx: number; my: number } | null = null;
       const spread = () => { const [a, b] = [...touches.values()]; return { d: Math.hypot(a.x - b.x, a.y - b.y), m: { clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 } }; };
       const down = (e: PointerEvent) => {
+        if ((e.target as Element | null)?.closest("button, a")) return;
         engaged = true;
         touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
         st.setPointerCapture(e.pointerId);
@@ -458,6 +466,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
               await loadEnv(); s.dirty = true; await frames(2);
               if (dead) return;
               setMode("3d"); setStatus(""); if (!lite) void startTracer();
+              // then, in a quiet moment, the back print at full resolution: close in it's sharp straight away
+              if (!lite) ("requestIdleCallback" in window ? requestIdleCallback : (f: () => void) => setTimeout(f, 1500))(() => { if (!dead) void sharpen(); });
             }));
           }
         }
@@ -721,15 +731,25 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           }}
           onPointerUp={() => { flatDrag.current = null; }}
         >
-          {ANGLES.map((a) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={`${design}-${a}`} src={STILL(design, a)} alt="" draggable={false}
-              fetchPriority={a === ang ? "high" : "low"} decoding="async"
-              className={`absolute inset-0 h-full w-full ${a === ang ? "" : "opacity-0"}`}
-              style={stillCrop}
-            />
-          ))}
+          {shot.who === "alone"
+            ? TEE_STILLS.map((x) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={`${design}-tee-${x.v}`} src={TEE_STILL(design, x.v)} alt="" draggable={false}
+                fetchPriority={x.v === nearestTee(ang) ? "high" : "low"} decoding="async"
+                className={`absolute inset-0 h-full w-full ${x.v === nearestTee(ang) ? "" : "opacity-0"}`}
+                style={stillCrop}
+              />
+            ))
+            : ANGLES.map((a) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={`${design}-${a}`} src={STILL(design, a)} alt="" draggable={false}
+                fetchPriority={a === ang ? "high" : "low"} decoding="async"
+                className={`absolute inset-0 h-full w-full ${a === ang ? "" : "opacity-0"}`}
+                style={stillCrop}
+              />
+            ))}
         </div>
         {/* the way to the next view, drawn the way the notes on the shirts are: a marker arrow and a word in hand.
             Near an edge the room dims a little on that side and the word says where it goes. */}
@@ -769,7 +789,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           {SHOTS.map((x, i) => {
             const live = thumbs[`${design}-${x.id}`];
             // until a view has been seen live: the print itself for up close, a rendered frame for the others
-            const src = live ?? (x.spots ? asset(printBackURL(design, tee)) : STILL(design, x.thumb.a));
+            const src = live ?? (x.spots ? asset(printBackURL(design, tee)) : x.who === "alone" ? TEE_STILL(design, nearestTee(x.thumb.a)) : STILL(design, x.thumb.a));
             return (
               <button
                 key={x.id} onClick={() => void goShot(i)} aria-label={x.label} aria-current={i === shotI}
@@ -802,7 +822,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           {TEE_SIDES.map((v, i) => (
             <button key={v.label} onClick={() => turnTee(i)} className={`hit ${i === spotI ? "font-semibold" : "text-quiet hover:text-ink"}`}>{v.label}</button>
           ))}
-          <span className="ml-auto text-quiet">drag to turn it<span className="hidden md:inline">, or press 1 2 3</span></span>
+          <span className="text-quiet">drag to turn it<span className="hidden md:inline">, or press 1 2 3</span></span>
+          {zoomRow}
         </div>
       ) : null}
       {shot.id === "worn" ? (
