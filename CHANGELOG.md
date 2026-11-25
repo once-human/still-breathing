@@ -2,6 +2,14 @@
 
 Versions follow [SemVer](https://semver.org): MAJOR for a new site or pipeline structure, MINOR for a new garment, colourway, size or studio feature, PATCH for fixes to renders, numbers or copy. Every release is a git tag `vX.Y.Z` with its renders attached to the GitHub release.
 
+## 0.16.1 — 2026-11-25
+02 is i am a party now, after the Fred again.. song.
+
+### Shirts
+- The title reads i am a party, with a small mirror ball hanging beside it: a real ball of mirror tiles, rendered and cut into flat tones, a blue light glancing off one side.
+- the warmest place in the city sits lower now, over the crowd, out of the sky. The nose line is can't feel my nose. don't care. Both notes have small arrows.
+- New try-on textures and prints to match.
+
 ## 0.16.0 — 2026-11-25
 02 is called envelops me now, after a Fred again.. song, the way Still Breathing is.
 
