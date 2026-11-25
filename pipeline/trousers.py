@@ -48,17 +48,18 @@ TOPZ = crotch - 0.05
 
 
 def slice_(s, z, d=0.008):
-    """one leg's slice at a height: its centre and its reach"""
+    """one leg's slice at a height: its centre and its mean reach (a thigh is no circle: its widest reach would
+    balloon the leg)"""
     pts = []
     while len(pts) < 8 and d < 0.1:            # MakeHuman's shins are long quads: widen the band until it holds a ring
         pts = [p for p in legs if p.x * s > 0.01 and abs(p.z - z) < d]; d *= 1.5
     c = sum(pts, Vector()) / len(pts)
-    return c, max((p - c).xy.length for p in pts)
+    return c, sum((p - c).xy.length for p in pts) / len(pts)
 
 
 for s in (1, -1):
     c0, r0 = slice_(s, TOPZ); c1, _ = slice_(s, ANKLE + 0.06)
-    r0 += 0.012
+    r0 += 0.02
     N, K = 48, 24
     rings = []
     for k in range(K + 1):
