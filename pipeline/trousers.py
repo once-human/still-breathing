@@ -36,7 +36,7 @@ print("hip", round(HIP, 3), "waist", round(WAIST, 3), "hem", round(HEM, 3), flus
 # ---------- 1. the shell ----------
 bm = bmesh.new(); bm.from_mesh(me); bm.normal_update()
 for v in bm.verts:
-    v.co += v.normal * (OUT := 0.025)          # grown out, remeshed, then pulled back IN (a closing): the seat and the
+    v.co += v.normal * 0.025        # grown out, remeshed, then pulled back IN (a closing): the seat and the
 IN = 0.017                                     # crotch bridge as denim does, 8 mm of ease is left
 legs = [p for p in P if p.z < HIP - 0.06 and abs(p.x) < 0.25]
 crotch = min((p.z for p in P if abs(p.x) < 0.01 and HIP - 0.2 < p.z < HIP), default=HIP - 0.1)   # thighs that touch lower down are not it
