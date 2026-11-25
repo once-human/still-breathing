@@ -18,7 +18,7 @@ const W = {
     "tying the laces..", "walking in..", "finding a spot near the front..", "shoulders loose..", "outfit check..",
     "ready in five..", "deep breath..",
   ],
-  /** up close: the tee laid flat on the table */
+  /** on the table: the tee laid flat, from above */
   close: [
     "closer..", "leaning in..", "laying it flat..", "on the table..", "smoothing it out..", "nose to the print..",
     "counting the threads..", "reading the small print..", "finding the details..", "under the lamp..", "every line..",

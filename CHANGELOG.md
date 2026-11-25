@@ -8,7 +8,12 @@ Versions follow [SemVer](https://semver.org), counted by what a buyer would noti
 The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.Y.Z` and a GitHub release with the studio renders that changed attached.
 
 ## Unreleased
+### New
+- On the table: the tee laid flat on a worn wooden table by a window, with real shadows. A hard wind blows in from the right and carries dry leaves across the boards and the tee (now and then a tuft of fluff, a seed's parachute, a thread, a hair). They tremble as the air builds, slide, lift off in a gust, swing and tumble through the air, land, settle a moment and move on with the next gust. The cotton breathes and ripples in the wind.
+
 ### Changed
+- Up close is now on the table, and zooms out only a little.
+- The print stays at full quality at every zoom, and renders sharper whenever the machine has room for it.
 - Every load says something different: a word in hand picked at random from twenty or more for that kind of load (dressing it.., lights down.., closer.., swapping shirts.., in the darkroom.., tape out.. and the rest), never the same twice in a row. No more breathing in..
 - The actual size button is called artwork.
 

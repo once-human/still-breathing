@@ -32,7 +32,8 @@ type Engine = {
  * The carousel: three views, each made for one thing. The cloth and the air stay live in every one.
  *   the tee   the tee by itself on paper, turning slowly; drag to turn it, or pick front or back
  *   worn      someone wearing it at the place you pick: turn, zoom, the light, the photo
- *   up close  framed on a print (the back, or the chest), cloth and all: zoom right in and slide along it
+ *   on the table  laid flat on a worn table, the back or the front up, shot from above in window light: zoom right
+ *             in and slide along it
  */
 type Spot = {
   label: string; yaw: number;
@@ -50,7 +51,7 @@ type Shot = {
   turn: boolean; spin: boolean;
   zoom: [number, number];
   pan: boolean;
-  /** up close: the prints it frames, the first one first */
+  /** on the table: the prints it frames, the first one first */
   spots?: Spot[];
   /** its little preview: a rendered frame (angle) and the crop of it */
   thumb: { a: number; crop: [number, number, number] };
@@ -59,10 +60,12 @@ const SHOTS: Shot[] = [
   { id: "tee", label: "the tee", who: "alone", paper: true, yaw: 180, turn: true, spin: true, zoom: [1, 5], pan: true, thumb: { a: 180, crop: [1.35, 0, 0.1] } },
   { id: "worn", label: "worn", who: "worn", paper: false, yaw: null, turn: true, spin: true, zoom: [1, 5], pan: true, thumb: { a: 0, crop: [1, 0, 0] } },
   {
-    id: "close", label: "up close", who: "alone", paper: true, yaw: 180, turn: false, spin: false, zoom: [1.85, 7], pan: true, thumb: { a: 180, crop: [1.85, 0, 0.07] },
+    id: "close", label: "on the table", who: "alone", paper: true, yaw: 180, turn: false, spin: false, zoom: [1.6, 8.75], pan: true, thumb: { a: 180, crop: [1.85, 0, 0.07] },
     spots: [
-      { label: "back", yaw: 180, open: [1.85, 0, 0.07], zoom: [1.85, 7] },
-      { label: "front", yaw: 0, open: [3.6, 0.176, 0.3], zoom: [3.6, 7] },
+      // the flat lay (lib/viewer/flat.ts): it opens on the print of the side up, the neck just in at the top; zoomed
+      // out a little, most of the tee lies on the table
+      { label: "back", yaw: 180, open: [2.3, 0, 0.06], zoom: [1.6, 8.75] },
+      { label: "front", yaw: 0, open: [3.75, 0.155, 0.184], zoom: [1.6, 8.75] },
     ],
   },
 ];
@@ -70,7 +73,7 @@ const TEE_SIDES = [{ label: "front", yaw: 0 }, { label: "back", yaw: 180 }];
 /** the shop tee on its own form, no one in it */
 const ALONE: Variant = { dir: "form-M", size: "M", pose: "stand", body: false };
 
-/** keys 1 2 3: the same three faces in every view (up close has no ¾) */
+/** keys 1 2 3: the same three faces in every view (on the table has no ¾) */
 const FACES = [{ label: "front", yaw: 0 }, { label: "¾", yaw: 30 }, { label: "back", yaw: 180 }];
 /** actual size: how wide each print is on the shirt, in cm, and a bank card's width to check the screen against */
 const PRINT_CM: Record<string, number> = { back: 38.1, front: 10.5 };
@@ -138,9 +141,9 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
   const flatDrag = useRef<{ x: number; a: number } | null>(null);
   const [shotI, setShotI] = useState(0);
   const shotRef = useRef<Shot>(SHOTS[0]);
-  /** the zoom range in force: the shot's, or up close the print it frames */
+  /** the zoom range in force: the shot's, or on the table the print it frames */
   const rangeRef = useRef<[number, number]>(SHOTS[0].zoom);
-  // which side of the tee, or which print up close, was picked last (-1: none, it's turning on its own)
+  // which side of the tee, or which print on the table, was picked last (-1: none, it's turning on its own)
   const [spotI, setSpotI] = useState(-1);
   const spotRef = useRef(0);
   const [switching, setSwitching] = useState(false);
@@ -217,19 +220,20 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         const r = st.getBoundingClientRect();
         return [((e.clientX - r.left) / r.width) * 2 - 1, 1 - ((e.clientY - r.top) / r.height) * 2] as const;
       };
-      // close in, the back print is swapped for the full source resolution (fetched once per design)
-      const sharpened = new Set<string>();
+      // the back print at its full source resolution, fetched in a quiet moment (or the moment you zoom in); the
+      // raster keeps one design's at a time, so it's fetched again only after another design has been shown
+      const sharpening = new Set<string>();
       let ptFull: { key: string; url: string } | null = null, ptFullOn = "";
       const sharpen = async () => {
         const key = `${s.design}-${s.tee}`;
-        if (sharpened.has(key)) return;
-        sharpened.add(key);
+        if (sharpening.has(key) || raster.hasFull(key)) return;
+        sharpening.add(key);
         try {
           const d = s.design, t = s.tee, url = printBackURL(d, t, true);
-          raster.setFullPrint(d, t, await raster.printTexture(url)); s.dirty = true;
+          raster.setFullPrint(d, t, await raster.printTexture(url, !lite)); s.dirty = true;
           // the path tracer takes it later, at rest (it only traces then), so the upload never lands mid-zoom
           ptFull = { key, url };
-        } catch { /* the regular print stays */ }
+        } catch { /* the regular print stays */ } finally { sharpening.delete(key); }
       };
 
       const maps: Record<string, Promise<[ImageBitmap, ImageBitmap]>> = {};
@@ -299,7 +303,12 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
 
       // ---------- sizing: always full sharpness, never a lower-resolution stand-in while it moves ----------
       // a phone or a small machine draws at 1.5x at most: still sharp, and every drag stays at full frame rate
-      const dpr = () => Math.min(devicePixelRatio || 1, lite ? 1.5 : 2);
+      // above that, while the frame rate holds, it draws more pixels than the screen has (the browser averages them
+      // down: thin lines in the artwork stay clean and unbroken at any zoom); the moment frames start to slip it
+      // steps back down. It starts at the screen's own resolution, so the first frame is as quick as ever.
+      let ss = 1;
+      const SS_MAX = lite ? 1 : Math.max(1, Math.min(2, 3 / (devicePixelRatio || 1)));
+      const dpr = () => Math.min(devicePixelRatio || 1, lite ? 1.5 : 2) * ss;
       const traceK = () => Math.min(devicePixelRatio || 1, 1.5);
       const size = () => {
         const w = st.clientWidth, h = st.clientHeight;
@@ -420,6 +429,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
 
       // ---------- loop ----------
       let raf = 0, shown = -1, firstFrame = true, prevT = 0, traced = false;
+      const gov = { n: 0, ms: 0 };
       const loop = (now: number) => {
         raf = requestAnimationFrame(loop);
         if (process.env.NODE_ENV !== "production") Object.assign(window, { __sb: { pt, raster, s, zm, SCENES, spin: () => spin } });
@@ -431,6 +441,16 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         // motion needs; only turning it by hand gets every refresh of a fast screen
         if (!s.drag && prevT && now - prevT < 1000 / 60 - 3) return;
         const dt = prevT ? Math.min(0.1, (now - prevT) / 1000) : 1 / 60;
+        // the quality governor: over each second and a half of drawing, a steady 60 lets it draw finer, a slipping
+        // frame rate makes it draw coarser (never below the screen's own pixels)
+        if (prevT && !firstFrame) {
+          gov.n++; gov.ms += now - prevT;
+          if (gov.n >= 90) {
+            const avg = gov.ms / gov.n; gov.n = 0; gov.ms = 0;
+            const next = avg > 21 ? Math.max(1, ss - 0.25) : avg < 17.6 ? Math.min(SS_MAX, ss + 0.25) : ss;
+            if (next !== ss) { ss = next; size(); }
+          }
+        }
         prevT = now;
         if (firstFrame) s.yaw = angRef.current;   // pick up wherever the photos were turned to while this loaded
         // auto-turn: eases out when the pointer comes over the tee (or it's being turned, or a view was picked)
@@ -451,7 +471,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           s.dirty = true;
         }
         const moving = s.drag || s.goal !== null || spin !== 0 || zooming;
-        raster.detail(zm.z > 1.3);
+        // the full print: everywhere once it's in (with its mips), or on a small device only zoomed in
+        raster.detail(!lite || zm.z > 1.3);
         raster.setView(s.yaw, [zm.cx, zm.cy, zm.z], st.clientWidth, st.clientHeight);
         const swinging = raster.simulate(dt);
         // every display frame is drawn (60, 120, whatever the screen runs at): a skipped frame in a steady turn
@@ -513,6 +534,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           const [c, o] = await Promise.all([pt ? colourMaps(d, t) : Promise.resolve(null), raster.setLook(d, t)]).then(([m]) => m ?? [null, null]);
           s.design = d; s.tee = t; raster.setScene(scene, t === "cream");
           if (pt && c && o) { pt.setColourway(c, o); ptFullOn = ""; pt.setScene(scene, FABRIC[t], t === "cream"); }
+          if (!lite && !firstFrame) void sharpen();
           s.dirty = true; lastSig = "";
           await frames(2);
         },
@@ -554,6 +576,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           s.goal = null; s.vel = 0; spin = 0;
           s.yaw = sp?.yaw ?? sh.yaw ?? wornYaw;
           if (JSON.stringify(v) !== JSON.stringify(s.variant) || sceneOf(v) !== scene) await loadVariant(v);
+          // on the table the tee is laid flat on the table, the side picked up, the cotton settled afresh every time
+          await raster.setFlat(sh.id === "close" ? (sp?.label === "front" ? "front" : "back") : null);
           s.dirty = true; lastSig = "";
           await frames(2);
         },
@@ -582,7 +606,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
     try { await change(); } finally { if (turn === veilTurn.current) { setVeil(false); setSwitching(false); } }
     return turn === veilTurn.current;
   };
-  /** the current view's picture for the strip (up close, only its first framing) */
+  /** the current view's picture for the strip (on the table, only its first framing) */
   const capture = async () => {
     const e = engine.current, sh = shotRef.current, d = lookRef.current.design;
     if (!e || (sh.spots && spotRef.current > 0)) return;
@@ -626,7 +650,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
   const spot = shot.spots?.[Math.max(0, spotI)];
   const nearest = (yaw: number) => ((Math.round(yaw / 30) * 30) % 360 + 360) % 360;
   const showAngle = (yaw: number) => { const a = nearest(yaw); angRef.current = a; setAng(a); };
-  /** a view, and up close which print it frames */
+  /** a view, and on the table which print it frames */
   const goShot = async (i: number, sp = 0) => {
     const n = (i + SHOTS.length) % SHOTS.length, sh = SHOTS[n];
     setShotI(n); setSpotI(sh.spots ? sp : -1); spotRef.current = sp;
@@ -686,7 +710,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
     try { localStorage.setItem(SCALE_KEY, String(n)); } catch { /* not kept */ }
     return n;
   });
-  // the rendered frames framed the way up close frames the live view (the same crop of the same camera)
+  // the rendered frames framed the way the table view frames the live view (the same crop of the same camera)
   const stillCrop = spot && mode !== "3d"
     ? { transform: `scale(${spot.open[0]}) translate(${-spot.open[1] * 50}%, ${spot.open[2] * 50}%)` } : undefined;
   const dark = !shot.paper && sceneId === "show";
@@ -792,7 +816,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         <div className="absolute bottom-3 left-1/2 z-20 hidden -translate-x-1/2 gap-2 md:flex" role="group" aria-label="Views">
           {SHOTS.map((x, i) => {
             const live = thumbs[`${design}-${x.id}`];
-            // until a view has been seen live: the print itself for up close, a rendered frame for the others
+            // until a view has been seen live: the print itself for the table, a rendered frame for the others
             const src = live ?? (x.spots ? asset(printBackURL(design, tee)) : x.who === "alone" ? TEE_STILL(design, nearestTee(x.thumb.a)) : STILL(design, x.thumb.a));
             return (
               <button

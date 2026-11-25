@@ -10,6 +10,7 @@ import { CAMERA, VFOV, ASPECT, SWEEP, FLOOR, KNIT_REPEAT, lightFrame, radiance, 
 import type { TeeGeometry } from "./pathtracer";
 import { grab, bitmap } from "./grab";
 import { Cloth, buildNetAsync, offsetTexture, slopeTextures, clothNodes } from "./cloth";
+import type { FlatLay, LookNodes, Side } from "./flat";
 
 export const ASSET = "/tee/fit/";
 export type Pose = "stand" | "up" | "sit";
@@ -136,7 +137,7 @@ export class Raster {
       return rl;
     });
     this.paperMat.color.setRGB(...s.paper, THREE.LinearSRGBColorSpace);
-    this.sweep.visible = !s.open;
+    this.sweepOn = !s.open; this.sweep.visible = this.sweepOn && !this.flat?.side;
     this.scene.background = new THREE.Color().setRGB(...s.world, THREE.LinearSRGBColorSpace);
     this.envOn = !!s.env; this.envLight = s.envLight ?? 0; this.world = s.world; this.showEnv();
   }
@@ -232,15 +233,19 @@ export class Raster {
   }
 
   /**
-   * The full source resolution of a back print, for close up. Close up the print is only ever magnified, so it
-   * needs no mip chain and no anisotropic filtering: uploaded as one plain level (a third less memory, no mip
-   * build), and only bound while zoomed in; zoomed out, the regular print with its mips is used.
+   * The full source resolution of a back print. Where the machine can hold it, it comes with its mip chain and
+   * full anisotropic filtering and is used at every zoom (the artwork is the point: it's never shown softer than
+   * its source allows); on a small device it's one plain level, bound only while zoomed in. One design's full
+   * print is kept at a time.
    */
   setFullPrint(design: string, t: "black" | "cream", tex: THREE.Texture) {
-    this.fullTex[`${design}-${t}`] = tex;
+    const key = `${design}-${t}`;
+    for (const [k, old] of Object.entries(this.fullTex)) if (k !== key) { if (this.nodes?.back.value === old) this.nodes.back.value = this.backTex[k] ?? this.nodes.back.value; old.dispose(); delete this.fullTex[k]; }
+    this.fullTex[key] = tex;
     this.detail(this.detailOn);
   }
   private fullTex: Record<string, THREE.Texture> = {};
+  hasFull(key: string) { return !!this.fullTex[key]; }
   private detailOn = false;
   detail(on: boolean) {
     this.detailOn = on;
@@ -249,10 +254,11 @@ export class Raster {
     if (want && this.nodes.back.value !== want) this.nodes.back.value = want;
   }
   current = "";
-  async printTexture(url: string) {
+  async printTexture(url: string, mips: boolean) {
     const t = new THREE.Texture(await bitmap(url));
-    t.flipY = false; t.colorSpace = THREE.SRGBColorSpace;
-    t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter; t.anisotropy = 1;
+    t.flipY = false; t.colorSpace = THREE.SRGBColorSpace; t.magFilter = THREE.LinearFilter;
+    if (mips) { t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.anisotropy = this.maxAniso; }
+    else { t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.anisotropy = 1; }
     t.needsUpdate = true;
     return t;
   }
@@ -348,6 +354,7 @@ export class Raster {
       m.normalNode = cloth.bend(normalMap(blended.mul(0.5).add(0.5)));
       m.positionNode = cloth.position;
       this.outer = m;
+      this.lookNodes = { color: m.colorNode as LookNodes["color"], rough: m.roughnessNode as LookNodes["rough"], sheen: m.sheenNode as LookNodes["sheen"], relief: blended as unknown as LookNodes["relief"], fabric: this.fabric as unknown as LookNodes["fabric"] };
       this.nodes = { back: backN, front: frontN, normal: normalN };
     } else if (this.nodes) {
       this.nodes.back.value = c0; this.nodes.front.value = o0; this.nodes.normal.value = normalP;
@@ -449,6 +456,7 @@ export class Raster {
   }
 
   setCamera(c: Camera) {
+    this.target.set(...c.target);
     this.camera.position.set(...c.pos);
     this.camera.lookAt(...c.target);
   }
@@ -476,10 +484,37 @@ export class Raster {
   private still = new THREE.Matrix3();
   /** advance the cloth (the person stands still while the camera goes round: only the air moves it); true while it moves */
   simulate(dt: number) {
+    if (this.flat?.side) return this.flat.tick(dt);
     if (!this.cloth) return false;
     this.cloth.setPose(this.still, this.pivot.position, 1, dt);
     return this.cloth.step(dt);
   }
+
+  /**
+   * Up close: the tee laid flat on the table, `side` up, settled afresh each time (null: back on its form).
+   * Only one of the two is in the scene: the form, its paper and its lights are hidden while the table is out.
+   */
+  private flat: FlatLay | null = null;
+  private lookNodes: LookNodes | null = null;
+  private sweepOn = true;
+  async setFlat(side: Side | null) {
+    if (side && this.lookNodes) {
+      if (!this.flat) {
+        const { FlatLay } = await import("./flat");
+        this.flat = new FlatLay(this.lookNodes, this.maxAniso);
+        this.scene.add(this.flat.group);
+        // only the window over the table casts shadows (the studio's softboxes don't), so this costs nothing elsewhere
+        this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      }
+      await this.flat.place(side, { pos: this.camera.position, target: this.target }, matchMedia("(prefers-reduced-motion: reduce)").matches);
+      this.flat.group.visible = true;
+    } else if (this.flat) { this.flat.side = null; this.flat.group.visible = false; }
+    const on = !!this.flat?.side;
+    this.pivot.visible = this.rig.visible = this.hemi.visible = !on;
+    this.sweep.visible = this.sweepOn && !on;
+    if (on) await this.renderer.compileAsync(this.scene, this.camera).catch(() => {});
+  }
+  private target = new THREE.Vector3(...CAMERA.target);
 
   setKnit(on: boolean) { this.knit.value = on ? 0.55 : 0; }
 
