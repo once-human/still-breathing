@@ -37,8 +37,42 @@ jobs:
           P=$(echo "${{ inputs.places }}" | tr -d ' ' | sed 's/[^,][^,]*/"&"/g')
           echo "matrix={\"place\":[$P],\"strip\":[$(seq -s, 0 $(( ${{ inputs.strips }} - 1 )))]}" >> "$GITHUB_OUTPUT"
 
+  canopy:
+    # the show's fabric canopy, simulated once as cloth (pipeline/canopy.py), shared with every strip
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/blender
+          key: blender-${{ env.BLENDER }}
+      - uses: actions/cache@v4
+        id: cloth
+        with:
+          path: ~/.cache/stage
+          key: canopy-${{ hashFiles('pipeline/canopy.py') }}
+      - name: Blender ${{ env.BLENDER }}
+        if: steps.cloth.outputs.cache-hit != 'true'
+        run: |
+          if [ ! -x ~/blender/blender ]; then
+            mkdir -p ~/blender
+            curl -sSL "https://download.blender.org/release/Blender${BLENDER%.*}/blender-${BLENDER}-linux-x64.tar.xz" | tar -xJ -C ~/blender --strip-components=1
+          fi
+          sudo apt-get -qq update && sudo apt-get -qq install -y libxi6 libxxf86vm1 libxfixes3 libxrender1 libgl1 libxkbcommon0 libsm6 > /dev/null
+      - name: Hang the canopy
+        if: steps.cloth.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.cache/stage
+          ~/blender/blender -b --factory-startup -P pipeline/canopy.py -- ~/.cache/stage/canopy.npz | grep -E "band|saved|Error|Traceback"
+      - run: mkdir -p cloth && cp ~/.cache/stage/canopy.npz cloth/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: canopy
+          path: cloth/canopy.npz
+          retention-days: 7
+
   strip:
-    needs: plan
+    needs: [plan, canopy]
     runs-on: ubuntu-latest
     timeout-minutes: 300
     strategy:
@@ -51,11 +85,6 @@ jobs:
         with:
           path: ~/blender
           key: blender-${{ env.BLENDER }}
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/polyhaven
-          key: polyhaven-${{ hashFiles('pipeline/stage.py') }}
-          restore-keys: polyhaven-
       - name: Blender ${{ env.BLENDER }}
         run: |
           if [ ! -x ~/blender/blender ]; then
@@ -63,10 +92,12 @@ jobs:
             curl -sSL "https://download.blender.org/release/Blender${BLENDER%.*}/blender-${BLENDER}-linux-x64.tar.xz" | tar -xJ -C ~/blender --strip-components=1
           fi
           sudo apt-get -qq update && sudo apt-get -qq install -y libxi6 libxxf86vm1 libxfixes3 libxrender1 libgl1 libxkbcommon0 libsm6 > /dev/null
+      - uses: actions/download-artifact@v4
+        with: { name: canopy, path: cloth }
       - name: Render ${{ matrix.place }} strip ${{ matrix.strip }}
         run: |
           mkdir -p out; N=$(printf "${{ matrix.place }}-s%02d" ${{ matrix.strip }})
-          ~/blender/blender -b --factory-startup -P pipeline/stage.py -- ${{ matrix.place }} "$PWD/out/$N.exr" ${{ matrix.strip }} ${{ inputs.strips }} ${{ inputs.samples }} ${{ inputs.width }} \
+          CANOPY="$PWD/cloth/canopy.npz" ~/blender/blender -b --factory-startup -P pipeline/stage.py -- ${{ matrix.place }} "$PWD/out/$N.exr" ${{ matrix.strip }} ${{ inputs.strips }} ${{ inputs.samples }} ${{ inputs.width }} \
             | grep -E "Fra:.*Sample [0-9]+/[0-9]+$|saved|Error|Traceback" | tail -5
           test -s "out/$N.npy"
       - uses: actions/upload-artifact@v4
