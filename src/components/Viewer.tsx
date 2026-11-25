@@ -60,12 +60,12 @@ const SHOTS: Shot[] = [
   { id: "tee", label: "the tee", who: "alone", paper: true, yaw: 180, turn: true, spin: true, zoom: [1, 5], pan: true, thumb: { a: 180, crop: [1.35, 0, 0.1] } },
   { id: "worn", label: "worn", who: "worn", paper: false, yaw: null, turn: true, spin: true, zoom: [1, 5], pan: true, thumb: { a: 0, crop: [1, 0, 0] } },
   {
-    id: "close", label: "on the table", who: "alone", paper: true, yaw: 180, turn: false, spin: false, zoom: [1.6, 11], pan: true, thumb: { a: 180, crop: [1.85, 0, 0.07] },
+    id: "close", label: "on the table", who: "alone", paper: true, yaw: 180, turn: false, spin: false, zoom: [1.3, 11], pan: true, thumb: { a: 180, crop: [1.85, 0, 0.07] },
     spots: [
       // the flat lay (lib/viewer/flat.ts): it opens on the print of the side up, the neck just in at the top; zoomed
       // out a little, most of the tee lies on the table
-      { label: "back", yaw: 180, open: [2.3, 0, 0.06], zoom: [1.6, 11] },
-      { label: "front", yaw: 0, open: [3.75, 0.155, 0.184], zoom: [1.6, 11] },
+      { label: "back", yaw: 180, open: [2.3, 0, 0.06], zoom: [1.3, 11] },
+      { label: "front", yaw: 0, open: [3.75, 0.155, 0.184], zoom: [1.3, 11] },
     ],
   },
 ];
@@ -205,10 +205,10 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
       const zlim = () => rangeRef.current;
       const clampZoom = () => {
         zm.zt = Math.min(zlim()[1], Math.max(zlim()[0], zm.zt));
-        // the crop stays inside the frame; on the table a little inside it, more across than up and down, so
-        // panning never runs far out along the bare boards
-        const flat = shotRef.current.id === "close";
-        const lx = Math.max(0, (flat ? 0.84 : 1) - 1 / zm.zt), ly = Math.max(0, (flat ? 0.94 : 1) - 1 / zm.zt);
+        // the crop stays inside the frame; on the table, inside its widest view (the whole tee, sleeves and all),
+        // so how far it pans grows with the zoom and never runs out along the bare boards
+        const edge = shotRef.current.id === "close" ? 1 / zlim()[0] : 1;
+        const lx = Math.max(0, edge - 1 / zm.zt), ly = lx;
         zm.cxt = Math.min(lx, Math.max(-lx, zm.cxt)); zm.cyt = Math.min(ly, Math.max(-ly, zm.cyt));
       };
       /** zoom to zt keeping the point under (sx, sy) (viewport NDC) where it is */
