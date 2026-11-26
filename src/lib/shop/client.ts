@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { SHOP, priceOf } from "@/content/shop";
 import { DESIGNS, SIZE_ORDER, type Design, type Size } from "@/content/tee";
+import { track } from "@/components/Beacon";
 import type { BagItem, PayView } from "./types";
 
 /**
@@ -70,6 +71,7 @@ const subscribe = (f: () => void) => {
 };
 
 function put(design: Design, size: Size) {
+  track("bag", design, size); // the activity count: cookieless, nothing under Do Not Track or GPC
   const bag = [...state.bag];
   const l = bag.find((x) => x.design === design && x.size === size);
   if (l) bag.splice(bag.indexOf(l), 1, { ...l, quantity: l.quantity + 1 });
