@@ -1,14 +1,14 @@
 import "server-only";
 import { DESIGNS, SIZE_ORDER, type Design, type Size } from "@/content/tee";
-import type { Account } from "@/lib/shop/account";
+import { listAccounts, type Account } from "@/lib/shop/account";
 import { listOrders, refunded, type Order } from "@/lib/shop/orders";
 import { products } from "@/lib/shop/products";
 import { rows } from "./db";
 import { getSettings, type Settings } from "./settings";
 
 /**
- * The shop's records as the admin reads them: orders through the shop's listOrders, accounts from their rows (read
- * only: every change goes through the shop's own functions). A one-person shop has hundreds of orders, not millions, so they're
+ * The shop's records as the admin reads them: orders and accounts through the shop's listOrders and listAccounts
+ * (read only: every change goes through the shop's own functions). A one-person shop has hundreds of orders, not millions, so they're
  * read whole and worked out here.
  */
 export async function allOrders(): Promise<Order[]> {
@@ -23,8 +23,14 @@ export async function allOrders(): Promise<Order[]> {
 }
 
 export async function allAccounts(): Promise<Account[]> {
-  const r = await rows<{ v: Account }>("SELECT value::jsonb AS v FROM kv WHERE key LIKE 'user:%' AND (expires_at IS NULL OR expires_at > now()) LIMIT 20000");
-  return r.map((x) => x.v).filter((a) => a && typeof a.email === "string");
+  // through the shop's listAccounts (newest first, 200 a page)
+  const out: Account[] = [];
+  for (let offset = 0; offset < 20000; offset += 200) {
+    const page = await listAccounts({ limit: 200, offset });
+    out.push(...page);
+    if (page.length < 200) break;
+  }
+  return out;
 }
 
 export type Fee = { payment_id: string; order_id: string; fee: number | null; tax: number | null; method: string | null; detail: string | null; settlement_id: string | null; settled_at: string | null; fetched_at: string };
