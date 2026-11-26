@@ -19,7 +19,7 @@ export const shownList = async () => (await catalog()).filter((p) => p.status !=
 export const shown = async () => new Set(await shownList());
 export const drafts = async () => (await catalog()).filter((p) => p.status === "draft").map((p) => p.id);
 
-/** one line for "what a shirt costs": "₹1,270 each" when they're all one price, "from ₹1,070" when not */
+/** one line for "what a shirt costs": "₹1,170 each" when they're all one price, "from ₹1,070" when not */
 export async function priceLine() {
   const list = (await catalog()).filter((p) => p.status !== "draft").map((p) => p.price);
   if (!list.length) return { each: "", from: "", one: true };

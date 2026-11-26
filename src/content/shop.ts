@@ -2,15 +2,16 @@ import type { Design, Size } from "@/content/tee";
 
 /**
  * The shop's facts. Price rule (Onkar, 2026-11-26): what the print partner charges for the shirt (the blank, plus the
- * print for that shirt's own front and back) plus ₹600, rounded up to the next ₹10 (raised from ₹400 by Onkar, 2026-11-26: every
- * shirt ₹1,270 then; ₹1,210 since the back became the partner's 13.5 x 18 in, 2026-11-26). Shipping (about ₹64), the payment fee and marketing come out of the ₹600; the buyer pays nothing on top.
+ * print for that shirt's own front and back) plus ₹500, rounded up to the next ₹10. For now every shirt sells at a fixed
+ * ₹1,170 (FIXED_PRICE), which beats the rule. Shipping (about ₹64), the payment fee and marketing come out of what's
+ * above cost; the buyer pays nothing on top.
  *
  * Partner rates, from its 2026 price list (qikink.com/help/payments-pricing/pricing, read 2026-11-26):
  * the UC22 blank ₹260; printing on a coloured garment ₹0.9 per sq in, at least ₹100 a placement; 5% GST on the goods.
  * Off white is costed at the coloured-garment rate too: the list's lower rate is for white garments, and off white
  * isn't white. Every price is worked out here, on the server, from these numbers.
  */
-export const RATES = { blank: 260, perSqIn: 0.9, minPerPlacement: 100, gst: 0.05, margin: 600 };
+export const RATES = { blank: 260, perSqIn: 0.9, minPerPlacement: 100, gst: 0.05, margin: 500 };
 
 const CM = 1 / 2.54;
 /** the print boxes, in inches (fronts from pipeline/fronts.py; every back is 13.5 x 18 in: the partner's
@@ -35,8 +36,11 @@ export const costOf = (d: Design) => {
   return Math.round((RATES.blank + placement(p.front) + placement(p.back)) * (1 + RATES.gst) * 100) / 100;
 };
 
-/** one shirt's price in rupees: cost + ₹600, up to the next ₹10 */
-export const priceOf = (d: Design) => Math.ceil((costOf(d) + RATES.margin) / 10) * 10;
+/** the price every shirt sells at, beating the rule (Onkar, 2026-11-26: ₹1,170); null lets the rule set it */
+export const FIXED_PRICE: number | null = 1170;
+
+/** one shirt's price in rupees: the fixed price, or else cost + the margin, up to the next ₹10 */
+export const priceOf = (d: Design) => FIXED_PRICE ?? Math.ceil((costOf(d) + RATES.margin) / 10) * 10;
 
 /** what each shirt is in the print partner's catalogue, per size: its SKU under "My Products" once the shirt is made
  *  there with its print files. A shirt with no SKUs isn't offered (fill these in from the partner's dashboard). */
@@ -49,7 +53,7 @@ export const PARTNER_SKUS: Record<Design, Partial<Record<Size, string>>> = {
 };
 
 export const SHOP = {
-  /** price of one shirt (all five cost the same today: ₹1,210), GST and shipping included */
+  /** price of one shirt (all five the same today: ₹1,170, fixed), GST and shipping included */
   price: Math.max(...(["c", "e", "a", "d", "f"] as Design[]).map(priceOf)),
   currency: "INR" as const,
   /** the name on the payment page, the emails and the bank statement */

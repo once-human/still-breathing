@@ -7,7 +7,7 @@ import { rupees } from "@/lib/shop/money";
 import { BagDrawerHost } from "./BagDrawer";
 
 /**
- * The buy controls for one shirt in the size picked: "add to bag · ₹1,270" (the main one) and "buy now" (into the
+ * The buy controls for one shirt in the size picked: "add to bag · ₹1,170" (the main one) and "buy now" (into the
  * bag and straight to checkout). Always there; the bag works in the browser whether or not payment is connected,
  * and checkout says so plainly when it isn't. variant "bar": one slim row, for the fixed bar on phones.
  */

@@ -1,4 +1,4 @@
-import { PARTNER_SKUS, costOf } from "@/content/shop";
+import { FIXED_PRICE, PARTNER_SKUS, costOf } from "@/content/shop";
 import { DESIGNS, SIZE_ORDER, type Colour, type Design, type Size } from "@/content/tee";
 import { kvKeys } from "./config";
 import { ShopError } from "./errors";
@@ -59,7 +59,7 @@ export const priceRule = (cost: number, margin: number) => Math.ceil((cost + mar
 
 function seed(d: Design, i: number): Omit<Product, "price"> {
   const x = DESIGNS[d];
-  return { id: d, no: x.no, slug: x.slug, name: x.name, city: x.city, colour: x.colour, about: x.about, frontText: x.front, backText: x.back, status: "live", cost: costOf(d), margin: null, fixedPrice: null, skus: PARTNER_SKUS[d], images: [], sort: i, updatedAt: null };
+  return { id: d, no: x.no, slug: x.slug, name: x.name, city: x.city, colour: x.colour, about: x.about, frontText: x.front, backText: x.back, status: "live", cost: costOf(d), margin: null, fixedPrice: FIXED_PRICE, skus: PARTNER_SKUS[d], images: [], sort: i, updatedAt: null };
 }
 
 const json = <T>(v: string | null, fallback: T): T => {
@@ -102,7 +102,7 @@ export async function products(opts: { fresh?: boolean } = {}): Promise<Product[
           colour: r[6] === "black" || r[6] === "cream" ? r[6] : p.colour,
           about: r[7] ?? p.about, frontText: r[8] ?? p.frontText, backText: r[9] ?? p.backText,
           status: r[10] === "draft" || r[10] === "soldout" || r[10] === "live" ? r[10] : p.status,
-          cost: numOr(r[11], p.cost)!, margin: numOr(r[12], null), fixedPrice: numOr(r[13], null),
+          cost: numOr(r[11], p.cost)!, margin: numOr(r[12], null), fixedPrice: numOr(r[13], p.fixedPrice),
           skus: { ...p.skus, ...json<Partial<Record<Size, string>>>(r[14], {}) },
           images: json(r[15], p.images), sort: numOr(r[16], p.sort)!, updatedAt: r[17],
         }
