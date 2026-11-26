@@ -31,6 +31,7 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 - The actual size button is called artwork.
 
 ### Fixed
+- The 3D view is much lighter on a laptop: the slow motion on its own (breathing, the breeze, the slow turn) is drawn at an even 30 frames a second, and only what you do yourself (turning, zooming) at 60 or more; it draws past the screen's own sharpness only when the graphics card has most of its time to spare, so the rest of the computer stays smooth.
 - No more spikes of cloth: a few points of the tee that the simulation had thrown out (a spike off his sleeve, torn-off flaps when sitting or with hands up) sit back in the cloth, in the shop and in fit mode.
 - The tee's inside is plain cotton again, as in the renders, instead of carrying the prints; and the 3D draws the outside of the tee first, so what it covers (its inside, the body under it) is never lit only to be hidden: about a fifth less work for the graphics card every frame.
 - On a graphics card that can't draw 60 frames a second, the breeze, the breathing and the slow turn run at an even 30 instead of a ragged 15 to 40, leaving the card time for the rest of the page; turning it by hand still gets every frame.

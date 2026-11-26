@@ -385,11 +385,14 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
 
       // ---------- sizing: always full sharpness, never a lower-resolution stand-in while it moves ----------
       // a phone or a small machine draws at 1.5x at most: still sharp, and every drag stays at full frame rate
-      // above that, while the frame rate holds, it draws more pixels than the screen has (the browser averages them
-      // down: thin lines in the artwork stay clean and unbroken at any zoom); the moment frames start to slip it
-      // steps back down. It starts at the screen's own resolution, so the first frame is as quick as ever.
+      // above that, while the graphics card has plenty of room (its own time per frame is known and short), it draws
+      // more pixels than the screen has, up to twice the screen's width in all (the browser averages them down: thin
+      // lines in the artwork stay clean and unbroken at any zoom); the moment the card gets busy it steps back down.
+      // A screen at 2x already draws that many. Where the card's time can't be read, it stays at the screen's own
+      // pixels: never pushed past what is known to be free, so the rest of the machine keeps its share of the card.
+      // It starts at the screen's own resolution, so the first frame is as quick as ever.
       let ss = 1;
-      const SS_MAX = lite ? 1 : Math.max(1, Math.min(2, 3 / (devicePixelRatio || 1)));
+      const SS_MAX = lite ? 1 : Math.max(1, Math.min(2, 2 / (devicePixelRatio || 1)));
       const dpr = () => Math.min(devicePixelRatio || 1, lite ? 1.5 : 2) * ss;
       const traceK = () => Math.min(devicePixelRatio || 1, 1.5);
       const size = () => {
@@ -525,23 +528,26 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         // while the page scrolls the viewer holds its frame and the page gets the whole GPU: a tee sliding past
         // doesn't need to breathe, and the scroll must never stutter
         if (!s.drag && !firstFrame && now - pageScroll < 200) { prevT = 0; return; }
-        // steady motion (the breeze, the auto-turn) runs at an even 60 frames a second, which is all slow
-        // motion needs; only turning it by hand gets every refresh of a fast screen. On a graphics card that can't
-        // draw 60 it runs at an even 30 instead of a ragged 20 to 40: the same slow motion, every frame on time, and
-        // the card has time left for the rest of the page (scrolling, the strip, the buttons)
-        if (!s.drag && prevT && now - prevT < 1000 / (gov.slow ? 30 : 60) - 3) return;
+        // Steady motion on its own (the breath, the breeze, the slow auto-turn: a few millimetres or a third of a
+        // degree a frame) is drawn at an even 30 frames a second, every frame on time, which is all motion that slow
+        // needs: half the work of 60 for the same picture, so the card and the processor stay free for the rest
+        // of the machine. Whatever you do yourself (turning it, a zoom, a view easing to where you picked) gets 60,
+        // and a drag every refresh of a fast screen. A card that can't draw 60 even then draws those at 30 too.
+        const handled = s.drag || s.goal !== null || pinch !== null
+          || Math.abs(zm.zt - zm.z) > 1e-4 || Math.abs(zm.cxt - zm.cx) > 1e-5 || Math.abs(zm.cyt - zm.cy) > 1e-5;
+        const fps = handled && !gov.slow ? 60 : 30;
+        if (!s.drag && prevT && now - prevT < 1000 / fps - 3) return;
         const dt = prevT ? Math.min(0.1, (now - prevT) / 1000) : 1 / 60;
-        // the quality governor: over each second and a half of drawing, a steady 60 lets it draw finer, a slipping
-        // frame rate makes it draw coarser (never below the screen's own pixels)
+        // the quality governor: over every 90 frames drawn, frames that come late make it draw coarser (never below
+        // the screen's own pixels), and only a card with most of its time to spare lets it draw finer
         if (prevT && !firstFrame) {
-          gov.n++; gov.ms += now - prevT;
+          gov.n++; gov.ms += Math.max(0, now - prevT - 1000 / (s.drag ? 60 : fps));
           if (gov.n >= 90) {
-            const avg = gov.ms / gov.n, g = raster.gpuMs; gov.n = 0; gov.ms = 0;
-            // finer only while the card has room to spare (its own time, where it's known, not only the frame rate)
-            const next = avg > 1000 / (gov.slow ? 30 : 60) + 4.3 || g > 15 ? Math.max(1, ss - 0.25)
-              : avg < 17.6 && !gov.slow && (!g || g < 10) ? Math.min(SS_MAX, ss + 0.25) : ss;
+            const late = gov.ms / gov.n, g = raster.gpuMs; gov.n = 0; gov.ms = 0;
+            const next = late > 4.3 || g > 12 ? Math.max(1, ss - 0.25)
+              : late < 1 && !gov.slow && g && g < 6 ? Math.min(SS_MAX, ss + 0.25) : ss;
             if (next !== ss) { ss = next; size(); }
-            // even 30 once it's at the screen's own pixels and still can't draw 60; back to 60 when it easily can
+            // 30 for what you do too, once it's at the screen's own pixels and still can't draw 60; back when it easily can
             else if (ss === 1 && g) gov.slow = gov.slow ? g > 11 : g > 16;
           }
         }
