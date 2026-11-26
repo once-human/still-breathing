@@ -7,6 +7,7 @@ import { ShirtCard } from "@/components/ShirtCard";
 import { Facts } from "@/components/Facts";
 import { CURRENT, fmtDays, paperStill, shirtHref, shirtsOf, STILL_H, STILL_W } from "@/content/lineups";
 import { pageMeta } from "@/lib/site";
+import { SHOP } from "@/content/shop";
 
 export const metadata: Metadata = pageMeta({
   description: "sahn makes one shirt per moment. Lineup 01: five fan-made shirts for Fred again..'s December shows in India, drawn by hand from the crowd and the grounds, made to order and sent anywhere in India.",
@@ -22,7 +23,7 @@ export default function Home() {
         <div className="page-in grid grid-cols-2 gap-4 border-t border-line pt-1.5 text-[13px] md:grid-cols-4">
           <Link href={`/${l.slug}`} className="font-semibold hover:text-blue">{l.title}</Link>
           <span className="text-right text-quiet md:text-left">{l.tag}</span>
-          <span className="hidden text-quiet md:block">made to order, sent anywhere in india</span>
+          <span className="hidden text-quiet md:block">made to order, sent anywhere in {SHOP.where}</span>
           <span className="hidden text-right tnum md:block"><Countdown short /></span>
         </div>
         <div className="mt-4 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">

@@ -3,6 +3,7 @@ import { CURRENT, shirtHref, shirtLabel, shirtsOf } from "@/content/lineups";
 import { HELP_LINKS, POLICY_LINKS } from "@/lib/site";
 import { shopOpen } from "@/lib/shop/config";
 import pkg from "../../package.json";
+import { SHOP } from "@/content/shop";
 
 const col = "border-t border-line pt-1.5";
 const link = "text-quiet transition-colors hover:text-ink";
@@ -51,7 +52,7 @@ export function Footer() {
       <div className="mt-6 grid grid-cols-2 gap-x-4 px-4 text-[13px] text-quiet md:grid-cols-4">
         <span className={col}>© {new Date().getFullYear()} sahn</span>
         <span className={col}>made to order in india</span>
-        <span className={`${col} hidden md:block`}>sent anywhere in india</span>
+        <span className={`${col} hidden md:block`}>sent anywhere in {SHOP.where}</span>
         <span className={`${col} hidden text-right tnum md:block`}>v{pkg.version}</span>
       </div>
 

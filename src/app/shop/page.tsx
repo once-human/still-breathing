@@ -23,7 +23,7 @@ export default function Shop() {
         <span className="font-semibold">shop</span>
         <span className="text-right text-quiet md:text-left">{rupees(SHOP.price)} each, all taxes and shipping included</span>
         <span className="hidden text-quiet md:block">made to order</span>
-        <span className="hidden text-right text-quiet md:block">sent anywhere in india</span>
+        <span className="hidden text-right text-quiet md:block">sent anywhere in {SHOP.where}</span>
       </div>
       <h1 className="page-in-2 bigword mt-6 text-[30vw] md:text-[22vw]">shop</h1>
 

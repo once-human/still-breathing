@@ -1,6 +1,6 @@
 "use client";
 
-import { STATES, type Details } from "@/lib/shop/india";
+import { SHIP_STATES, type Details } from "@/lib/shop/india";
 
 /** where a shirt goes: the same fields at checkout, on the order page (fixing the address) and in the account */
 const FIELDS: { k: keyof Details; label: string; auto: string; type?: string; mode?: "numeric" | "tel" | "email"; wide?: boolean; optional?: boolean }[] = [
@@ -14,7 +14,7 @@ const FIELDS: { k: keyof Details; label: string; auto: string; type?: string; mo
 ];
 
 export const input = "mt-1 h-12 w-full border border-line bg-transparent px-3 text-[16px] text-ink outline-none focus:border-ink";
-export const EMPTY: Details = { name: "", email: "", phone: "", address1: "", address2: "", city: "", state: "", pin: "" };
+export const EMPTY: Details = { name: "", email: "", phone: "", address1: "", address2: "", city: "", state: SHIP_STATES.length === 1 ? SHIP_STATES[0] : "", pin: "" };
 
 export function AddressFields({ d, onChange, bad, email = true }: { d: Details; onChange: (d: Details) => void; bad?: keyof Details; email?: boolean }) {
   const set = (k: keyof Details) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => onChange({ ...d, [k]: e.target.value });
@@ -29,7 +29,7 @@ export function AddressFields({ d, onChange, bad, email = true }: { d: Details; 
       <label className="col-span-2 block text-[13px] text-quiet">state
         <select value={d.state} onChange={set("state")} autoComplete="address-level1" required aria-invalid={bad === "state"} className={`${input} appearance-none`}>
           <option value="" disabled>pick your state</option>
-          {STATES.map((s) => <option key={s} value={s} className="bg-paper">{s}</option>)}
+          {SHIP_STATES.map((s) => <option key={s} value={s} className="bg-paper">{s}</option>)}
         </select>
       </label>
     </div>

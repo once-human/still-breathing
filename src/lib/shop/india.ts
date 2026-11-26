@@ -1,3 +1,5 @@
+import { SELLS_IN, SHOP } from "@/content/shop";
+
 /** The states and union territories a parcel can go to, as the courier writes them. */
 export const STATES = [
   "Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chandigarh", "Chhattisgarh",
@@ -6,6 +8,12 @@ export const STATES = [
   "Mizoram", "Nagaland", "Odisha", "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura",
   "Uttar Pradesh", "Uttarakhand", "West Bengal",
 ] as const;
+
+/** the states the shop sends to, in the courier's spelling */
+export const SHIP_STATES = STATES.filter((s) => SELLS_IN.includes(s));
+
+/** a pin code's first two digits, by state, where a wrong pair is a sure sign of a mistyped state or pin */
+const PIN_START: Partial<Record<(typeof STATES)[number], RegExp>> = { Maharashtra: /^4[0-4]/ };
 
 export type Details = { name: string; email: string; phone: string; address1: string; address2: string; city: string; state: string; pin: string };
 
@@ -30,6 +38,9 @@ export function checkDetails(raw: unknown): { ok: Details } | { field: keyof Det
   if (d.address1.length < 5) return { field: "address1", error: "house, flat or building, and street" };
   if (d.city.length < 2) return { field: "city", error: "your city or town" };
   if (!(STATES as readonly string[]).includes(d.state)) return { field: "state", error: "pick your state" };
+  if (!SELLS_IN.includes(d.state)) return { field: "state", error: `we send only within ${SHOP.where}` };
   if (!/^[1-9]\d{5}$/.test(d.pin)) return { field: "pin", error: "your 6-digit pin code" };
+  const start = PIN_START[d.state as (typeof STATES)[number]];
+  if (start && !start.test(d.pin)) return { field: "pin", error: `that pin code isn't in ${d.state.toLowerCase()}` };
   return { ok: d };
 }

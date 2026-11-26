@@ -59,5 +59,15 @@ export const SHOP = {
   /** made to order: days to print and dispatch, then days on the road, as written on the site */
   make: [2, 5] as [number, number],
   road: [2, 7] as [number, number],
-  shipsTo: "India",
+  /** where it goes, as the site says it (from SELLS_IN) */
+  shipsTo: "Maharashtra",
+  where: "maharashtra",
 };
+
+/**
+ * The states a parcel can go to. Maharashtra only for now: the shop is run by an individual who isn't GST-registered,
+ * and selling goods into another state needs registration whatever the turnover, while selling within Maharashtra
+ * doesn't below the threshold. Once registered, list every state (STATES in lib/shop/india.ts), set shipsTo / where
+ * to India, and checkout, the address form and every line on the site follow.
+ */
+export const SELLS_IN: readonly string[] = ["Maharashtra"];

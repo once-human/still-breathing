@@ -8,6 +8,7 @@ import { AccountSlot, BagSlot } from "@/components/ShopSlots";
 import { setFocusCity } from "@/lib/city";
 import { NAV, BRAND } from "@/lib/site";
 import { CURRENT, fmtDays, paperStill, shirtHref, shirtLabel, shirtsOf, STILL_H, STILL_W } from "@/content/lineups";
+import { SHOP } from "@/content/shop";
 
 const cell = "border-t pt-1.5 truncate transition-colors duration-300";
 const on = (path: string, href: string) => (href === "/" ? path === "/" : path === href || path.startsWith(href + "/"));
@@ -61,7 +62,7 @@ export function Header() {
       >
         {/* one quiet line over every page: what a buyer wants to know first */}
         <p className="flex h-7 items-center justify-center gap-2 border-b border-line px-4 text-[12px] text-quiet">
-          <span className="text-ink">free delivery anywhere in india</span>
+          <span className="text-ink">free delivery anywhere in {SHOP.where}</span>
           <span aria-hidden>·</span>
           <span className="truncate">made to order, with you in about 10 days</span>
         </p>

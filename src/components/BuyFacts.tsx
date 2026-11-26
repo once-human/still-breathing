@@ -22,7 +22,7 @@ export function BuyFacts() {
     <ul className="mt-4 space-y-2 text-[13px]">
       <li className="flex gap-3">
         <Mark d="M2 6.5h8.5v6H2zM10.5 8.5h2.6l1.9 2.2v1.8h-4.5M4.5 14.5a1.2 1.2 0 1 0 0-.01M12.5 14.5a1.2 1.2 0 1 0 0-.01" />
-        <span>order today, usually with you <span className="font-semibold text-ink tnum">{range ?? "in about 10 days"}</span><span className="block text-quiet">free delivery anywhere in india. made for you first, then sent with tracking.</span></span>
+        <span>order today, usually with you <span className="font-semibold text-ink tnum">{range ?? "in about 10 days"}</span><span className="block text-quiet">free delivery anywhere in {SHOP.where}. made for you first, then sent with tracking.</span></span>
       </li>
       <li className="flex gap-3">
         <Mark d="M8 2.2 13.5 4.4v3.8c0 3.1-2.3 5.1-5.5 6-3.2-.9-5.5-2.9-5.5-6V4.4zM5.7 8.2l1.6 1.6 3-3.1" />

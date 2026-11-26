@@ -21,10 +21,15 @@ export const partnerKeys = () => {
   return id && secret ? { id, secret, sandbox, base: sandbox ? "https://sandbox.qikink.com" : "https://api.qikink.com" } : null;
 };
 
-/** Upstash Redis over REST (the Vercel Marketplace integration sets the KV_ names; Upstash's own names work too) */
+/** the order store: Postgres on Neon (DATABASE_URL, or POSTGRES_URL as Vercel's Neon integration names it) */
 export const kvKeys = () => {
-  const url = env("KV_REST_API_URL") ?? env("UPSTASH_REDIS_REST_URL"), token = env("KV_REST_API_TOKEN") ?? env("UPSTASH_REDIS_REST_TOKEN");
-  return url && token && url.startsWith("https://") ? { url, token } : null;
+  const url = env("DATABASE_URL") ?? env("POSTGRES_URL");
+  if (!url || !/^postgres(ql)?:\/\//.test(url)) return null;
+  try {
+    return { url, host: new URL(url).hostname };
+  } catch {
+    return null;
+  }
 };
 
 export const mailKeys = () => {

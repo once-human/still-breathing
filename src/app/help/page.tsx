@@ -11,7 +11,7 @@ import { POLICY_LINKS, pageMeta } from "@/lib/site";
 
 export const metadata: Metadata = pageMeta({
   title: "help",
-  description: "Help with a sahn order: made to order, sent anywhere in India, sizes and care.",
+  description: `Help with a sahn order: made to order, sent anywhere in ${SHOP.shipsTo}, sizes and care.`,
   path: "/help",
 });
 
@@ -29,7 +29,7 @@ const PARTS: Part[] = [
   },
   {
     id: "shipping", title: "shipping",
-    body: <p>we send anywhere in india. making takes {SHOP.make[0]} to {SHOP.make[1]} days, then {SHOP.road[0]} to {SHOP.road[1]} days on the road. if you want it for a show, order early: fred again.. india starts on 5 december.</p>,
+    body: <p>we send anywhere in {SHOP.where}. making takes {SHOP.make[0]} to {SHOP.make[1]} days, then {SHOP.road[0]} to {SHOP.road[1]} days on the road. if you want it for a show, order early: fred again.. india starts on 5 december.</p>,
   },
   {
     id: "sizes", title: "sizes",
