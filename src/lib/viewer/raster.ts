@@ -361,10 +361,10 @@ export class Raster {
   private async look(design: string, t: "black" | "cream") {
     const key = `${design}-${t}`;
     if (!this.backTex[key]) {
-      const [b, f] = await Promise.all([this.tx(`tex/print-back-${key}.webp`, true), this.frontTex[t] ? Promise.resolve(this.frontTex[t]) : this.tx(`tex/print-front-${t}.webp`, true)]);
-      this.backTex[key] = b; this.frontTex[t] = f;
+      const [b, f] = await Promise.all([this.tx(`tex/print-back-${key}.webp`, true), this.tx(`tex/print-front-${key}.webp`, true)]);
+      this.backTex[key] = b; this.frontTex[key] = f;
     }
-    return [this.backTex[key], this.frontTex[t]] as const;
+    return [this.backTex[key], this.frontTex[key]] as const;
   }
 
   async setLook(design: string, t: "black" | "cream") {

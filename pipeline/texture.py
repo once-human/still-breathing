@@ -92,8 +92,10 @@ if __name__ == "__main__":
     # back: the whole printable area. The blank takes up to 16 x 20 in; the art is 3:4, so it fills the height:
     # 15 x 20 in (38.1 x 50.8 cm), its top 9.5 cm under the high shoulder point (just clear of the collar rib)
     place(back, 0, NECK_Y - 9.5, 38.1, 1)
-    # front: again.. in four scripts, stacked, on the wearer's left chest at chest height (top 15 cm under the
-    # shoulder point, so the block centres on the chest line), its inner edge 4 cm off the centre front
-    W_FRONT = 10.5
-    place(Image.open(f"{OV}/ov-front-{tee}.png").convert("RGBA"), 4 + W_FRONT / 2, NECK_Y - 15, W_FRONT, 0)
+    # front: each shirt's own (fronts.py). The lineup's again.. in four scripts sits on the wearer's left chest;
+    # i am a party has its seal on the centre chest
+    from fronts import FRONTS
+    f_file, f_cx, f_top, f_w = FRONTS[design.lower()]
+    f_img = Image.open(f"{OV}/ov-front-{tee}.png" if f_file is None else os.path.join(HERE, f_file)).convert("RGBA")
+    place(f_img, f_cx, NECK_Y - f_top, f_w, 0)
     atlas.convert("RGB").save(f"atlas-{design}-{tee}.png"); mask.save(f"inkmask-{design}-{tee}.png"); print("ok", atlas.size)

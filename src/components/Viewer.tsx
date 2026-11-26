@@ -80,7 +80,7 @@ const ALONE: Variant = { dir: "form-M", size: "M", pose: "stand", body: false };
 /** keys 1 2 3: the same three faces in every view (on the table has no ¾) */
 const FACES = [{ label: "front", yaw: 0 }, { label: "¾", yaw: 30 }, { label: "back", yaw: 180 }];
 /** actual size: how wide each print is on the shirt, in cm, and a bank card's width to check the screen against */
-const PRINT_CM: Record<string, number> = { back: 38.1, front: 10.5 };
+const PRINT_CM: Record<string, number> = { back: 38.1, front: 30 };   // the front texture is the whole chest area
 const CARD_CM = [8.56, 5.398];
 const SCALE_KEY = "sb-cm";
 const VIEWS = [
@@ -265,7 +265,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
 
       const maps: Record<string, Promise<[ImageBitmap, ImageBitmap]>> = {};
       // the back and chest prints, at print resolution (the fabric itself is one flat colour)
-      const colourMaps = (d: Design, t: Colour) => (maps[`${d}-${t}`] ??= Promise.all([bitmap(printBackURL(d, t)), bitmap(printFrontURL(t))]));
+      const colourMaps = (d: Design, t: Colour) => (maps[`${d}-${t}`] ??= Promise.all([bitmap(printBackURL(d, t)), bitmap(printFrontURL(d, t))]));
       const normals: Record<string, Promise<ImageBitmap>> = {};
       let knitB: ImageBitmap | null = null;
       let geo: Awaited<ReturnType<typeof raster.load>> | null = null;
@@ -1076,7 +1076,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={asset(actual === "front" ? printFrontURL(tee) : printBackURL(design, tee, true))} alt="" draggable={false}
+              src={asset(actual === "front" ? printFrontURL(design, tee) : printBackURL(design, tee, true))} alt="" draggable={false}
               className="mx-auto my-10 block max-w-none select-none"
               style={{ width: `${PRINT_CM[actual] * cm}cm` }}
               onLoad={() => { const p = pane.current; if (p) p.scrollLeft = (p.scrollWidth - p.clientWidth) / 2; }}

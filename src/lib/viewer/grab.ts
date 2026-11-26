@@ -26,7 +26,7 @@ export async function bitmap(url: string) {
 export function prefetchTee(v: { dir: string; size: string; pose: string; body: boolean; person?: string }, design: string, tee: string) {
   const A = "/tee/fit/";
   const urls = [
-    `${A}${v.dir}/${v.pose}.glb`, `${A}tex/print-back-${design}-${tee}.webp`, `${A}tex/print-front-${tee}.webp`,
+    `${A}${v.dir}/${v.pose}.glb`, `${A}tex/print-back-${design}-${tee}.webp`, `${A}tex/print-front-${design}-${tee}.webp`,
     `${A}tex/normal-${v.size}.png`, `${A}tex/knit-normal.png`, "/draco/draco_wasm_wrapper.js", "/draco/draco_decoder.wasm",
   ];
   if (v.person) urls.push(v.person, v.person.replace(/\.glb$/, "-skin.webp"), v.person.replace(/\.glb$/, "-skin-n.webp"), v.person.replace(/\.glb$/, "-hair.webp"));

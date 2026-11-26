@@ -1,13 +1,15 @@
 # python3 printtex.py <outdir> : the prints as their own sharp textures for the viewer and the path tracer
 #   print-back-<d>-<tee>.webp   the back, 2048 x 2731 (54 px/cm over 38.1 x 50.8 cm), RGBA, alpha = ink
-#   print-front-<tee>.webp      the chest lettering, 632 x 976 (60 px/cm over 10.5 cm), RGBA
+#   print-front-<d>-<tee>.webp  the chest: fronts.py's 30 x 30 cm area, 1800 x 1800 (60 px/cm), RGBA, each shirt's
+#                               own front in its own place (python3 printtex.py <outdir> <pairs> front: only these)
 # The fabric itself is one flat colour, so the prints are all the detail there is: they get the pixels.
 # Stored premultiplied (colour already times coverage, exact bytes kept under clear pixels), so filtering and
 # mipmaps never pull a dark or light fringe in from the clear surround: shaded as fabric*(1-a) + rgb.
 import sys, numpy as np
 from PIL import Image
 OUT = sys.argv[1]
-FULL = len(sys.argv) > 3 and sys.argv[3] == "full"   # close-zoom version: 3600 x 4800 (94 px/cm), fetched only on zoom
+FULL = len(sys.argv) > 3 and sys.argv[3] == "full"
+FRONT_ONLY = len(sys.argv) > 3 and sys.argv[3] == "front"   # close-zoom version: 3600 x 4800 (94 px/cm), fetched only on zoom
 BW, BH = (3600, 4800) if FULL else (2048, 2731)
 TEE = {"black": (21, 21, 21), "cream": (255, 250, 231)}
 HALO = {"black": (21, 21, 21), "cream": (236, 227, 206)}   # halo fill used in the Figma file: holes in the ink
@@ -64,7 +66,7 @@ BACK = {("a", "cream"): ("art/art-a-map/art-cream-al3.png", "overlays/ov-back-A-
         ("d", "cream"): ("art/art-d-map/art-cream.png", "overlays/ov-back-D-cream-hi.png"),
         ("e", "black"): ("art/art-e-breath/art-black.png", "overlays/ov-back-E-black-hi.png")}
 pairs = [tuple(p.split("-")) for p in sys.argv[2].split(",")] if len(sys.argv) > 2 else list(BACK)
-for d, tee in pairs:
+for d, tee in ([] if FRONT_ONLY else pairs):
     art, ov = BACK[(d, tee)]
     b = resize_rgba(Image.open(art), (BW, BH))
     if ov:
@@ -86,13 +88,29 @@ which = dist.argmin(0)
 span = np.linalg.norm(src_inks - bg, axis=-1)[which]
 alpha = np.clip(np.linalg.norm(hi - bg, axis=-1) / span, 0, 1)
 LINES = [((138, 333, 535, 1160), (0, 0)), ((374, 563, 120, 744), (2, 59)), ((610, 811, 121, 591), (2, 118)), ((860, 1112, 120, 570), (2, 181))]
+lettering = {}
 for tee in ("black", "cream"):
     inks = np.array(INK[tee], np.float32) / 255
-    out = np.zeros((976, 632, 4), np.float32)
+    out = np.zeros((976, 632, 4), np.float32)   # 10.5 cm wide at 60 px/cm
     for (y0, y1, x0, x1), (ox, oy) in LINES:
         X, Y = ox * 4, oy * 4
         h, w = min(y1 - y0, 976 - Y), min(x1 - x0, 632 - X)
         out[Y:Y + h, X:X + w, :3] = inks[which[y0:y0 + h, x0:x0 + w]]
         out[Y:Y + h, X:X + w, 3] = alpha[y0:y0 + h, x0:x0 + w]
-    save(out, f"{OUT}/print-front-{tee}.webp")
+    lettering[tee] = out
+
+# each shirt's front, in its place in the chest area (fronts.py)
+from fronts import AREA, AREA_PX_CM, FRONTS
+K = AREA_PX_CM; AW, AH = int(AREA["w"] * K), int(AREA["h"] * K)
+for d, tee in pairs:
+    f_file, cx, top, w_cm = FRONTS[d]
+    if f_file is None: art = lettering[tee]
+    else:
+        im = Image.open(f_file).convert("RGBA")
+        art = resize_rgba(im, (int(round(w_cm * K)), int(round(im.height * w_cm * K / im.width))))
+    h, w = art.shape[:2]
+    x, y = int(round((cx - AREA["x0"]) * K - w / 2)), int(round((top - AREA["top"]) * K))
+    assert 0 <= x and x + w <= AW and 0 <= y and y + h <= AH, f"front {d} leaves the chest area"
+    area = np.zeros((AH, AW, 4), np.float32); area[y:y + h, x:x + w] = art
+    save8(knockout((np.clip(area, 0, 1) * 255 + 0.5).astype(np.uint8), tee), f"{OUT}/print-front-{d}-{tee}.webp")
 print("prints ok")

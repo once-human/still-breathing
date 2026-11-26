@@ -7,7 +7,8 @@ export type Design = "c" | "a" | "d" | "e";
 export type City = "mumbai" | "bengaluru";
 
 /**
- * Four shirts. Same blank, same front (again.. in four scripts); the back is what changes.
+ * Four shirts on the same blank. Each has its own back; the front is again.. in four scripts on the left chest,
+ * except i am a party, whose front is a seal on the centre chest (pipeline/fronts.py).
  * The tour has two (the crowd, both cities in one drawing, and i am a party); each city has its map.
  * Each shirt comes in one colour only: a night shirt in black, a day shirt in off white.
  */
