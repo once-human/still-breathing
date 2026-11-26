@@ -2,6 +2,7 @@ import { cookies, headers } from "next/headers";
 import { SHOP } from "@/content/shop";
 import { DESIGNS, type Design, type Size } from "@/content/tee";
 import { shopOpen } from "./config";
+import { clientIp } from "./guard";
 import { designOfHandle, getCatalog, sizeOf } from "./catalog";
 import { ShopError, storefront, userErrors } from "./storefront";
 import { EMPTY_BAG, type BagView } from "./types";
@@ -34,8 +35,7 @@ type Mut = { cart: Cart | null; userErrors: { message: string; code?: string | n
 
 /** the visitor's IP as Vercel saw it, for Shopify's buyer-traffic header and our rate limit */
 export async function buyerIp() {
-  const h = await headers();
-  return h.get("x-real-ip") ?? h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+  return clientIp(await headers());
 }
 
 async function cartId() {

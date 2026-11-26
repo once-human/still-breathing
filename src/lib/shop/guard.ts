@@ -30,7 +30,14 @@ export function sameOrigin(req: Request) {
   }
 }
 
-export const ipOf = (req: Request) => req.headers.get("x-real-ip") ?? req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "?";
+/**
+ * The visitor's IP. sahn.in reaches Vercel through Cloudflare, so Vercel's own x-real-ip is a Cloudflare edge there;
+ * Cloudflare puts the visitor in cf-connecting-ip. (A client that skips Cloudflare could set that header itself, but
+ * all it gains is its own rate-limit bucket.)
+ */
+export const clientIp = (h: Headers) =>
+  h.get("cf-connecting-ip")?.trim() || h.get("x-real-ip")?.trim() || h.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
+export const ipOf = (req: Request) => clientIp(req.headers) ?? "?";
 
 const NO_STORE = { "Cache-Control": "no-store" };
 export const json = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: NO_STORE });
