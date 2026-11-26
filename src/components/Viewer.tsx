@@ -242,14 +242,17 @@ export function Viewer({ design, tee, variant, onShot }: { design: Design; tee: 
         zm.zt = Math.min(zlim()[1], Math.max(zlim()[0], zt));
         zm.cxt = px - sx / zm.zt; zm.cyt = py - sy / zm.zt;
         clampZoom(); s.dirty = true; s.goal = null;
-        if (zm.zt > 1.5) void sharpen();
+        if (zm.zt > 1.2) void sharpen();
       };
       const ndc = (e: { clientX: number; clientY: number }) => {
         const r = st.getBoundingClientRect();
         return [((e.clientX - r.left) / r.width) * 2 - 1, 1 - ((e.clientY - r.top) / r.height) * 2] as const;
       };
-      // the back print at its full source resolution, fetched in a quiet moment (or the moment you zoom in); the
-      // raster keeps one design's at a time, so it's fetched again only after another design has been shown
+      // the back print at its full source resolution (3600 x 4800, over 90 MB on the card with its mips), fetched the
+      // moment you zoom in or lay it on the table. Till then the regular print (2048 x 2731) already has more texels
+      // than the screen shows of it, even on a 2x screen, so it looks the same and the machine keeps that memory. The
+      // raster keeps one design's at a time, so it's fetched again only after another design has been shown.
+      const closeIn = () => zm.zt > 1.2 || shotRef.current.id === "close";
       const sharpening = new Set<string>();
       let ptFull: { key: string; url: string } | null = null, ptFullOn = "";
       const sharpen = async () => {
@@ -339,7 +342,8 @@ export function Viewer({ design, tee, variant, onShot }: { design: Design; tee: 
         await raster.setEnv(e);
         if (dead || envUrl !== url) return;
         envNow = e; if (pt) void tracerEnv(pt, url);
-        if (!bandAsked.has(url)) { bandAsked.add(url); void pixels(bandURL(url)).then((b) => { if (!dead) raster.setBand(url, b); }).catch(() => bandAsked.delete(url)); }
+        // asked for again if the raster let it go (it keeps the bands of the last two places shown)
+        if (!bandAsked.has(url) && !raster.hasBand(url)) { bandAsked.add(url); void pixels(bandURL(url)).then((b) => { if (!dead) raster.setBand(url, b); }).catch(() => {}).finally(() => bandAsked.delete(url)); }
         s.dirty = true; lastSig = "";
         playMotion();
       };
@@ -550,6 +554,9 @@ export function Viewer({ design, tee, variant, onShot }: { design: Design; tee: 
             if (next !== ss) { ss = next; size(); }
             // 30 for what you do too, once it's at the screen's own pixels and still can't draw 60; back when it easily can
             else if (ss === 1 && g) gov.slow = gov.slow ? g > 11 : g > 16;
+            // where the card's time can't be read (WebGL), frames that keep coming late say the same: an even 30 is
+            // smoother than a 60 that lands at 40 (every other frame held twice). It stays there: at 30 nothing is late.
+            else if (ss === 1 && !g && late > 6) gov.slow = true;
           }
         }
         prevT = now;
@@ -595,8 +602,8 @@ export function Viewer({ design, tee, variant, onShot }: { design: Design; tee: 
               await loadEnv(); s.dirty = true; await frames(2);
               if (dead) return;
               setMode("3d"); setStatus("");
-              // then, in a quiet moment, the back print at full resolution: close in it's sharp straight away
-              if (!lite) ("requestIdleCallback" in window ? requestIdleCallback : (f: () => void) => setTimeout(f, 1500))(() => { if (!dead) void sharpen(); });
+              // the back print at full resolution, if the view opens close in
+              if (closeIn()) void sharpen();
               // then, when the page is idle, the likely next things: the other views and each place's picture,
               // decoded and on the graphics card, one per idle moment
               void (async () => {
@@ -670,8 +677,8 @@ export function Viewer({ design, tee, variant, onShot }: { design: Design; tee: 
           if (pt && c && o) { pt.setColourway(c, o); ptFullOn = ""; pt.setScene(scene, FABRIC[t], t === "cream"); }
           s.dirty = true; lastSig = "";
           await frames(2);
-          // its print at full resolution in the next quiet moment, not in the switch (it's a big picture)
-          if (!lite && !firstFrame) ("requestIdleCallback" in window ? requestIdleCallback : (f: () => void) => setTimeout(f, 1500))(() => { if (!dead && s.design === d) void sharpen(); });
+          // close in, its print at full resolution in the next quiet moment, not in the switch (it's a big picture)
+          if (!firstFrame && closeIn()) ("requestIdleCallback" in window ? requestIdleCallback : (f: () => void) => setTimeout(f, 1500))(() => { if (!dead && s.design === d && closeIn()) void sharpen(); });
         },
         zoomBy: (k) => { if (k === 0) zoomAt(1, 0, 0); else zoomAt(zm.zt * k, 0, 0); },
         turnTo: (deg) => { const d = ((((deg - s.yaw) % 360) + 540) % 360) - 180; s.goal = s.yaw + d; holdUntil = performance.now() + 6000; },

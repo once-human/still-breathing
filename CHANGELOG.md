@@ -55,6 +55,9 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 - The actual size button is called artwork.
 
 ### Fixed
+- 3D views: the place around the person is drawn only where the person doesn't cover it: the same picture, less work every frame.
+- 3D views: the full-size back print loads when you zoom in or open on the table (looks the same until then); only the last three shirts' prints and the last two places' sharp pictures stay in graphics memory.
+- 3D views: where the graphics card's timing can't be read and frames keep arriving late, steady motion runs at an even 30 instead of an uneven 40.
 - An order's page names the courier the way the print partner gives it, and shows no tracking link until there is an airway bill (before dispatch the partner's link is empty).
 - Test orders to the print partner's sandbox now ask for each shirt's own blank: black or off white, and its 2XL by the name the partner uses.
 - The privacy policy says how the site counts its own visits: the page, where a visit came from, the device and the region, with no cookie, no address kept and a code that changes daily; do not track and global privacy control turn it off.

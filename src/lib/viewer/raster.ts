@@ -1,7 +1,7 @@
 // Real-time view on three.js WebGPURenderer (falls back to WebGL2 by itself where WebGPU is missing).
 // It is the preview you drag; the path tracer takes over the moment you let go.
 import * as THREE from "three/webgpu";
-import { positionLocal, texture, uv, vec2, vec3, float, normalMap, normalize, uniform, mix, vertexColor, step, fwidth, clamp, length, normalWorldGeometry, atan, asin, cos, sin, sqrt, max, log2 } from "three/tsl";
+import { positionLocal, texture, uv, vec2, vec3, float, normalMap, normalize, uniform, mix, vertexColor, step, fwidth, clamp, length, normalWorldGeometry, atan, asin, cos, sin, sqrt, max, log2, vec4, modelViewMatrix, cameraProjectionMatrix } from "three/tsl";
 import { PRINT_BACK, PRINT_FRONT, type Rect } from "./print";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
@@ -245,13 +245,14 @@ export class Raster {
     const { tex: t, sh } = await this.prepareEnv(env);
     // another place was picked while this one went up: that one is shown instead
     if (turn !== this.envTurn) return;
-    this.probeYaw = NaN; this.envUrl = env.url;
+    this.probeYaw = NaN;
+    if (env.url !== this.envUrl) { this.lastEnvUrl = this.envUrl; this.envUrl = env.url; }
     // the sharp band (a big picture, setBand) if it's on the card; until it is, the whole picture stands in
     const bandP = this.bands.get(env.url);
     const band = bandP ? await Promise.race([bandP, Promise.resolve(undefined)]) : null;
     if (band === undefined) void bandP!.then((b) => this.showBand(env.url, b));
     this.envSH = sh; this.bandOn = !!band;
-    if (this.env) { this.env.value = t; if (band) this.band!.value = band; this.applyMotion(); this.showEnv(); return; }
+    if (this.env) { this.env.value = t; this.band!.value = band ?? t; this.applyMotion(); this.showEnv(); this.trimBands(t); return; }
     const d = normalize(normalWorldGeometry);
     const c = cos(this.envYaw), sn = sin(this.envYaw);
     const x = c.mul(d.x).sub(sn.mul(d.z)), z = sn.mul(d.x).add(c.mul(d.z));
@@ -275,6 +276,23 @@ export class Raster {
   }
   private envTurn = 0;
   private envUrl = "";
+  private lastEnvUrl = "";
+  /**
+   * A band is over 100 MB on the card, and on most laptops the card's memory is the machine's own: the place shown
+   * and the one before it keep theirs, an older one's goes (it comes back from the browser's cache, sharpening a
+   * moment after the whole picture, as it did the first time). Nothing still reads a band when it goes.
+   */
+  private trimBands(now: THREE.Texture) {
+    for (const [u, p] of this.bands) {
+      if (u === this.envUrl || u === this.lastEnvUrl) continue;
+      this.bands.delete(u);
+      void p.then((b) => {
+        if (!b) return;
+        for (const n of [this.band, this.motionNode]) if (n && n.value === b) n.value = now;
+        b.dispose();
+      });
+    }
+  }
   /** each place's sharp band (scene.ts BAND), once it's been asked for: sent to the card when that place is shown */
   private bands = new Map<string, Promise<THREE.Texture | null>>();
   hasBand(url: string) { return this.bands.has(url); }
@@ -344,8 +362,35 @@ export class Raster {
   }
   private showEnv() {
     const on = !!(this.env && this.envOn);
-    this.scene.backgroundNode = on ? (this.bandOn ? this.bg : this.env) : null;
+    const node = on ? (this.bandOn ? this.bg : this.env) : null;
+    if (node) {
+      const m = this.backdrop().material;
+      // a new picture node only when what it shows changes (the whole picture, or it with the band): a new shader
+      if (this.backdropNode !== node) { this.backdropNode = node; m.colorNode = node as THREE.Node<"vec4">; m.needsUpdate = true; }
+    }
+    if (this.backdropMesh) this.backdropMesh.visible = !!node;
     this.ambient();
+  }
+  /**
+   * The place's picture, drawn the way three.js draws a background (a sphere round the camera, pinned to the far
+   * plane) but after everything else and depth-tested, not first under everything: only the pixels the person and the
+   * tee leave open work out the picture (its direction, and the band and the moving rows it reads), instead of every
+   * pixel of the frame, most of it then painted over. The same picture, pixel for pixel.
+   */
+  private backdropMesh: THREE.Mesh<THREE.SphereGeometry, THREE.NodeMaterial> | null = null;
+  private backdropNode: THREE.Node | null = null;
+  private backdrop() {
+    if (this.backdropMesh) return this.backdropMesh;
+    const m = new THREE.NodeMaterial();
+    m.name = "place"; m.side = THREE.BackSide; m.depthTest = true; m.depthWrite = false; m.fog = false; m.lights = false;
+    // w = 0: the sphere never moves with the camera; z = w: on the far plane, behind everything drawn
+    const view = modelViewMatrix.mul(vec4(positionLocal, 0)), clip = cameraProjectionMatrix.mul(vec4(view.xyz, 1));
+    m.vertexNode = clip.setZ(clip.w);
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 32), m);
+    // last of the solid things (see-through ones still go over it)
+    mesh.frustumCulled = false; mesh.renderOrder = 1e6; mesh.visible = false; mesh.name = "place";
+    this.scene.add(mesh);
+    return (this.backdropMesh = mesh);
   }
 
   /** a picture as a texture, exactly as stored and never holding the page (pic.ts) */
@@ -364,7 +409,25 @@ export class Raster {
       const [b, f] = await Promise.all([this.tx(`tex/print-back-${key}.webp`, true), this.tx(`tex/print-front-${key}.webp`, true)]);
       this.backTex[key] = b; this.frontTex[key] = f;
     }
-    return [this.backTex[key], this.frontTex[key]] as const;
+    const got = [this.backTex[key], this.frontTex[key]] as const;
+    this.keepLook(key);
+    return got;
+  }
+  /**
+   * The prints of the last three shirts seen stay on the card (about 60 MB a shirt with their mips, out of the
+   * machine's own memory on most laptops); an older one's go, and come back from the browser's cache if it's picked
+   * again (behind its rendered frame, as any switch is). Never the one shown, or one a material still reads.
+   */
+  private looks: string[] = [];
+  private keepLook(key: string) {
+    this.looks = this.looks.filter((k) => k !== key); this.looks.push(key);
+    while (this.looks.length > 3) {
+      const old = this.looks.find((k) => k !== key && k !== this.current && this.nodes?.back.value !== this.backTex[k] && this.nodes?.front.value !== this.frontTex[k]);
+      if (!old) break;
+      this.looks = this.looks.filter((k) => k !== old);
+      this.backTex[old]?.dispose(); this.frontTex[old]?.dispose();
+      delete this.backTex[old]; delete this.frontTex[old];
+    }
   }
 
   async setLook(design: string, t: "black" | "cream") {
@@ -383,7 +446,7 @@ export class Raster {
    */
   setFullPrint(design: string, t: "black" | "cream", tex: THREE.Texture) {
     const key = `${design}-${t}`;
-    for (const [k, old] of Object.entries(this.fullTex)) if (k !== key) { if (this.nodes?.back.value === old) this.nodes.back.value = this.backTex[k] ?? this.nodes.back.value; old.dispose(); delete this.fullTex[k]; }
+    for (const [k, old] of Object.entries(this.fullTex)) if (k !== key) { if (this.nodes?.back.value === old) this.nodes.back.value = this.backTex[k] ?? this.backTex[this.current] ?? this.nodes.back.value; old.dispose(); delete this.fullTex[k]; }
     this.fullTex[key] = tex;
     this.detail(this.detailOn);
   }
