@@ -1,0 +1,24 @@
+# Moves every open shop order on: payments confirmed late, orders the print partner hasn't taken yet (retried),
+# parcels that have left or arrived (the buyer is emailed). Every 3 hours; runs nothing until both are set:
+#   repo secret CRON_SECRET  = the same value as CRON_SECRET in Vercel (32+ characters)
+#   repo variable SHOP_SITE_URL = the site's address, e.g. https://www.sahn.in
+name: shop sync
+on:
+  schedule:
+    - cron: "17 */3 * * *"
+  workflow_dispatch:
+permissions: {}
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: sync orders
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          SITE: ${{ vars.SHOP_SITE_URL }}
+        run: |
+          if [ -z "$CRON_SECRET" ] || [ -z "$SITE" ]; then echo "shop sync not set up"; exit 0; fi
+          code=$(curl -sS -o out.json -w '%{http_code}' -X POST "$SITE/api/shop/cron" -H "Authorization: Bearer $CRON_SECRET" --max-time 90)
+          echo "HTTP $code"; head -c 4000 out.json | sed -E 's/"S[0-9]{6}[A-Z0-9]{4}"/"order"/g'; echo
+          [ "$code" = "200" ]

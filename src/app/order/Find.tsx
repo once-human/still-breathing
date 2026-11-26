@@ -10,7 +10,7 @@ export function Find() {
   return (
     <form action={act} className="max-w-[420px]">
       <label className="block text-[13px] text-quiet">order number
-        <input name="number" required inputMode="numeric" autoComplete="off" placeholder="#1001" maxLength={12} className={`${field} tnum text-ink`} />
+        <input name="number" required autoComplete="off" autoCapitalize="characters" placeholder="#S261126K7QX" maxLength={13} className={`${field} tnum text-ink`} />
       </label>
       <label className="mt-4 block text-[13px] text-quiet">the email you ordered with
         <input name="email" type="email" required autoComplete="email" maxLength={200} className={`${field} text-ink`} />

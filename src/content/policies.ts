@@ -132,7 +132,7 @@ export const POLICIES: Record<PolicySlug, Policy> = {
         heading: "prices and payment",
         body: [
           `prices are in indian rupees and include GST and shipping within india; one shirt is ${price} unless the site says otherwise. the price charged is the one at checkout.`,
-          "payment is taken on a secure checkout hosted by Shopify and processed by Razorpay. your card and UPI details go only to them; we never see or store them.",
+          "payment is taken by Razorpay, a payment gateway, in its own secure payment window. your UPI, card and bank details go only to it; we never see or store them.",
           "an order is ours to make once the payment is confirmed. if a price is ever shown wrongly or we can't make an order, we tell you and refund it in full.",
           `you can buy at most ${SHOP.maxPerBag} shirts in one order.`,
         ],
@@ -169,14 +169,14 @@ export const POLICIES: Record<PolicySlug, Policy> = {
         body: [
           "when you order: your name, email, phone number, delivery address, what you bought and what you paid. you give these at checkout, and we need them to make and send your shirt.",
           "when you just look: nothing that names you. no ad trackers, no analytics cookies, no third-party pixels.",
-          "the bag is kept in one cookie, which holds only your bag's ID, can't be read by scripts on the page, and expires after 10 days.",
+          "the bag is kept in your own browser (which shirts, which sizes, how many) until you pay or empty it. no cookies are set for it.",
           "to show the nearest show, the site uses the rough city your connection comes from (the hosting service adds it to every request). it's rounded to about 10 km, used once for the distance and never stored.",
         ],
       },
       {
         heading: "who sees it",
         body: [
-          "Shopify runs our store and checkout and stores your order. Razorpay processes your payment; your card, UPI or bank details go only to it, never to us.",
+          "Razorpay processes your payment; your UPI, card or bank details go only to it, never to us. your order is kept in our order store (Upstash, on servers in Mumbai, reached only over encrypted connections), and our order emails are sent through Resend.",
           "our production partner, who prints, packs and sends your shirt, and the courier who delivers it get your name, address and phone number, only to do that.",
           "we don't sell, rent or share your details with anyone else, or use them for ads.",
         ],

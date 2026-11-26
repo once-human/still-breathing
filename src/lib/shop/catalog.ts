@@ -1,72 +1,36 @@
-import { SHOP } from "@/content/shop";
-import { SIZE_ORDER, type Design, type Size } from "@/content/tee";
-import { shopOpen } from "./config";
-import { storefront } from "./storefront";
-import type { CatalogView } from "./types";
+import { SHOP, priceOf } from "@/content/shop";
+import { DESIGNS, SIZE_ORDER, type Design, type Size } from "@/content/tee";
+import { partnerKeys, shopOpen } from "./config";
+import { partnerSku } from "./partner";
+import type { BagItem, CatalogView } from "./types";
 
-/** the cache tag the webhook refreshes when a product, price or stock level changes in Shopify */
-export const CATALOG_TAG = "shop:catalog";
-
-type Variant = { id: string; availableForSale: boolean; price: { amount: string; currencyCode: string }; selectedOptions: { name: string; value: string }[] };
-type Product = { handle: string; availableForSale: boolean; variants: { nodes: Variant[] } } | null;
-
-const DESIGNS = Object.keys(SHOP.handles) as Design[];
-
-/** XXL and 2XL are the same size; Shopify's option values are whatever Qikink pushed */
-export const toSize = (v: string): Size | null => {
-  const s = v.trim().toUpperCase().replace(/^XXL$/, "2XL");
-  return (SIZE_ORDER as readonly string[]).includes(s) ? (s as Size) : null;
-};
-
-export const sizeOf = (opts: { name: string; value: string }[]) => {
-  const o = opts.find((x) => /size/i.test(x.name)) ?? (opts.length === 1 ? opts[0] : undefined);
-  return o ? toSize(o.value) : null;
-};
-
-export const designOfHandle = (handle: string): Design | null =>
-  DESIGNS.find((d) => SHOP.handles[d] === handle) ?? null;
-
-const QUERY = `query Catalog {
-${DESIGNS.map((d) => `  ${d}: product(handle: ${JSON.stringify(SHOP.handles[d])}) { ...P }`).join("\n")}
-}
-fragment P on Product {
-  handle
-  availableForSale
-  variants(first: 30) { nodes { id availableForSale price { amount currencyCode } selectedOptions { name value } } }
-}`;
-
-export type Catalog = Partial<Record<Design, { price: number; sizes: Partial<Record<Size, { id: string; available: boolean }>> }>>;
-
-/** The five shirts as Shopify has them right now (cached five minutes, refreshed at once by the product webhook). */
-export async function getCatalog(): Promise<Catalog> {
-  if (!shopOpen()) return {};
-  const data = await storefront<Record<Design, Product>>(QUERY, {}, { cache: { revalidate: 300, tags: [CATALOG_TAG] } });
-  const out: Catalog = {};
-  for (const d of DESIGNS) {
-    const p = data[d];
-    if (!p) continue;
-    const sizes: Partial<Record<Size, { id: string; available: boolean }>> = {};
-    let price = Infinity;
-    for (const v of p.variants.nodes) {
-      const size = sizeOf(v.selectedOptions);
-      if (!size || v.price.currencyCode !== SHOP.currency) continue;
-      sizes[size] = { id: v.id, available: v.availableForSale };
-      price = Math.min(price, Number(v.price.amount));
-    }
-    if (Number.isFinite(price) && Object.keys(sizes).length) out[d] = { price, sizes };
-  }
-  return out;
+/** the sizes a shirt can be ordered in: those with a partner SKU (in the sandbox, any size of the test blank) */
+export function sizesOf(d: Design): Size[] {
+  if (partnerKeys()?.sandbox) return process.env.QIKINK_SANDBOX_SKU ? [...SIZE_ORDER] : [];
+  return SIZE_ORDER.filter((s) => partnerSku(d, s));
 }
 
-/** the catalog without Shopify's IDs, for the browser */
-export async function catalogView(): Promise<CatalogView> {
+export function catalogView(): CatalogView {
   if (!shopOpen()) return { open: false };
-  const cat = await getCatalog();
   const shirts: Extract<CatalogView, { open: true }>["shirts"] = {};
-  for (const d of Object.keys(cat) as Design[]) {
-    const c = cat[d]!;
-    shirts[d] = { price: c.price, sizes: Object.fromEntries(Object.entries(c.sizes).map(([s, v]) => [s, v!.available])) };
+  for (const d of Object.keys(DESIGNS) as Design[]) {
+    const sizes = sizesOf(d);
+    if (sizes.length) shirts[d] = { price: priceOf(d), sizes };
   }
-  // keys are set but no shirt is found (handles not set yet, or not on the Headless channel): still not open
-  return Object.keys(shirts).length ? { open: true, shirts } : { open: false };
+  return Object.keys(shirts).length ? { open: true, shirts, maxPerLine: SHOP.maxPerLine, maxPerBag: SHOP.maxPerBag } : { open: false };
+}
+
+/** a bag from the browser, checked line by line against what's actually for sale; merged, bounded, or null */
+export function cleanBag(raw: unknown): BagItem[] | null {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > 30) return null;
+  const merged = new Map<string, BagItem>();
+  for (const l of raw) {
+    const d = (l as BagItem)?.design, s = (l as BagItem)?.size, q = (l as BagItem)?.quantity;
+    if (typeof d !== "string" || !Object.hasOwn(DESIGNS, d) || typeof s !== "string" || !sizesOf(d as Design).includes(s as Size)) return null;
+    if (typeof q !== "number" || !Number.isInteger(q) || q < 1 || q > SHOP.maxPerLine) return null;
+    const k = `${d}-${s}`, was = merged.get(k)?.quantity ?? 0;
+    merged.set(k, { design: d as Design, size: s as Size, quantity: Math.min(SHOP.maxPerLine, was + q) });
+  }
+  const items = [...merged.values()];
+  return items.reduce((t, l) => t + l.quantity, 0) <= SHOP.maxPerBag ? items : null;
 }
