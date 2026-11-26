@@ -34,6 +34,12 @@ body, rig = bpy.data.objects["body"], bpy.data.objects["rig"]
 ART_EYES = [bpy.data.objects[n] for n in ("eye.L", "eye.R") if n in bpy.data.objects]
 HBM = "helper-tights" not in body.vertex_groups      # people.py's bodies: the artist's sculpt, no helpers
 upd = bpy.context.view_layer.update
+if HBM:
+    # the artist's open hands, relaxed (hands.py): fingers together and curled, the thumb along the index finger;
+    # done on the rest mesh, so the arms carry them into the pose
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import hands
+    hands.relax(body.data, rig, body.get("sex") == "female", {"L": 1.1, "R": 0.92})
 
 
 # ---------- the stand pose, exactly as build.py sets it (arms 64 degrees below horizontal) ----------
@@ -91,7 +97,7 @@ CURL = {2: (16, 17, 8), 3: (20, 21, 10), 4: (24, 25, 12), 5: (28, 27, 14)}    # 
 for side, s in (("L", 1), ("R", -1)):
     e = EASE[side]
     aim(rig.pose.bones["lowerarm01." + side], Vector((s * e["fore"][0], e["fore"][1], e["fore"][2])), "lowerarm02." + side)
-    if HBM: continue       # the artist sculpted the hands relaxed: they stay as made (the fitted finger bones are rough)
+    if HBM: continue       # hands.py relaxed the artist's hands on the mesh itself (the fitted finger bones are rough)
     aim(rig.pose.bones["wrist." + side], Vector((s * e["wrist"][0], e["wrist"][1], e["wrist"][2])))
     upd()
     B = rig.pose.bones
