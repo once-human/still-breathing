@@ -1,5 +1,5 @@
 import { PARTNER_SKUS, PRINTS } from "@/content/shop";
-import type { Design, Size } from "@/content/tee";
+import { DESIGNS, type Design, type Size } from "@/content/tee";
 import { partnerKeys } from "./config";
 import { ShopError } from "./errors";
 
@@ -66,7 +66,11 @@ export const partnerSku = (d: Design, s: Size) => PARTNER_SKUS[d][s] ?? null;
 
 /** In the sandbox, "My Products" can't be seen, so each line names a plain blank and its print files instead. */
 function sandboxLine(l: PartnerLine, site: string) {
-  const sku = (process.env.QIKINK_SANDBOX_SKU ?? "").replace("{size}", l.size);
+  // QIKINK_SANDBOX_SKU is a pattern such as UOsMRnHs-{colour}-{size}: the partner's codes are Bk for black and OFw
+  // for off white, and it calls 2XL "XXL"
+  const sku = (process.env.QIKINK_SANDBOX_SKU ?? "")
+    .replace("{colour}", DESIGNS[l.design].colour === "black" ? "Bk" : "OFw")
+    .replace("{size}", l.size === "2XL" ? "XXL" : l.size);
   const p = PRINTS[l.design];
   // the sandbox only needs a reachable picture per placement; the share picture is public already
   const file = () => `${site}/og/home.jpg`;
