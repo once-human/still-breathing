@@ -131,6 +131,12 @@ def grow(hb, she, colour, seed=1618):
             while len(pts) > 3 and pts[-1][3] < 0.15: pts.pop(); arc.pop()
             Lt = arc[-1]
             if Lt < 0.4 * L: continue
+        if not she and pts[-1][3] < 0.3:
+            # his: a card running out over the hair's edge toward the faded sides ends before it (a row of tips piled
+            # up along the edge reads as a ragged rim round the head)
+            while len(pts) > 3 and pts[-1][3] < 0.3: pts.pop(); arc.pop()
+            Lt = arc[-1]
+            if Lt < 0.4 * L: continue
         strip = rnd.randrange(10, 16) if sparse else rnd.randrange(0, 10)
         u0, u1 = strip / NS + 0.6 / 1024, (strip + 1) / NS - 0.6 / 1024
         tone = rnd.uniform(0.8, 1.2)
