@@ -25,7 +25,7 @@ def label(im, txt):
 panels = []
 W20, W0 = 13.3, 4.2
 im, d = tee(); put(im, "art/fronts/c/05-wristband/trial/down-20.png", 10 + W20 / 2, 14.0, W20); panels.append((im, "G, the artist's: 30 cm, 20 deg off vertical drifting out, clasp up on the left chest"))
-im, d = tee(); put(im, "art/fronts/c/05-wristband/trial/down-0.png", 12.0, 14.0, W0); panels.append((im, "H, yours: 30 cm, straight down from the left chest"))
+im, d = tee(); put(im, "art/fronts/c/05-wristband/trial/down-0.png", 12.0, 20.0, 49 * 234 / 1678); panels.append((im, "H, yours: 49 cm, straight down from the left chest to near the hem"))
 
 out = Image.new("RGB", (W * len(panels), H + 30), BG)
 for i, (p, t) in enumerate(panels):

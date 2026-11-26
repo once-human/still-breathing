@@ -22,5 +22,6 @@ FRONTS = {
     # left chest, 30 cm long, clasp up. g: the artist's, 20 deg off vertical drifting out toward the side seam;
     # h: straight down
     "g": ("art/fronts/c/05-wristband/trial/down-20.png", 10 + 13.3 / 2, 14.0, 13.3),
-    "h": ("art/fronts/c/05-wristband/trial/down-0.png", 12.0, 14.0, 4.2),
+    # h now: from lower on the left chest (20 cm under the shoulder) to about 4 cm above the hem, 49 cm
+    "h": ("art/fronts/c/05-wristband/trial/down-0.png", 12.0, 20.0, 49 * 234 / 1678),
 }
