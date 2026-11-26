@@ -15,7 +15,7 @@ import math, os, sys, datetime
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 import front as F
 
-WMM, HMM = 172, 180
+WMM, HMM = 172, 194
 F.setup(WMM, HMM, draft_px=4.5)
 import hand
 from hand import Art, hatch_poly
@@ -87,8 +87,7 @@ for alt in (30, 60):
 # ---------------------------------------------------------------- the figures: pencil-dash lines between the stars
 FIG = [('meissa', 'betelgeuse'), ('meissa', 'bellatrix'), ('betelgeuse', 'bellatrix'), ('betelgeuse', 'alnitak'),
        ('bellatrix', 'mintaka'), ('mintaka', 'alnilam'), ('alnilam', 'alnitak'), ('alnitak', 'saiph'),
-       ('mintaka', 'rigel'), ('aldebaran', 'theta2_tau'), ('theta2_tau', 'gamma_tau'), ('gamma_tau', 'delta_tau'),
-       ('delta_tau', 'epsilon_tau'), ('epsilon_tau', 'elnath'), ('aldebaran', 'zeta_tau')]
+       ('mintaka', 'rigel'), ('aldebaran', 'elnath'), ('aldebaran', 'zeta_tau')]   # Orion, and the bull's two horns
 
 
 def dashes(a, b, layer, w=1.1, dash=(2.6, 4.2), gap=(1.6, 2.6), trim=3.2):
@@ -159,10 +158,17 @@ def radial(az, alt0, alt1):
     return sky(alt0, az), sky(alt1, az)
 
 
-# the towers east of the course (Lower Parel side), over the trees: tall slabs, hatched, lit windows left as paper
-for az0, wdeg, top in [(AZC + 9, 3.2, 12.5), (AZC + 13.6, 2.4, 15.4), (AZC + 20.5, 3.6, 9.8),
-                       (AZC - 13, 2.8, 11.2), (AZC - 18, 2.2, 13.6)]:
+# the towers east of the course (any that would stand under a bright star are left out, so the star has clear sky) (Lower Parel side), over the trees: tall slabs, hatched, lit windows left as paper
+for az0, wdeg, top in [(AZC + 8.6, 3.4, 15.5), (AZC + 13.4, 2.6, 19.5), (AZC + 19.6, 3.8, 12.0), (AZC + 3.6, 2.2, 10.2),
+                       (AZC + 24.2, 2.6, 14.6), (AZC - 7.2, 2.4, 12.4),
+                       (AZC - 12.5, 3.0, 14.2), (AZC - 17.6, 2.4, 17.4), (AZC - 22.4, 3.2, 10.6)]:
     a0, a1 = az0 - wdeg / 2, az0 + wdeg / 2
+    for k_, ((ra_, de_, mg_)) in STARS.items():   # never under a bright star: the tower stops well short of it
+        al_, az_ = altaz(ra_, de_)
+        if mg_ < 1.0 and a0 - 3.5 < az_ < a1 + 3.5 and 4 < al_ < top + 5:
+            top = -1
+    if top < 0:
+        continue
     poly = [sky(4.6, a0), sky(top, a0), sky(top + rng.uniform(-0.3, 0.3), a1), sky(4.6, a1)]
     if not all(-4 < p[0] < WMM + 4 for p in poly):
         continue
@@ -173,45 +179,65 @@ for az0, wdeg, top in [(AZC + 9, 3.2, 12.5), (AZC + 13.6, 2.4, 15.4), (AZC + 20.
         c = sky(wh, wa)
         art.knock([(c[0] - 0.8, c[1] - 0.8), (c[0] + 0.8, c[1] - 0.8), (c[0] + 0.8, c[1] + 0.8), (c[0] - 0.8, c[1] + 0.8)], layers=('key',))
 
-# the rain trees round the course perimeter, in front of everything: crowns as loose green screens, their tops
-# inked in short scalloped strokes, their feet left ragged where the drawing stops
+# the rain trees round the course perimeter, in front of everything. A rain tree is an umbrella: a crown much wider
+# than tall, its top a run of soft domes, its underside flat, a short forked trunk under it. Each crown is a loose
+# green screen with a paper gap round it where it overlaps the next, its domes inked in short strokes.
 crowns = []
-az = AZC - 25
-while az < AZC + 25:
-    h = rng.uniform(3.2, 5.6)
-    rad = rng.uniform(5.2, 8.0) * (1 - 0.35 * (abs(az - AZC) / 25) ** 2)   # smaller toward the ends
+az = AZC - 26
+while az < AZC + 26:
+    edge = abs(az - AZC) / 26
+    h = rng.uniform(3.6, 5.0) - 1.0 * edge
+    rad = rng.uniform(7.6, 10.2) * (1 - 0.4 * edge ** 2)          # smaller toward the ends, where the drawing stops
     crowns.append((az, h, rad))
-    az += rng.uniform(3.4, 4.6)
+    az += rng.uniform(3.6, 4.8) * (1 + 0.25 * edge)
+rng.shuffle(crowns)
 for az, h, rad in crowns:
     c = sky(h, az)
     dx, dy = ZX - c[0], ZY - c[1]
     L = math.hypot(dx, dy); ux, uy = dx / L, dy / L          # toward the zenith: "up" for this tree
+    nd = rng.randint(4, 5)
+    ph = [rng.uniform(-0.25, 0.25) for _ in range(nd + 1)]
     poly = []
-    for i in range(14):
-        t = math.pi * 2 * i / 14
-        rr = rad * rng.uniform(0.82, 1.08)
-        px_, py_ = math.cos(t) * rr, math.sin(t) * rr * 0.72
+    for i in range(48):
+        t = math.pi * 2 * i / 48
+        across, upc = math.cos(t), math.sin(t)
+        if upc > 0:      # the top: a run of domes
+            k = (across + 1) / 2 * nd
+            j = min(nd - 1, int(k))
+            bump = math.sin((k - j) * math.pi) ** 0.6
+            rr_up = rad * 0.72 * (0.74 + 0.26 * bump + ph[j] * 0.15)
+            px_, py_ = across * rad, upc * rr_up
+        else:            # the underside: nearly flat, a little sag
+            px_, py_ = across * rad * 0.96, upc * rad * 0.26
         poly.append((c[0] + px_ * -uy + py_ * ux, c[1] + px_ * ux + py_ * uy))
-    art.knock(poly, layers=('key',))
-    art.blob(poly, 'green', jit=0.05, gap=0.25, shift=0.5, n=40)
-    top = [p for p in hand.catmull(poly + poly[:1], closed=True, step=0.8) if (p[0] - c[0]) * ux + (p[1] - c[1]) * uy > rad * 0.18]
-    if len(top) > 4:
-        top.sort(key=lambda p: (p[0] - c[0]) * -uy + (p[1] - c[1]) * ux)
-        for j in range(0, len(top), 7):
-            seg = top[j:j + rng.randint(5, 9)]
-            if len(seg) > 2 and rng.random() < 0.8:
-                art.line(seg[::2], 1.15, layer='key', wob=0.1, trem=0.1, a0=0.8, a1=1.8)
-    # the trunk: a short stroke down from the crown, toward the ground
-    if False:   # trunks read as stitching at chest size: dropped
-        foot = (c[0] - ux * rad * 0.95, c[1] - uy * rad * 0.95)
-        art.line([(c[0] - ux * rad * 0.5, c[1] - uy * rad * 0.5), foot], 1.15, layer='key', wob=0.1, trem=0.1, a0=0.6, a1=2.0)
+    halo = [(c[0] + (x - c[0]) * 1.12, c[1] + (y - c[1]) * 1.16) for x, y in poly]
+    art.knock(halo, layers=('green', 'key'))
+    art.blob(poly, 'green', jit=0.02, gap=0.0, shift=0.35, n=60, scale=(0.98, 1.0))
+    # the domes inked: short strokes along the top, some left out
+    top = [p for p in hand.catmull(poly + poly[:1], closed=True, step=0.7) if (p[0] - c[0]) * ux + (p[1] - c[1]) * uy > rad * 0.12]
+    top.sort(key=lambda p: (p[0] - c[0]) * -uy + (p[1] - c[1]) * ux)
+    j = 0
+    while j < len(top) - 3:
+        n = rng.randint(6, 11)
+        seg = top[j:j + n]
+        if len(seg) > 3 and rng.random() < 0.75:
+            art.line(seg[::2], 1.15, layer='key', wob=0.06, trem=0.06, a0=0.8, a1=1.8)
+        j += n + rng.randint(1, 4)
+    # the trunk: a short fork from the underside down to the ground, on the bigger trees
+    if False:   # forked trunks read as cartoon Ys at chest size: the crowns stand on the horizon instead
+        base = (c[0] - ux * rad * 0.16, c[1] - uy * rad * 0.16)
+        foot = (base[0] - ux * 3.6 + rng.uniform(-0.3, 0.3), base[1] - uy * 3.6)
+        for side in (-1, 1):
+            arm = (base[0] + side * -uy * rad * 0.32, base[1] + side * ux * rad * 0.32)
+            mid = (foot[0] + (base[0] - foot[0]) * 0.45, foot[1] + (base[1] - foot[1]) * 0.45)
+            art.line([foot, mid, arm], 1.15, layer='key', wob=0.05, trem=0.0, a0=0.8, a1=1.6)
 
 # the name, set along the horizon's curve under the trees (each letter upright to the zenith), dots in ring blue
-NAME, NSIZE = 'fred again', 12.5
-RT = (90 + 6.2) / 90 * RH                        # a little under the horizon
+NAME, NSIZE = 'fred again', 15.0
+RT = (90 + 6.8) / 90 * RH                        # a little under the horizon
 f = F.font('brico', NSIZE, 800)
 adv = [f.getlength(c) / hand.R for c in NAME]
-DSTEP, DR = 4.2, 1.5
+DSTEP, DR = 4.9, 1.75
 total = sum(adv) + 1.0 + DSTEP + DR * 2
 s0 = -total / 2
 letters = []
@@ -229,12 +255,34 @@ order = ('green', 'water', 'ring', 'key')
 inks = art.finish(order=order, shifts={'green': (0.4, -0.3), 'water': (-0.3, 0.3), 'ring': (0.25, 0.4)}, trim=False)
 for k, (p, mag, alt) in S.items():
     print(f'{k:12s} alt {alt:5.1f}  at {p[0]:6.1f} {p[1]:6.1f}') if mag < 1.0 else None
+def curve_text(layer, text, fnt, size, r, grow=3):
+    """set text along the circle of radius r round the zenith, centred under it, each letter upright to the zenith"""
+    adv_ = [fnt.getlength(c) / hand.R for c in text]
+    s_ = -sum(adv_) / 2
+    S_ = int(size * 2.2 * hand.R)
+    for c, a in zip(text, adv_):
+        th = (s_ + a / 2) / r
+        s_ += a
+        if c == ' ':
+            continue
+        im = Image.new('L', (S_, S_), 0)
+        ImageDraw.Draw(im).text((S_ / 2, S_ / 2), c, font=fnt, fill=255, anchor='ms')   # baseline-middle at the centre
+        im = im.rotate(math.degrees(th), resample=Image.BICUBIC).point(lambda p: 255 if p >= 128 else 0)
+        if grow:
+            im = im.filter(ImageFilter.MaxFilter(grow))
+        x, y = ZX + r * math.sin(th), ZY + r * math.cos(th)
+        inks[layer].paste(255, (int(x * hand.R - S_ / 2), int(y * hand.R - S_ / 2)), im)
+
+
 S_ = int(NSIZE * 2.2 * hand.R)
 for c, th in letters:
     im = Image.new('L', (S_, S_), 0)
-    ImageDraw.Draw(im).text((S_ / 2, S_ / 2), c, font=f, fill=255, anchor='ms')   # baseline-middle at the centre
+    ImageDraw.Draw(im).text((S_ / 2, S_ / 2), c, font=f, fill=255, anchor='ms')
     im = im.rotate(math.degrees(th), resample=Image.BICUBIC).point(lambda p: 255 if p >= 128 else 0).filter(ImageFilter.MaxFilter(3))
     x, y = ZX + RT * math.sin(th), ZY + RT * math.cos(th)
     inks['key'].paste(255, (int(x * hand.R - S_ / 2), int(y * hand.R - S_ / 2)), im)
+# the chart's caption under the name: where, when, which way
+CAP = '8 dec, 10 pm, looking east'
+curve_text('ring', CAP, F.font('shantell', 8.6, 800), 8.6, RT + 13.4, grow=0)
 F.finish_out(art, inks, order, __file__)
 F.write_placement(__file__, 'centre chest', 17, 11)
