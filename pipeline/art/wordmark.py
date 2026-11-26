@@ -26,7 +26,7 @@ PRINTS = {
     "e": ("i am a party", (169, 39, 1032, 292), BLACK, ["ov-back-E-black-hi.png"]),
     "a": ("mumbai", (303, 53, 1023, 367), CREAM, ["ov-back-A-cream-hi.png", "ov-back-cream.png"]),
     "d": ("bengaluru", (217, 1196, 971, 1485), CREAM, ["ov-back-D-cream-hi.png"]),
-    "f": ("actual life", (200, 60, 1000, 250), BLACK, ["ov-back-F-black-hi.png"]),
+    "f": ("actual life", (236, 68, 964, 241), BLACK, ["ov-back-F-black-hi.png"]),
 }
 
 def font(px):
