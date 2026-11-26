@@ -14,7 +14,7 @@ export const metadata: Metadata = { title: "receipt", robots: { index: false, fo
 
 /**
  * A receipt for the payment, to print or save as PDF. Not a GST tax invoice: sahn is run by a person who isn't
- * GST-registered, so it says so rather than look like one.
+ * GST-registered, so it says so rather than look like one. It speaks as the brand: no person's name or city (Onkar).
  */
 export default async function Receipt({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ k?: string | string[] }> }) {
   if (!shopOpen()) notFound();
@@ -26,7 +26,7 @@ export default async function Receipt({ params, searchParams }: { params: Promis
     <div className="mx-auto max-w-[720px] px-4 pt-6 pb-24 text-[14px] print:p-0">
       <div className="flex items-baseline justify-between border-t border-line pt-1.5 text-[13px] text-quiet"><span>receipt</span><Print /></div>
       <h1 className="mt-5 text-[40px] leading-none font-extrabold tracking-[-0.04em]">{SHOP.merchant}</h1>
-      <p className="mt-2 text-quiet">{[OPERATOR.legalName, OPERATOR.place ? `${OPERATOR.place}, india` : null, OPERATOR.email].filter(Boolean).join(" · ") || "india"}</p>
+      <p className="mt-2 text-quiet">{["an independent label from india", OPERATOR.email].filter(Boolean).join(" · ")}</p>
 
       <div className="mt-8 grid grid-cols-2 gap-4">
         <div>
