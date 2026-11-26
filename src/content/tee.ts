@@ -7,8 +7,8 @@ export type Design = "c" | "a" | "d" | "e" | "f";
 export type City = "mumbai" | "bengaluru";
 
 /**
- * Four shirts on the same blank. Each has its own back; the front is again.. in four scripts on the left chest,
- * except i am a party, whose front is a seal on the centre chest (pipeline/fronts.py).
+ * Five shirts on the same blank, each with its own back and its own front on the left chest (pipeline/fronts.py):
+ * again.. in four scripts on the crowd, the seal on i am a party, each city's map key on its map, the wristband on actual life.
  * The tour has two (the crowd, both cities in one drawing, and i am a party); each city has its map.
  * Each shirt comes in one colour only: a night shirt in black, a day shirt in off white.
  */
@@ -17,7 +17,7 @@ export const DESIGNS: Record<Design, { no: string; name: string; city: City | nu
   e: { no: "02", name: "i am a party", city: null, colour: "black", back: "both nights through a heat camera: the crowd from the stage, hands up for the drop, every breath rising into the December air, 16° in Bengaluru, 20° in Mumbai" },
   a: { no: "03", name: "map", city: "mumbai", colour: "cream", back: "the race course from above, the sea beside it, the sound rolling out from the stage" },
   d: { no: "04", name: "map", city: "bengaluru", colour: "cream", back: "the NICE grounds from above, every person in the crowd drawn, friends holding hands; the last train in at Madavara, Tumakuru Road jammed, the sound rolling out over the village to the lake" },
-  f: { no: "05", name: "actual life", city: "bengaluru", colour: "black", back: "the walk home at 1:42 am in light rain: the street under the rain trees shining wet, the last train in at Madavara over it, the stage still lit at the end of the road, autos waiting, coffee still on, friends who won't go home yet; on the front, the festival wristband hanging from the left chest, again.. again.. again.." },
+  f: { no: "05", name: "actual life", city: "bengaluru", colour: "black", back: "the walk home at 1:42 am in light rain: the street under the rain trees shining wet, the last train in at Madavara over it, the stage still lit at the end of the road, autos waiting, filter coffee still on, friends who won't go home yet; on the front, the festival wristband hanging from the left chest, again.. again.. again.." },
 };
 export const CITIES: City[] = ["mumbai", "bengaluru"];
 
@@ -43,7 +43,7 @@ export const SHOWS = [
 
 export const THE_TEE = {
   lineup: "lineup 01",
-  lede: "again.. in four scripts across the chest, the night drawn across the whole back. Heavy cotton, cut loose, made for a long night on your feet.",
+  lede: "a mark of its own on the left chest, the night drawn across the whole back. Heavy cotton, cut loose, made for a long night on your feet.",
   cloth: [
     ["cotton", "100% combed cotton, single jersey"],
     ["weight", "240 g/m², heavy and dense, not see-through"],

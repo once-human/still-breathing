@@ -13,7 +13,7 @@ LINE = ImageFont.truetype(os.path.join(PIPE, "fonts", "Gaegu-Bold.ttf"), 46 * K)
 NOTES = [
     ("who needs an umbrella", (60, 1345), "ls", -2, (170, 1310), (175, 1240), 0.3),
     ("nobody's going home yet", (1165, 1435), "rs", -2, (1010, 1398), (930, 1325), 0.3),
-    ("coffee's still on", (1170, 1065), "rs", 3, (1050, 1040), (1010, 975), 0.35),
+    ("filter coffee's still on", (1170, 1065), "rs", 3, (1050, 1040), (1010, 975), 0.35),
     ("last train from madavara", (1170, 405), "rs", -2, (975, 372), (880, 318), -0.3),
 ]
 LINE_TEXT, LINE_AT = "bengaluru . 1:42 am . 22°c", (600, 1540)

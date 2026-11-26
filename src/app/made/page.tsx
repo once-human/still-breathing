@@ -31,7 +31,7 @@ const PARTS: Part[] = [
   {
     no: "03", title: "the lettering", note: "set by hand",
     body: [
-      "the city, the dates and the small notes are set in figma, on the art, by eye: placed where the drawing leaves room, turned a few degrees, roughened so they sit in the same ink as everything else. the front is one word, again.., in four scripts: english, hindi, marathi and kannada.",
+      "the city, the dates and the small notes are set in figma, on the art, by eye: placed where the drawing leaves room, turned a few degrees, roughened so they sit in the same ink as everything else. each front is its own, on the left chest: again.. in four scripts (english, hindi, marathi and kannada), a seal, a map key, a wristband.",
     ],
   },
   {

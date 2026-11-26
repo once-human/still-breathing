@@ -9,7 +9,11 @@ AREA_PX_CM = 60                                   # the viewer's front texture: 
 # design: (file under pipeline/, centre x, top, width). None: the lineup's again.. in four scripts, left chest.
 LETTERING = (None, 4 + 10.5 / 2, 15.0, 10.5)     # inner edge 4 cm off the centre front, top 15 cm under the shoulder
 FRONTS = {
-    "a": LETTERING, "b": LETTERING, "c": LETTERING, "d": LETTERING,
+    "b": LETTERING, "c": LETTERING,
+    # the maps: each city's key (picks 28 and 18) as the front, in exactly the lettering's place and size
+    "a": ("art/fronts/a/01-the-key/art.png",) + LETTERING[1:],
+    # Bengaluru's key with lines up from again..'s two dots to sat 12 and sun 13 (picks 25's dates)
+    "d": ("art/fronts/d/03-the-key-dates/art.png",) + LETTERING[1:],
     # i am a party: the seal, in exactly the lettering's place and size on the other shirts (left chest, 10.5 cm wide)
     "e": ("art/fronts/e/06-the-seal-left-chest/art.png",) + LETTERING[1:],
     # actual life: the wristband (picks no. 09), turned to hang down the wearer's left front, clasp up, its tail
