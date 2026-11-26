@@ -73,9 +73,11 @@ const numOr = (v: string | null, fallback: number | null) => (v === null || v ==
 
 let cache: { list: Product[]; at: number } | null = null;
 
-export async function products(): Promise<Product[]> {
-  if (cache && Date.now() - cache.at < 30_000) return cache.list;
-  const { margin } = await getSettings();
+/** `fresh` reads the database itself, skipping this instance's 30-second cache of products and settings: for pages
+ *  regenerated after revalidateTag(PRODUCTS_TAG), which another instance may have triggered */
+export async function products(opts: { fresh?: boolean } = {}): Promise<Product[]> {
+  if (!opts.fresh && cache && Date.now() - cache.at < 30_000) return cache.list;
+  const { margin } = await getSettings(opts);
   const base = (Object.keys(DESIGNS) as Design[]).map(seed);
   let rows: (string | null)[][] = [];
   if (kvKeys()) {
@@ -84,6 +86,9 @@ export async function products(): Promise<Product[]> {
       rows = await query(`SELECT ${COLS} FROM products`);
     } catch (e) {
       console.error("products:", e instanceof Error ? e.message : e);
+      // a fresh read must not hand a stale list to a page cached for an hour: outside the build, let the regeneration
+      // fail (Next keeps serving the page it had and tries again); a build goes on with the code's values
+      if (opts.fresh && process.env.NEXT_PHASE !== "phase-production-build") throw e;
       if (cache) return cache.list;
     }
   }

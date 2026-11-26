@@ -31,7 +31,6 @@ export type Policy = { slug: PolicySlug; title: string; summary: string; section
 
 const mail = () => OPERATOR.email ?? "our order email";
 const [m0, m1] = SHOP.make, [r0, r1] = SHOP.road;
-const price = `₹${SHOP.price.toLocaleString("en-IN")}`;
 
 export const POLICIES: Record<PolicySlug, Policy> = {
   shipping: {
@@ -133,7 +132,7 @@ export const POLICIES: Record<PolicySlug, Policy> = {
       {
         heading: "prices and payment",
         body: [
-          `prices are in indian rupees and include all taxes and shipping within ${SHOP.where}; one shirt is ${price} unless the site says otherwise. the price charged is the one at checkout.`,
+          `prices are in indian rupees and include all taxes and shipping within ${SHOP.where}. each shirt's price is shown on its page, and the price charged is the one at checkout.`,
           "payment is taken by Razorpay, a payment gateway, in its own secure payment window. your UPI, card and bank details go only to it; we never see or store them.",
           "an order is ours to make once the payment is confirmed. if a price is ever shown wrongly or we can't make an order, we tell you and refund it in full.",
           `you can buy at most ${SHOP.maxPerBag} shirts in one order.`,

@@ -24,9 +24,10 @@ const okMargin = (x: unknown): x is number => Number.isInteger(x) && (x as numbe
 
 let cache: { v: Settings; at: number } | null = null;
 
-export async function getSettings(): Promise<Settings> {
+/** `fresh` skips this instance's 30-second cache (a page being regenerated after a save must see the save) */
+export async function getSettings(opts: { fresh?: boolean } = {}): Promise<Settings> {
   if (!kvKeys()) return DEFAULT_SETTINGS;
-  if (cache && Date.now() - cache.at < 30_000) return cache.v;
+  if (!opts.fresh && cache && Date.now() - cache.at < 30_000) return cache.v;
   try {
     await table();
     const v = { ...DEFAULT_SETTINGS };
