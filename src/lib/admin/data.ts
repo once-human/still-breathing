@@ -1,21 +1,25 @@
 import "server-only";
 import { DESIGNS, SIZE_ORDER, type Design, type Size } from "@/content/tee";
 import type { Account } from "@/lib/shop/account";
-import { refunded, type Order } from "@/lib/shop/orders";
+import { listOrders, refunded, type Order } from "@/lib/shop/orders";
 import { products } from "@/lib/shop/products";
 import { rows } from "./db";
 import { getSettings, type Settings } from "./settings";
 
 /**
- * The shop's records as the admin reads them, straight from the order store's rows (read only: every change to an
- * order goes through the shop's own functions). A one-person shop has hundreds of orders, not millions, so they're
+ * The shop's records as the admin reads them: orders through the shop's listOrders, accounts from their rows (read
+ * only: every change goes through the shop's own functions). A one-person shop has hundreds of orders, not millions, so they're
  * read whole and worked out here.
  */
 export async function allOrders(): Promise<Order[]> {
-  const r = await rows<{ v: Order }>(
-    "SELECT value::jsonb AS v FROM kv WHERE key LIKE 'order:%' AND (expires_at IS NULL OR expires_at > now()) ORDER BY key DESC LIMIT 20000",
-  );
-  return r.map((x) => x.v).filter((o) => o && typeof o.id === "string").sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  // through the shop's listOrders (newest first, 200 a page), so the admin never depends on how orders are stored
+  const out: Order[] = [];
+  for (let offset = 0; offset < 20000; offset += 200) {
+    const page = await listOrders({ limit: 200, offset });
+    out.push(...page);
+    if (page.length < 200) break;
+  }
+  return out;
 }
 
 export async function allAccounts(): Promise<Account[]> {
