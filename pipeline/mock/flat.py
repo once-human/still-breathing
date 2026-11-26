@@ -22,11 +22,17 @@ def put(im, file, cx, top, w, rot=0.0):
     x, y = to(cx, top); im.alpha_composite(a, (int(x - a.width / 2), int(y)))
 def label(im, txt):
     ImageDraw.Draw(im).text((M, H - M + 6), txt, fill=(60, 60, 60))
+from fronts import FRONTS
+BOX = (-14 * 2.54 / 2, 11.5, 14 * 2.54, 16 * 2.54)   # the front print box: 35.6 x 40.6 cm from the collar seam
+def box(im):
+    d = ImageDraw.Draw(im); x0, y0 = to(BOX[0], BOX[1]); x1, y1 = to(BOX[0] + BOX[2], BOX[1] + BOX[3])
+    for x in range(int(x0), int(x1), 24): d.line([(x, y0), (x + 12, y0)], fill=(90, 90, 90), width=2); d.line([(x, y1), (x + 12, y1)], fill=(90, 90, 90), width=2)
+    for y in range(int(y0), int(y1), 24): d.line([(x0, y), (x0, y + 12)], fill=(90, 90, 90), width=2); d.line([(x1, y), (x1, y + 12)], fill=(90, 90, 90), width=2)
 panels = []
-W20, W0 = 13.3, 4.2
-im, d = tee(); put(im, "art/fronts/c/05-wristband/trial/down-20.png", 10 + W20 / 2, 14.0, W20); panels.append((im, "G, the artist's: 30 cm, 20 deg off vertical drifting out, clasp up on the left chest"))
-im, d = tee(); put(im, "art/fronts/c/05-wristband/trial/down-0.png", 12.0, 20.0, 49 * 234 / 1678); panels.append((im, "H, yours: 49 cm, straight down from the left chest to near the hem"))
-
+for dsg in (sys.argv[2:] or ["c", "f"]):
+    f_file, cx, top, w = FRONTS[dsg]
+    im, d = tee(); box(im); put(im, f_file or "overlays/ov-front-black.png", cx, top, w)
+    panels.append((im, f"{dsg}: front as printed; dashed: the front print box"))
 out = Image.new("RGB", (W * len(panels), H + 30), BG)
 for i, (p, t) in enumerate(panels):
     out.paste(p.convert("RGB"), (i * W, 0)); ImageDraw.Draw(out).text((i * W + M, H + 4), t, fill=(50, 50, 50))

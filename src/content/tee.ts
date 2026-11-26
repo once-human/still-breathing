@@ -17,7 +17,7 @@ export const DESIGNS: Record<Design, { no: string; name: string; city: City | nu
   e: { no: "02", name: "i am a party", city: null, colour: "black", back: "both nights through a heat camera: the crowd from the stage, hands up for the drop, every breath rising into the December air, 16° in Bengaluru, 20° in Mumbai" },
   a: { no: "03", name: "map", city: "mumbai", colour: "cream", back: "the race course from above, the sea beside it, the sound rolling out from the stage" },
   d: { no: "04", name: "map", city: "bengaluru", colour: "cream", back: "the NICE grounds from above, every person in the crowd drawn, friends holding hands; the last train in at Madavara, Tumakuru Road jammed, the sound rolling out over the village to the lake" },
-  f: { no: "05", name: "actual life", city: "bengaluru", colour: "black", back: "the walk home at 1:42 am in light rain: the street under the rain trees shining wet, the last train in at Madavara over it, the stage still lit at the end of the road, autos waiting, coffee still on, friends who won't go home yet; on the chest, the festival wristband, again.. again.. again.." },
+  f: { no: "05", name: "actual life", city: "bengaluru", colour: "black", back: "the walk home at 1:42 am in light rain: the street under the rain trees shining wet, the last train in at Madavara over it, the stage still lit at the end of the road, autos waiting, coffee still on, friends who won't go home yet; on the front, the festival wristband hanging from the left chest, again.. again.. again.." },
 };
 export const CITIES: City[] = ["mumbai", "bengaluru"];
 
