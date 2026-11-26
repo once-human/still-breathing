@@ -42,7 +42,7 @@ export const POLICIES: Record<PolicySlug, Policy> = {
       {
         heading: "where we send",
         body: [
-          `anywhere in ${SHOP.where} with a pin code a courier reaches. we don't send to other states or abroad yet.`,
+          `anywhere in ${SHOP.where} with a pin code a courier reaches. ${SHOP.where === "india" ? "we don't send abroad yet." : "we don't send to other states or abroad yet."}`,
           "shipping is free: the price you see is what you pay, all taxes included.",
         ],
       },

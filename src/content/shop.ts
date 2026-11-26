@@ -60,14 +60,13 @@ export const SHOP = {
   make: [2, 5] as [number, number],
   road: [2, 7] as [number, number],
   /** where it goes, as the site says it (from SELLS_IN) */
-  shipsTo: "Maharashtra",
-  where: "maharashtra",
+  shipsTo: "India",
+  where: "india",
 };
 
 /**
- * The states a parcel can go to. Maharashtra only for now: the shop is run by an individual who isn't GST-registered,
- * and selling goods into another state needs registration whatever the turnover, while selling within Maharashtra
- * doesn't below the threshold. Once registered, list every state (STATES in lib/shop/india.ts), set shipsTo / where
- * to India, and checkout, the address form and every line on the site follow.
+ * The states a parcel can go to: all of them (null), Onkar's call (2026-11-26). To narrow it (Maharashtra only, say),
+ * list the states here and set shipsTo / where to match: checkout, the address form, the pin check and every line on
+ * the site follow.
  */
-export const SELLS_IN: readonly string[] = ["Maharashtra"];
+export const SELLS_IN: readonly string[] | null = null;

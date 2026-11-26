@@ -34,7 +34,7 @@ export const LINEUPS: Lineup[] = [
     story: [
       "five shirts for five nights in december: delhi on the 5th, mumbai on the 8th and 9th, bengaluru on the 12th and 13th. not a tour shirt with a list of dates on the back, but the nights themselves.",
       "the crowd and i am a party belong to the whole tour: both cities in one drawing, the crowd from behind and the crowd from the stage. the maps are the grounds seen from above, the race course by the sea and the nice grounds at the end of the green line, every road and rail line where it really is. actual life is the walk home after, in bengaluru's rain.",
-      "each one is made to order, one at a time, and sent anywhere in maharashtra. it's a fan's shirt: drawn for the shows, not by them.",
+      "each one is made to order, one at a time, and sent anywhere in india. it's a fan's shirt: drawn for the shows, not by them.",
     ],
     groups: [
       { label: "the tour", city: null, shirts: ["c", "e"] },

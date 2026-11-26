@@ -10,7 +10,8 @@ export const STATES = [
 ] as const;
 
 /** the states the shop sends to, in the courier's spelling */
-export const SHIP_STATES = STATES.filter((s) => SELLS_IN.includes(s));
+const only = SELLS_IN;
+export const SHIP_STATES = only ? STATES.filter((s) => only.includes(s)) : [...STATES];
 
 /** a pin code's first two digits, by state, where a wrong pair is a sure sign of a mistyped state or pin */
 const PIN_START: Partial<Record<(typeof STATES)[number], RegExp>> = { Maharashtra: /^4[0-4]/ };
@@ -38,7 +39,7 @@ export function checkDetails(raw: unknown): { ok: Details } | { field: keyof Det
   if (d.address1.length < 5) return { field: "address1", error: "house, flat or building, and street" };
   if (d.city.length < 2) return { field: "city", error: "your city or town" };
   if (!(STATES as readonly string[]).includes(d.state)) return { field: "state", error: "pick your state" };
-  if (!SELLS_IN.includes(d.state)) return { field: "state", error: `we send only within ${SHOP.where}` };
+  if (SELLS_IN && !SELLS_IN.includes(d.state)) return { field: "state", error: `we send only within ${SHOP.where}` };
   if (!/^[1-9]\d{5}$/.test(d.pin)) return { field: "pin", error: "your 6-digit pin code" };
   const start = PIN_START[d.state as (typeof STATES)[number]];
   if (start && !start.test(d.pin)) return { field: "pin", error: `that pin code isn't in ${d.state.toLowerCase()}` };

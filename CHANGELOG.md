@@ -29,7 +29,7 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 - On the table: the tee laid flat on a worn wooden table, lit by a window on the right whose frame throws a soft shadow across the boards. Air comes in through it, never quite straight: it dies away, breezes, builds slowly or bursts. Now and then a dry leaf (rarely a thread or a hair) drifts down or skates in; it has weight, holding until a puff beats its grip, then breaking loose, skidding and stopping again. Leaves glow a little with the light behind them. The cotton breathes with the air.
 
 ### Changed
-- The shop sends within Maharashtra for now: checkout offers Maharashtra and checks the pin code is in it, and every line that said anywhere in india says anywhere in maharashtra.
+- Checkout checks a Maharashtra pin code is really in Maharashtra. Where the shop sends is one setting now (still anywhere in india).
 - Orders, sign-ins and the order marks are kept in a Postgres database on Neon (Singapore) instead of Upstash; the privacy policy says so.
 - The label is called sahn now: in the header, the footer, every page's title and share card, the words on the photos you save from the 3D and the try-on, and their file names. The site's own addresses (in search results and share cards) follow its domain, sahn.in once it points here. Lineup 01 is still lineup 01 · fred again.. india · fan made.
 - Nothing on the site says soon: no buy button, contact or policy link shows until it's real.
