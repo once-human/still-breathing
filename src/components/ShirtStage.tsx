@@ -8,13 +8,16 @@ import { Viewer, warmDesign } from "@/components/Viewer";
 import { Countdown } from "@/components/Countdown";
 import { Fit, SHOP, WEARERS, type Wearer } from "@/components/Fit";
 import { AddToBagSlot } from "@/components/ShopSlots";
-import { SHOP as STORE } from "@/content/shop";
+import { BuyFacts } from "@/components/BuyFacts";
+import { priceOf } from "@/content/shop";
+import { rupees } from "@/lib/shop/money";
 import type { Variant } from "@/lib/viewer/raster";
 import { COLOURS, DESIGNS, SIZES, SIZE_ORDER, THE_TEE, type Size } from "@/content/tee";
 import { fmtDays, lineupOf, paperStill, shirtBySlug, shirtHref, shirtTitle, STILL_H, STILL_W } from "@/content/lineups";
 
 /**
- * The top of every shirt page: the tee in 3D on the left, everything you pick on the right. It lives in the shirts'
+ * The shirt page: the tee in 3D on the left; on the right its name, price, what's on it, the size and the buy button,
+ * and on a phone a buy bar that stays at the bottom once that button has scrolled away. It lives in the shirts'
  * layout, so going from one shirt to the next keeps the 3D running and only swaps the shirt on it.
  */
 export function ShirtStage() {
@@ -25,8 +28,22 @@ export function ShirtStage() {
   const [size, setSize] = useState<Size>("M");
   const [variant, setVariant] = useState<Variant>(SHOP);
   const [wearer, setWearer] = useState<Wearer>("him");
+  const [shot, setShot] = useState("tee");
+  const [barOn, setBarOn] = useState(false);
+  const buyRef = useRef<HTMLDivElement>(null);
   const fromStage = useRef(false);
   const first = useRef(true);
+
+  // a shirt page always opens at its top, on the tee (never part way down)
+  useEffect(() => { if (!location.hash) requestAnimationFrame(() => scrollTo({ top: 0 })); }, []);
+  // the phone's buy bar shows once the buy button itself is out of sight above
+  useEffect(() => {
+    const el = buyRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([e]) => setBarOn(!e.isIntersecting && e.boundingClientRect.top < 0));
+    io.observe(el);
+    return () => io.disconnect();
+  }, [design]);
 
   // the page follows this shirt's city (countdown, the sky); a lineup-wide shirt follows the visitor's nearest show
   useEffect(() => { if (design) setFocusCity(DESIGNS[design].city ?? null); }, [design]);
@@ -45,8 +62,8 @@ export function ShirtStage() {
   return (
     <section aria-label={`${t.top} ${t.name}`} className="grid grid-cols-1 gap-x-4 gap-y-8 px-4 pt-4 md:grid-cols-12">
       <div className="page-in md:col-span-7 lg:col-span-7">
-        <Viewer design={design} tee={tee} variant={variant} />
-        <div className="mt-2 flex items-baseline gap-4 text-[13px]" role="group" aria-label="Worn by">
+        <Viewer design={design} tee={tee} variant={variant} onShot={setShot} />
+        <div className={`mt-2 items-baseline gap-4 text-[13px] ${shot === "worn" ? "flex" : "hidden"}`} role="group" aria-label="Worn by">
           <span className="text-quiet">worn by</span>
           {(Object.keys(WEARERS) as Wearer[]).map((w) => (
             <button key={w} onClick={() => setWearer(w)} aria-pressed={w === wearer}
@@ -56,16 +73,20 @@ export function ShirtStage() {
       </div>
 
       <div className="page-in-2 md:col-span-5 lg:col-span-4 lg:col-start-9">
-        <div className="md:sticky md:top-20">
+        <div className="md:sticky md:top-28">
           <nav aria-label="Breadcrumb" className="border-t border-line pt-1.5 text-[13px] text-quiet">
-            <Link href={`/${lineup.slug}`} className="draw hover:text-ink">lineup {lineup.no}</Link>
-            <span className="mx-1.5">/</span>{group.label}<span className="mx-1.5">/</span><span className="tnum">{s.no}</span>
+            <Link href={`/${lineup.slug}`} className="draw hover:text-ink">{lineup.title}</Link>
+            <span className="mx-1.5">/</span>{group.label}
           </nav>
 
           <h1 className="mt-5 text-[46px] leading-[0.88] font-extrabold tracking-[-0.045em] lg:text-[68px]">
             {t.top}<span className="block text-quiet">{t.name}</span>
           </h1>
-          <p className="mt-5 max-w-[36ch] text-ink/85">{THE_TEE.lede}</p>
+          <p className="mt-5 flex items-baseline gap-3">
+            <span className="text-[28px] font-extrabold tracking-[-0.03em] tnum">{rupees(priceOf(design))}</span>
+            <span className="text-[13px] text-quiet">tax and shipping included</span>
+          </p>
+          <p className="mt-4 max-w-[40ch] text-ink/85">{s.about}</p>
 
           <p className="mt-5 flex items-center gap-2 text-[13px]">
             <span className="inline-block h-3 w-3 rounded-full border border-line" style={{ background: COLOURS[tee].hex }} />
@@ -88,16 +109,26 @@ export function ShirtStage() {
                 <div key={k}><dt className="text-quiet">{k}</dt><dd className="text-[20px] font-semibold">{v}<span className="text-[13px] font-normal text-quiet"> cm</span></dd></div>
               ))}
             </dl>
-            <p className="mt-2 text-[12px] text-quiet">measured on the garment. it&apos;s cut big: most people take their usual size.</p>
+            <p className="mt-2 text-[12px] text-quiet">measured on the garment, in cm.</p>
           </div>
 
-          <div className="mt-6"><AddToBagSlot design={design} size={size} /></div>
-          <p className="mt-2 text-[12px] text-quiet">made to order: made in {STORE.make[0]} to {STORE.make[1]} days, then {STORE.road[0]} to {STORE.road[1]} days to you, anywhere in india. <Link href="/help#shipping" className="draw hover:text-ink">shipping</Link></p>
+          <div ref={buyRef} className="mt-6"><AddToBagSlot design={design} size={size} /></div>
+          <BuyFacts />
 
           <Fit size={size} shop={WEARERS[wearer]} onVariant={setVariant} />
 
+          <details className="group/d mt-8 border-t border-line pt-1.5 text-[13px]">
+            <summary className="flex cursor-pointer list-none items-baseline justify-between text-quiet hover:text-ink [&::-webkit-details-marker]:hidden">
+              <span>cloth and care</span><span className="transition-transform group-open/d:rotate-45">+</span>
+            </summary>
+            <dl className="mt-3 space-y-1.5">
+              {THE_TEE.cloth.map(([k, v]) => <div key={k} className="grid grid-cols-[5.5rem_1fr] gap-3"><dt className="text-quiet">{k}</dt><dd>{v}</dd></div>)}
+            </dl>
+            <ul className="mt-4 space-y-0.5">{THE_TEE.care.map((c) => <li key={c}>{c}</li>)}</ul>
+          </details>
+
           <div className="mt-8 border-t border-line pt-1.5 text-[13px]">
-            <p className="text-quiet">lineup {lineup.no} · the other shirts</p>
+            <p className="text-quiet">{lineup.title} · the other shirts</p>
             <ul className="mt-3 grid grid-cols-5 gap-1.5">
               {all.map((d) => (
                 <li key={d}>
@@ -124,6 +155,15 @@ export function ShirtStage() {
             <p className="mt-3 flex items-center gap-2"><span className="inline-block h-1.5 w-1.5 rounded-full bg-blue" /><Countdown /></p>
           </div>
         </div>
+      </div>
+
+      {/* phones: once the buy button has scrolled away, the shirt, its size and the button stay at the bottom */}
+      <div className={`fixed inset-x-0 bottom-0 z-40 border-t border-line bg-paper/95 px-4 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md transition-transform duration-500 ease-[cubic-bezier(.2,.7,.2,1)] md:hidden ${barOn ? "" : "translate-y-full"}`} inert={!barOn}>
+        <p className="mb-2 flex items-baseline justify-between gap-3 text-[13px]">
+          <span className="truncate"><span className="font-semibold">{t.name}</span><span className="text-quiet"> · {t.top} · {size}</span></span>
+          <span className="shrink-0 font-semibold tnum">{rupees(priceOf(design))}</span>
+        </p>
+        <AddToBagSlot design={design} size={size} />
       </div>
     </section>
   );

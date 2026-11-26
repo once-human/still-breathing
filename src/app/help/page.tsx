@@ -29,7 +29,7 @@ const PARTS: Part[] = [
   },
   {
     id: "shipping", title: "shipping",
-    body: <p>we send anywhere in india. making takes {SHOP.make[0]} to {SHOP.make[1]} days, then {SHOP.road[0]} to {SHOP.road[1]} days on the road. if you want it for a show, order early: lineup {CURRENT.no}&apos;s nights start on 5 december.</p>,
+    body: <p>we send anywhere in india. making takes {SHOP.make[0]} to {SHOP.make[1]} days, then {SHOP.road[0]} to {SHOP.road[1]} days on the road. if you want it for a show, order early: fred again.. india starts on 5 december.</p>,
   },
   {
     id: "sizes", title: "sizes",

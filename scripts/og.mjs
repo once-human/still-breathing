@@ -1,6 +1,6 @@
 // Open Graph pictures (1200 x 630) from the studio renders in public/tee/still, written to public/og as JPEG
-// (WhatsApp, iMessage and the rest all read JPEG). Each shirt: its front and back on the studio paper, then worn at
-// the show. A lineup (and the home page): every shirt's back side by side. Run again after the stills are re-rendered:
+// (WhatsApp, iMessage and the rest all read JPEG). Each shirt: its front, ¾ and back on the studio paper. A collection
+// (and the home page): every shirt's back side by side. No people. Run again after the stills are re-rendered:
 //   node scripts/og.mjs
 import sharp from "sharp";
 import { mkdirSync, readFileSync } from "node:fs";
@@ -10,7 +10,7 @@ const W = 1200, H = 630, BG = { r: 13, g: 13, b: 12 };
 const tee = readFileSync("src/content/tee.ts", "utf8");
 const slugs = Object.fromEntries([...tee.matchAll(/^\s+(\w): \{ no: "\d+", slug: "([\w-]+)"/gm)].map((m) => [m[1], m[2]]));
 const lineups = readFileSync("src/content/lineups.ts", "utf8");
-const groups = [...lineups.matchAll(/slug: "(lineup-\d+)"[\s\S]*?groups: \[([\s\S]*?)\n {4}\]/g)].map((m) => ({
+const groups = [...lineups.matchAll(/slug: "([\w-]+)",\s+no:[\s\S]*?groups: \[([\s\S]*?)\n {4}\]/g)].map((m) => ({
   slug: m[1], shirts: [...m[2].matchAll(/shirts: \[([^\]]*)\]/g)].flatMap((g) => [...g[1].matchAll(/"(\w)"/g)].map((x) => x[1])),
 }));
 
@@ -33,6 +33,6 @@ const strip = async (files, out) => {
 
 mkdirSync("public/og", { recursive: true });
 const S = (d, p) => `public/tee/still/${d}/${p}.webp`;
-for (const [d, slug] of Object.entries(slugs)) await strip([S(d, "tee/front"), S(d, "tee/back"), S(d, "a180")], `public/og/${slug}.jpg`);
+for (const [d, slug] of Object.entries(slugs)) await strip([S(d, "tee/front"), S(d, "tee/q"), S(d, "tee/back")], `public/og/${slug}.jpg`);
 for (const l of groups) await strip(l.shirts.map((d) => S(d, "tee/back")), `public/og/${l.slug}.jpg`);
-if (groups[0]) await strip([S(groups[0].shirts[0], "a180"), ...groups[0].shirts.slice(1).map((d) => S(d, "tee/back"))], "public/og/home.jpg");
+if (groups[0]) await strip(groups[0].shirts.map((d) => S(d, "tee/back")), "public/og/home.jpg");

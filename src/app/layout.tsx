@@ -37,7 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <SmoothScroll />
         <Header />
-        <main id="main" className="min-h-[70vh] pt-14 md:pt-16">{children}</main>
+        <main id="main" className="min-h-[70vh] pt-[5.25rem] md:pt-[5.75rem]">{children}</main>
         <Footer />
       </body>
     </html>

@@ -97,7 +97,7 @@ export default function Made() {
           ))}
         </div>
         <div className="mt-24 px-4">
-          <Link href={`/${CURRENT.slug}`} className="text-[clamp(28px,5vw,64px)] font-extrabold tracking-[-0.04em] hover:text-blue">see lineup {CURRENT.no} →</Link>
+          <Link href={`/${CURRENT.slug}`} className="text-[clamp(28px,5vw,64px)] font-extrabold tracking-[-0.04em] hover:text-blue">see the shirts →</Link>
         </div>
       </div>
     </>

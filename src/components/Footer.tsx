@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { CURRENT, shirtHref, shirtLabel, shirtsOf } from "@/content/lineups";
-import { DESIGNS } from "@/content/tee";
 import { HELP_LINKS, POLICY_LINKS } from "@/lib/site";
 import { shopOpen } from "@/lib/shop/config";
 import pkg from "../../package.json";
@@ -14,12 +13,12 @@ export function Footer() {
     <footer className="mt-40 overflow-hidden" aria-label="Site">
       <div className="grid grid-cols-2 gap-x-4 gap-y-10 px-4 text-[14px] md:grid-cols-4 lg:grid-cols-12">
         <div className={`${col} lg:col-span-3`}>
-          <p className="font-semibold">lineup {CURRENT.no}</p>
+          <p className="font-semibold">{CURRENT.title}</p>
           <ul className="mt-3 space-y-1">
             {shirtsOf(CURRENT).map((d) => (
-              <li key={d}><Link href={shirtHref(d)} className={link}><span className="mr-2 tnum">{DESIGNS[d].no}</span>{shirtLabel(d)}</Link></li>
+              <li key={d}><Link href={shirtHref(d)} className={link}>{shirtLabel(d)}</Link></li>
             ))}
-            <li className="pt-2"><Link href={`/${CURRENT.slug}`} className="text-blue hover:text-ink">the whole lineup →</Link></li>
+            <li className="pt-2"><Link href={`/${CURRENT.slug}`} className="text-blue hover:text-ink">all five, with the shows →</Link></li>
           </ul>
         </div>
         <div className={`${col} lg:col-span-3`}>
@@ -33,7 +32,7 @@ export function Footer() {
           <p className="font-semibold">sahn</p>
           <ul className="mt-3 space-y-1">
             <li><Link href="/" className={link}>home</Link></li>
-            <li><Link href="/lineups" className={link}>lineups</Link></li>
+            <li><Link href="/shop" className={link}>shop</Link></li>
             <li><Link href="/made" className={link}>how it&apos;s made</Link></li>
           </ul>
         </div>

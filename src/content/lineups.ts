@@ -2,8 +2,9 @@ import { asset } from "@/lib/asset";
 import { DESIGNS, SHOWS, type City, type Design } from "@/content/tee";
 
 /**
- * The lineups, newest first. A lineup is one moment: its shows, its story and its shirts. A new one drops in by adding
- * an entry here (its shirts in tee.ts); every page, the header, the footer and the sitemap read from this list.
+ * The collections, newest first, each named for what it is (fred again.. india): its shows, its story and its shirts.
+ * A new one drops in by adding an entry here (its shirts in tee.ts); every page, the header, the footer and the
+ * sitemap read from this list. Its slug is its address: /fred-again-india, /fred-again-india/<shirt>.
  */
 export type Lineup = {
   slug: string;
@@ -15,7 +16,7 @@ export type Lineup = {
   lede: string;
   story: string[];
   groups: { label: string; city: City | null; shirts: Design[] }[];
-  /** the shirt whose worn back stands for the lineup on the home page */
+  /** the shirt whose back artwork stands for the collection on the home page */
   hero: Design;
 };
 
@@ -23,7 +24,7 @@ const GROUND: Record<string, string> = { "delhi ncr": "gurugram", mumbai: "the r
 
 export const LINEUPS: Lineup[] = [
   {
-    slug: "lineup-01",
+    slug: "fred-again-india",
     no: "01",
     title: "fred again.. india",
     tag: "fan made",
@@ -31,7 +32,7 @@ export const LINEUPS: Lineup[] = [
     shows: SHOWS.map((s) => ({ ...s, ground: GROUND[s.city] ?? s.city })),
     lede: "five shirts for the december shows in india. two for the whole tour, and the ground itself for each city, drawn by hand from where it really is.",
     story: [
-      "lineup 01 is for five nights in december: delhi on the 5th, mumbai on the 8th and 9th, bengaluru on the 12th and 13th. not a tour shirt with a list of dates on the back, but the nights themselves.",
+      "five shirts for five nights in december: delhi on the 5th, mumbai on the 8th and 9th, bengaluru on the 12th and 13th. not a tour shirt with a list of dates on the back, but the nights themselves.",
       "the crowd and i am a party belong to the whole tour: both cities in one drawing, the crowd from behind and the crowd from the stage. the maps are the grounds seen from above, the race course by the sea and the nice grounds at the end of the green line, every road and rail line where it really is. actual life is the walk home after, in bengaluru's rain.",
       "each one is made to order, one at a time, and sent anywhere in india. it's a fan's shirt: drawn for the shows, not by them.",
     ],
@@ -59,8 +60,10 @@ export const shirtLabel = (d: Design) => `${DESIGNS[d].name}${DESIGNS[d].city ? 
 /** The studio renders. Paper: the tee alone on the studio paper. Worn: at the show, him by default, or her. */
 export type StillView = "front" | "q" | "back";
 export const paperStill = (d: Design, v: StillView) => asset(`/tee/still/${d}/tee/${v}.webp`);
-export const wornStill = (d: Design, a: 0 | 180, who: "him" | "her" = "him") => asset(`/tee/still/${d}${who === "her" ? "/her" : ""}/a${a}.webp`);
+
 export const STILL_W = 880, STILL_H = 1120;
+/** each side's whole print area, uncropped and at one scale (scripts/art.mjs), shown on the shirt's own colour */
+export const printArt = (d: Design, side: "front" | "back") => asset(`/tee/art/${d}-${side}.webp`);
 
 /** "08 + 09.12" */
 export const fmtDays = (days: string[]) => days.map((d) => d.slice(8, 10)).join(" + ") + "." + days[0].slice(5, 7);

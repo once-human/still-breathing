@@ -60,9 +60,9 @@ type Shot = {
   /** its little preview: a rendered frame (angle) and the crop of it */
   thumb: { a: number; crop: [number, number, number] };
 };
+/** the views, in order: the tee on its own, on the table, then worn (the only place a person is shown on the site) */
 const SHOTS: Shot[] = [
   { id: "tee", label: "the tee", who: "alone", paper: true, yaw: 180, turn: true, spin: true, zoom: [1, 5], pan: true, thumb: { a: 180, crop: [1.35, 0, 0.1] } },
-  { id: "worn", label: "worn", who: "worn", paper: false, yaw: null, turn: true, spin: true, zoom: [1, 5], pan: true, thumb: { a: 0, crop: [1, 0, 0] } },
   {
     id: "close", label: "on the table", who: "alone", paper: true, yaw: 180, turn: false, spin: false, zoom: [1.3, 11], pan: true, thumb: { a: 180, crop: [1.85, 0, 0.07] },
     spots: [
@@ -72,6 +72,7 @@ const SHOTS: Shot[] = [
       { label: "front", yaw: 0, open: [3.75, 0.155, 0.184], zoom: [1.3, 11] },
     ],
   },
+  { id: "worn", label: "worn", who: "worn", paper: false, yaw: null, turn: true, spin: true, zoom: [1, 5], pan: true, thumb: { a: 0, crop: [1, 0, 0] } },
 ];
 const TEE_SIDES = [{ label: "front", yaw: 0 }, { label: "back", yaw: 180 }];
 /** the shop tee on its own form, no one in it */
@@ -131,7 +132,7 @@ const LOOK_LIST: Look[] = ["clean", "film"];
  * is a game camera walking round it, so at the show the place stays where it is and you see it from behind. At rest the browser path-traces the exact view (same cotton, ink and
  * softboxes as the offline renders) and fades it in.
  */
-export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; variant: Variant }) {
+export function Viewer({ design, tee, variant, onShot }: { design: Design; tee: Colour; variant: Variant; onShot?: (id: string) => void }) {
   const stage = useRef<HTMLDivElement>(null);
   const rasterCv = useRef<HTMLCanvasElement>(null);
   const traceCv = useRef<HTMLCanvasElement>(null);
@@ -799,6 +800,8 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
   };
 
   const shot = SHOTS[shotI];
+  // the page around the viewer can follow which view is up (the him / her switch shows only under worn)
+  useEffect(() => { onShot?.(SHOTS[shotI].id); }, [shotI]); // eslint-disable-line react-hooks/exhaustive-deps
   const spot = shot.spots?.[Math.max(0, spotI)];
   const showAngle = (yaw: number) => { const a = nearest(yaw); angRef.current = a; setAng(a); };
   /** a view, and on the table which print it frames */

@@ -71,7 +71,7 @@ async function develop(img: ImageData, look: Look, cap: Caption): Promise<Blob> 
   g.fillText("sahn", pad, pad);
   g.font = `500 ${Math.round(W * 0.028)}px ${face}`;
   g.fillStyle = quietOn(0, pad * 2);
-  const lu = "lineup 01";
+  const lu = "fred again.. india";
   g.fillText(lu, W - pad - g.measureText(lu).width, pad + Math.round(W * 0.008));
 
   // bottom: what it is

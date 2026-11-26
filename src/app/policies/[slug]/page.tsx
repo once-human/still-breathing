@@ -48,7 +48,7 @@ export default async function PolicyPage({ params }: Params) {
       <p className="page-in-3 mt-8 max-w-[34ch] text-[clamp(20px,2.2vw,30px)] leading-[1.18] font-semibold tracking-[-0.02em]">{p.summary}</p>
 
       <div className="page-in-3 mt-20 grid grid-cols-1 gap-x-4 gap-y-14 md:grid-cols-12">
-        <nav aria-label="Policies" className="text-[14px] md:sticky md:top-20 md:col-span-3 md:self-start lg:col-span-2 lg:col-start-2">
+        <nav aria-label="Policies" className="text-[14px] md:sticky md:top-28 md:col-span-3 md:self-start lg:col-span-2 lg:col-start-2">
           <p className="border-t border-line pt-1.5 text-quiet">the small print</p>
           <ul className="mt-3 space-y-1">
             {POLICY_ORDER.map((s) => (

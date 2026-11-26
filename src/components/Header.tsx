@@ -8,15 +8,14 @@ import { BagSlot } from "@/components/ShopSlots";
 import { setFocusCity } from "@/lib/city";
 import { NAV, BRAND } from "@/lib/site";
 import { CURRENT, fmtDays, paperStill, shirtHref, shirtLabel, shirtsOf, STILL_H, STILL_W } from "@/content/lineups";
-import { DESIGNS } from "@/content/tee";
 
 const cell = "border-t pt-1.5 truncate transition-colors duration-300";
 const on = (path: string, href: string) => (href === "/" ? path === "/" : path === href || path.startsWith(href + "/"));
 
 /**
  * The header: the brand, the pages, the next show and the bag, each under its own rule; the rule over the page you're
- * on turns blue. It slides away as you read down and comes back the moment you scroll up. Over lineup 01 it opens the
- * five shirts; on a phone everything is behind menu.
+ * on turns blue. It slides away as you read down and comes back the moment you scroll up. Over fred again.. india it opens
+ * its five shirts; on a phone everything is behind menu.
  */
 export function Header() {
   const path = usePathname();
@@ -60,6 +59,12 @@ export function Header() {
         className={`fixed inset-x-0 top-0 z-50 bg-paper/95 backdrop-blur-md transition-transform duration-500 ease-[cubic-bezier(.2,.7,.2,1)] ${hidden && !menu && !shelf ? "-translate-y-full" : ""}`}
         onMouseLeave={closeShelf}
       >
+        {/* one quiet line over every page: what a buyer wants to know first */}
+        <p className="flex h-7 items-center justify-center gap-2 border-b border-line px-4 text-[12px] text-quiet">
+          <span className="text-ink">free delivery anywhere in india</span>
+          <span aria-hidden>·</span>
+          <span className="truncate">made to order, with you in about 10 days</span>
+        </p>
         <nav aria-label="Main" className="grid grid-cols-[1fr_auto_auto] items-end gap-3 px-4 pt-3 pb-2 text-[14px] md:grid-cols-7 md:gap-4 md:text-[15px] lg:grid-cols-9">
           <Link href="/" className={`${cell} ${path === "/" ? "border-blue" : "border-line"} font-semibold`}>{BRAND}</Link>
 
@@ -84,7 +89,7 @@ export function Header() {
           >{menu ? "close" : "menu"}</button>
         </nav>
 
-        {/* lineup 01's five shirts, under the header on a wide screen */}
+        {/* the collection's five shirts, under the header on a wide screen */}
         <div
           onMouseEnter={openShelf}
           onMouseLeave={closeShelf}
@@ -92,19 +97,19 @@ export function Header() {
         >
           <div className="grid grid-cols-7 gap-4 border-b border-line px-4 pt-4 pb-5 lg:grid-cols-9">
             <div className="col-span-2 text-[13px]">
-              <p className="font-semibold">lineup {CURRENT.no} · {CURRENT.title}</p>
+              <p className="font-semibold">{CURRENT.title}</p>
               <p className="text-quiet">{CURRENT.tag} · {CURRENT.when}</p>
               <ul className="mt-4 space-y-0.5 text-quiet tnum">
                 {CURRENT.shows.map((s) => <li key={s.city} className="flex justify-between gap-4"><span>{s.city}</span><span>{fmtDays(s.days)}</span></li>)}
               </ul>
-              <Link href={`/${CURRENT.slug}`} tabIndex={shelf ? 0 : -1} className="mt-4 inline-block text-blue hover:text-ink">the whole lineup →</Link>
+              <Link href={`/${CURRENT.slug}`} tabIndex={shelf ? 0 : -1} className="mt-4 inline-block text-blue hover:text-ink">all five, with the shows →</Link>
             </div>
             {shirtsOf(CURRENT).map((d) => (
               <Link key={d} href={shirtHref(d)} tabIndex={shelf ? 0 : -1} className="group col-span-1 text-[13px]">
                 <span className="block overflow-hidden bg-studio">
                   {shelf ? <img src={paperStill(d, "back")} alt="" width={STILL_W} height={STILL_H} className="aspect-[880/1120] w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]" /> : <span className="block aspect-[880/1120]" />}
                 </span>
-                <span className="mt-1.5 flex gap-1.5"><span className="text-quiet tnum">{DESIGNS[d].no}</span><span className="truncate group-hover:text-blue">{shirtLabel(d)}</span></span>
+                <span className="mt-1.5 block truncate group-hover:text-blue">{shirtLabel(d)}</span>
               </Link>
             ))}
           </div>
@@ -128,13 +133,12 @@ export function Header() {
             </li>
           ))}
         </ul>
-        <p className="mt-10 border-t border-line pt-1.5 text-[13px] text-quiet">lineup {CURRENT.no} · the shirts</p>
+        <p className="mt-10 border-t border-line pt-1.5 text-[13px] text-quiet">{CURRENT.title} · the shirts</p>
         <ul className="mt-3 grid grid-cols-5 gap-2">
           {shirtsOf(CURRENT).map((d) => (
             <li key={d}>
               <Link href={shirtHref(d)} className="block text-[11px] leading-tight">
                 {menu ? <img src={paperStill(d, "back")} alt="" width={STILL_W} height={STILL_H} className="aspect-[880/1120] w-full bg-studio object-cover" /> : null}
-                <span className="mt-1 block text-quiet tnum">{DESIGNS[d].no}</span>
                 <span className="block">{shirtLabel(d)}</span>
               </Link>
             </li>

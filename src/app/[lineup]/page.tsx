@@ -5,7 +5,7 @@ import { Label } from "@/components/Label";
 import { Now } from "@/components/Now";
 import { ShirtCard } from "@/components/ShirtCard";
 import { DESIGNS } from "@/content/tee";
-import { LINEUPS, lineupOf, fmtDays, shirtHref, shirtLabel, shirtsOf, wornStill, STILL_H, STILL_W } from "@/content/lineups";
+import { LINEUPS, lineupOf, fmtDays, paperStill, shirtHref, shirtLabel, shirtsOf, STILL_H, STILL_W } from "@/content/lineups";
 import { pageMeta } from "@/lib/site";
 
 type Params = { params: Promise<{ lineup: string }> };
@@ -16,7 +16,7 @@ export const generateStaticParams = () => LINEUPS.map((l) => ({ lineup: l.slug }
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const l = lineupOf((await params).lineup);
   if (!l) return {};
-  return pageMeta({ title: `lineup ${l.no} · ${l.title} · ${l.tag}`, description: `${l.lede} Lineup ${l.no} of sahn, ${l.when}.`, path: `/${l.slug}`, image: l.slug });
+  return pageMeta({ title: `${l.title} · ${l.tag}`, description: `${l.lede} By sahn, ${l.when}.`, path: `/${l.slug}`, image: l.slug });
 }
 
 export default async function LineupPage({ params }: Params) {
@@ -30,7 +30,7 @@ export default async function LineupPage({ params }: Params) {
       {/* the title, as loud as the page gets */}
       <header className="px-4 pt-6">
         <div className="page-in grid grid-cols-2 gap-4 border-t border-line pt-1.5 text-[13px] md:grid-cols-4">
-          <span className="font-semibold">lineup {l.no}</span>
+          <span className="font-semibold">{l.title}</span>
           <span className="text-quiet">{l.tag}</span>
           <span className="hidden text-quiet md:block">{l.when}</span>
           <span className="hidden text-right text-quiet md:block">{shirts.length} shirts</span>
@@ -77,10 +77,10 @@ export default async function LineupPage({ params }: Params) {
         ))}
       </section>
 
-      {/* the story, beside the crowd worn at the show */}
+      {/* the story, beside the hero shirt on the studio paper */}
       <section className="mt-36 grid grid-cols-1 gap-x-4 gap-y-10 px-4 md:grid-cols-12">
         <div className="reveal md:col-span-5 lg:col-span-4 lg:col-start-2">
-          <img src={wornStill(l.hero, 180)} alt="the crowd, worn at the show, from behind" width={STILL_W} height={STILL_H} loading="lazy" decoding="async" className="aspect-[880/1120] w-full bg-[#0b0a0a] object-cover" />
+          <img src={paperStill(l.hero, "back")} alt="the crowd, the back, on the studio paper" width={STILL_W} height={STILL_H} loading="lazy" decoding="async" className="aspect-[880/1120] w-full bg-studio object-cover" />
         </div>
         <div className="md:col-span-7 lg:col-span-5 lg:col-start-7">
           <Label>the story</Label>

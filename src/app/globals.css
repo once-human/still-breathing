@@ -102,3 +102,16 @@ html.menu-open, html.menu-open body { overflow: hidden; }
 .prose-sb li + li { margin-top: 0.35em; }
 .prose-sb a { color: var(--blue); }
 .prose-sb a:hover { color: var(--ink); }
+
+/* a shirt card's hover: the print on the shirt's colour, front about two seconds slowly closer, then the back, round again */
+.art-layer { opacity: 0; transition: opacity 450ms cubic-bezier(.2,.7,.2,1); }
+.group:hover .art-layer, .group:focus-visible .art-layer { opacity: 1; }
+.art-front { transform-origin: 50% 40%; }
+.art-back { opacity: 0; transform-origin: 50% 45%; }
+@keyframes art-front { 0% { opacity: 1; transform: scale(1); } 40% { opacity: 1; transform: scale(1.06); } 50%, 90% { opacity: 0; transform: scale(1); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes art-back { 0%, 40% { opacity: 0; transform: scale(1); } 50% { opacity: 1; transform: scale(1); } 90% { opacity: 1; transform: scale(1.06); } 100% { opacity: 0; transform: scale(1.06); } }
+.group:hover .art-front, .group:focus-visible .art-front { animation: art-front 5s cubic-bezier(.45,0,.25,1) infinite; }
+.group:hover .art-back, .group:focus-visible .art-back { animation: art-back 5s cubic-bezier(.45,0,.25,1) infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .group:hover .art-front, .group:hover .art-back, .group:focus-visible .art-front, .group:focus-visible .art-back { animation: none; }
+}

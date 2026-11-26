@@ -13,8 +13,8 @@ export const BRAND = "sahn";
 
 /** The header, left to right (the bag sits apart, on the right). */
 export const NAV = [
-  { href: "/lineups", label: "lineups" },
-  { href: `/${CURRENT.slug}`, label: `lineup ${CURRENT.no}`, lineup: true },
+  { href: "/shop", label: "shop" },
+  { href: `/${CURRENT.slug}`, label: CURRENT.title, lineup: true },
   { href: "/made", label: "how it's made" },
   { href: "/size-guide", label: "sizes" },
   { href: "/help", label: "help" },
