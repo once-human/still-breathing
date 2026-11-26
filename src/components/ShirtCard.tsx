@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { COLOURS, DESIGNS, type Design } from "@/content/tee";
+import { SHOP } from "@/content/shop";
+import { rupees } from "@/lib/shop/money";
 import { paperStill, shirtHref, shirtTitle, wornStill, STILL_H, STILL_W } from "@/content/lineups";
 
 /**
@@ -27,9 +29,12 @@ export function ShirtCard({ d, eager = false, big = false }: { d: Design; eager?
           <span className="block truncate font-semibold transition-colors group-hover:text-blue">{t.name}</span>
           <span className="block truncate text-quiet">{t.top}</span>
         </span>
-        <span className="flex shrink-0 items-center gap-1.5 text-[12px] text-quiet">
-          <span className="inline-block h-2.5 w-2.5 rounded-full border border-line" style={{ background: COLOURS[s.colour].hex }} />
-          {COLOURS[s.colour].name}
+        <span className="shrink-0 text-right">
+          <span className="block tnum">{rupees(SHOP.price)}</span>
+          <span className="flex items-center justify-end gap-1.5 text-[12px] text-quiet">
+            <span className="inline-block h-2.5 w-2.5 rounded-full border border-line" style={{ background: COLOURS[s.colour].hex }} />
+            {COLOURS[s.colour].name}
+          </span>
         </span>
       </span>
     </Link>

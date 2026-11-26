@@ -8,6 +8,7 @@ import { Viewer, warmDesign } from "@/components/Viewer";
 import { Countdown } from "@/components/Countdown";
 import { Fit, SHOP, WEARERS, type Wearer } from "@/components/Fit";
 import { AddToBagSlot } from "@/components/ShopSlots";
+import { SHOP as STORE } from "@/content/shop";
 import type { Variant } from "@/lib/viewer/raster";
 import { COLOURS, DESIGNS, SIZES, SIZE_ORDER, THE_TEE, type Size } from "@/content/tee";
 import { fmtDays, lineupOf, paperStill, shirtBySlug, shirtHref, shirtTitle, STILL_H, STILL_W } from "@/content/lineups";
@@ -90,8 +91,8 @@ export function ShirtStage() {
             <p className="mt-2 text-[12px] text-quiet">measured on the garment. it&apos;s cut big: most people take their usual size.</p>
           </div>
 
-          <div className="mt-6 empty:hidden"><AddToBagSlot design={design} size={size} /></div>
-          <p className="mt-2 text-[12px] text-quiet">made to order and sent anywhere in india. <Link href="/help#shipping" className="draw hover:text-ink">shipping</Link></p>
+          <div className="mt-6"><AddToBagSlot design={design} size={size} /></div>
+          <p className="mt-2 text-[12px] text-quiet">made to order: made in {STORE.make[0]} to {STORE.make[1]} days, then {STORE.road[0]} to {STORE.road[1]} days to you, anywhere in india. <Link href="/help#shipping" className="draw hover:text-ink">shipping</Link></p>
 
           <Fit size={size} shop={WEARERS[wearer]} onVariant={setVariant} />
 

@@ -3,6 +3,8 @@ import Link from "next/link";
 import { Label } from "@/components/Label";
 import { THE_TEE } from "@/content/tee";
 import { CURRENT } from "@/content/lineups";
+import { SHOP } from "@/content/shop";
+import { rupees } from "@/lib/shop/money";
 import { POLICY_LINKS, pageMeta } from "@/lib/site";
 
 export const metadata: Metadata = pageMeta({
@@ -16,11 +18,11 @@ type Part = { id: string; title: string; body: React.ReactNode };
 const PARTS: Part[] = [
   {
     id: "orders", title: "orders",
-    body: <p>every shirt is made to order: nothing sits in a warehouse. yours is made once you&apos;ve paid, in the size you picked, then packed and sent.</p>,
+    body: <p>every shirt is made to order: nothing sits in a warehouse. each is {rupees(SHOP.price)}, tax and shipping included. yours is made once you&apos;ve paid, in the size you picked, then packed and sent.</p>,
   },
   {
     id: "shipping", title: "shipping",
-    body: <p>we send anywhere in india. if you want it for a show, order early: lineup {CURRENT.no}&apos;s nights start on 5 december.</p>,
+    body: <p>we send anywhere in india. making takes {SHOP.make[0]} to {SHOP.make[1]} days, then {SHOP.road[0]} to {SHOP.road[1]} days on the road. if you want it for a show, order early: lineup {CURRENT.no}&apos;s nights start on 5 december.</p>,
   },
   {
     id: "sizes", title: "sizes",
