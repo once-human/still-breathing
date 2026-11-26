@@ -7,7 +7,7 @@ import { POLICY_LINKS, pageMeta } from "@/lib/site";
 
 export const metadata: Metadata = pageMeta({
   title: "help",
-  description: "Help with a still breathing order: made to order, shipping anywhere in India, returns and refunds, sizes, care and how to reach us.",
+  description: "Help with a sahn order: made to order, sent anywhere in India, sizes and care.",
   path: "/help",
 });
 
@@ -16,30 +16,11 @@ type Part = { id: string; title: string; body: React.ReactNode };
 const PARTS: Part[] = [
   {
     id: "orders", title: "orders",
-    body: (
-      <>
-        <p>every shirt is made to order: nothing sits in a warehouse. yours is made once you&apos;ve paid, in the size you picked, then packed and sent.</p>
-        <p>once it&apos;s on its way you get the tracking with your order.</p>
-      </>
-    ),
+    body: <p>every shirt is made to order: nothing sits in a warehouse. yours is made once you&apos;ve paid, in the size you picked, then packed and sent.</p>,
   },
   {
     id: "shipping", title: "shipping",
-    body: (
-      <>
-        <p>we send anywhere in india. how long making and delivery take, and what it costs, is on the <Link href="/policies/shipping">shipping policy</Link>.</p>
-        <p>if you want it for a show, order early: lineup {CURRENT.no}&apos;s nights start on 5 december.</p>
-      </>
-    ),
-  },
-  {
-    id: "returns", title: "returns and refunds",
-    body: (
-      <>
-        <p>because each shirt is made for you, what can be returned or swapped, and how a refund works, is set out in <Link href="/policies/refunds">returns and refunds</Link>.</p>
-        <p>if your shirt arrives damaged or misprinted, tell us with a photo and we&apos;ll put it right.</p>
-      </>
-    ),
+    body: <p>we send anywhere in india. if you want it for a show, order early: lineup {CURRENT.no}&apos;s nights start on 5 december.</p>,
   },
   {
     id: "sizes", title: "sizes",
@@ -48,10 +29,6 @@ const PARTS: Part[] = [
   {
     id: "care", title: "care",
     body: <ul>{THE_TEE.care.map((c) => <li key={c}>{c}</li>)}</ul>,
-  },
-  {
-    id: "contact", title: "contact",
-    body: <p>a question about a shirt or an order: the address to write to goes up here when orders open, and it will be on your order too.</p>,
   },
 ];
 
@@ -73,14 +50,14 @@ export default function Help() {
             </div>
           </section>
         ))}
-        <section className="grid grid-cols-1 gap-x-4 md:grid-cols-12">
+        {POLICY_LINKS.length ? <section className="grid grid-cols-1 gap-x-4 md:grid-cols-12">
           <div className="md:col-span-8 lg:col-span-6 lg:col-start-2">
             <Label>the small print</Label>
             <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-[15px]">
               {POLICY_LINKS.map((l) => <li key={l.href}><Link href={l.href} className="draw hover:text-blue">{l.label} →</Link></li>)}
             </ul>
           </div>
-        </section>
+        </section> : null}
       </div>
     </div>
   );

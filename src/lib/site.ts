@@ -1,11 +1,9 @@
 import { CURRENT } from "@/content/lineups";
 
 /** The address the site is served from, for metadata, Open Graph and the sitemap. */
-export const SITE_URL = process.env.VERCEL_PROJECT_PRODUCTION_URL
-  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-  : "https://still-breathing-studio.vercel.app";
+export const SITE_URL = "https://sahn.in";
 
-export const BRAND = "still breathing";
+export const BRAND = "sahn";
 
 /** The header, left to right (the bag sits apart, on the right). */
 export const NAV = [
@@ -16,20 +14,14 @@ export const NAV = [
   { href: "/help", label: "help" },
 ] as const;
 
-export const POLICY_LINKS = [
-  { href: "/policies/shipping", label: "shipping" },
-  { href: "/policies/refunds", label: "returns and refunds" },
-  { href: "/policies/terms", label: "terms" },
-  { href: "/policies/privacy", label: "privacy" },
-];
+/** The policy pages, from the shop's src/content/policies.ts. Listed only once those pages exist: nothing links to a page that isn't there. */
+export const POLICY_LINKS: { href: string; label: string }[] = [];
 
 export const HELP_LINKS = [
   { href: "/size-guide", label: "size guide" },
   { href: "/help#orders", label: "orders" },
   { href: "/help#shipping", label: "shipping" },
-  { href: "/help#returns", label: "returns" },
   { href: "/help#care", label: "care" },
-  { href: "/help#contact", label: "contact" },
 ];
 
 /** Open Graph pictures, made from the studio renders by scripts/og.mjs */

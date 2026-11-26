@@ -7,7 +7,7 @@ import { pageMeta } from "@/lib/site";
 
 export const metadata: Metadata = pageMeta({
   title: "size guide",
-  description: "still breathing sizes XS to 2XL, measured on the garment in cm: chest, length and shoulder, how to measure a tee you own, and how the oversized cut fits.",
+  description: "sahn sizes XS to 2XL, measured on the garment in cm: chest, length and shoulder, how to measure a tee you own, and how the oversized cut fits.",
   path: "/size-guide",
 });
 

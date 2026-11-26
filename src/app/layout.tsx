@@ -6,14 +6,14 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { SITE_URL, og } from "@/lib/site";
 
-const description = "still breathing makes one shirt per moment. Lineup 01: five fan-made shirts for Fred again..'s December shows in India, drawn by hand from the crowd and the grounds, made to order and sent anywhere in India.";
+const description = "sahn makes one shirt per moment. Lineup 01: five fan-made shirts for Fred again..'s December shows in India, drawn by hand from the crowd and the grounds, made to order and sent anywhere in India.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: { default: "still breathing", template: "%s · still breathing" },
+  title: { default: "sahn", template: "%s · sahn" },
   description,
-  applicationName: "still breathing",
-  openGraph: { type: "website", siteName: "still breathing", title: "still breathing", description, locale: "en_IN", images: [og("home")] },
+  applicationName: "sahn",
+  openGraph: { type: "website", siteName: "sahn", title: "sahn", description, locale: "en_IN", images: [og("home")] },
   twitter: { card: "summary_large_image" },
 };
 

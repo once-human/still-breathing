@@ -787,7 +787,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
         caption: { title: "again..", line: `${d.no} ${d.name} · ${COLOURS[tee].name} · ${sc.label}`, foot: "the india shows, december" },
         onProgress: (n, t) => setDeveloping(n / t),
       });
-      setPhoto({ url: URL.createObjectURL(blob), blob, name: `still-breathing-${d.name}-${tee}-${sceneId}-${format}.jpg` });
+      setPhoto({ url: URL.createObjectURL(blob), blob, name: `sahn-${d.name}-${tee}-${sceneId}-${format}.jpg` });
     } catch (e) {
       if ((e as Error).name !== "AbortError") { console.error(e); setStatus("the photo could not be made"); }
     } finally { setDeveloping(null); stopPhoto.current = null; }
@@ -795,7 +795,7 @@ export function Viewer({ design, tee, variant }: { design: Design; tee: Colour; 
   const share = async () => {
     if (!photo) return;
     const file = new File([photo.blob], photo.name, { type: "image/jpeg" });
-    if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], title: "still breathing" }); } catch { /* closed */ } }
+    if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], title: "sahn" }); } catch { /* closed */ } }
   };
 
   const shot = SHOTS[shotI];

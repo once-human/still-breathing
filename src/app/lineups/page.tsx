@@ -5,7 +5,7 @@ import { pageMeta } from "@/lib/site";
 
 export const metadata: Metadata = pageMeta({
   title: "lineups",
-  description: "Every still breathing lineup: one moment each, its shows and its shirts. Lineup 01 is Fred again.. India, December 2026, fan made.",
+  description: "Every sahn lineup: one moment each, its shows and its shirts. Lineup 01 is Fred again.. India, December 2026, fan made.",
   path: "/lineups",
   image: LINEUPS[0].slug,
 });
@@ -44,7 +44,6 @@ export default function Lineups() {
             </Link>
           </li>
         ))}
-        <li className="border-t border-line pt-3 text-[14px] text-quiet">the next one comes when the next moment does.</li>
       </ol>
     </div>
   );

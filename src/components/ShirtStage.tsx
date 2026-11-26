@@ -90,8 +90,8 @@ export function ShirtStage() {
             <p className="mt-2 text-[12px] text-quiet">measured on the garment. it&apos;s cut big: most people take their usual size.</p>
           </div>
 
-          <div className="mt-6"><AddToBagSlot design={design} size={size} /></div>
-          <p className="mt-2 text-[12px] text-quiet">made to order and sent anywhere in india. <Link href="/help#shipping" className="draw hover:text-ink">shipping and returns</Link></p>
+          <div className="mt-6 empty:hidden"><AddToBagSlot design={design} size={size} /></div>
+          <p className="mt-2 text-[12px] text-quiet">made to order and sent anywhere in india. <Link href="/help#shipping" className="draw hover:text-ink">shipping</Link></p>
 
           <Fit size={size} shop={WEARERS[wearer]} onVariant={setVariant} />
 

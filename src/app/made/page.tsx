@@ -7,7 +7,7 @@ import { pageMeta } from "@/lib/site";
 
 export const metadata: Metadata = pageMeta({
   title: "how it's made",
-  description: "How a still breathing shirt is drawn, cut, simulated and shown: hand-made art from real places, a pattern graded on Indian bodies, cloth physics, and a path tracer that runs in your browser.",
+  description: "How a sahn shirt is drawn, cut, simulated and shown: hand-made art from real places, a pattern graded on Indian bodies, cloth physics, and a path tracer that runs in your browser.",
   path: "/made",
   image: CURRENT.slug,
 });

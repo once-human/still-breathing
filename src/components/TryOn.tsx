@@ -78,7 +78,7 @@ export function TryOn({ design, tee, onClose }: { design: Design; tee: Colour; o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rec]);
   const ext = (b: Blob) => (b.type.includes("mp4") ? "mp4" : b.type.includes("webm") ? "webm" : "jpg");
-  const file = (b: Blob) => new File([b], `still-breathing-${look}.${ext(b)}`, { type: b.type });
+  const file = (b: Blob) => new File([b], `sahn-${look}.${ext(b)}`, { type: b.type });
   const canShare = (b: Blob) => typeof navigator !== "undefined" && !!navigator.canShare?.({ files: [file(b)] });
   const share = (b: Blob) => navigator.share({ files: [file(b)] }).catch(() => {});
 
@@ -131,7 +131,7 @@ export function TryOn({ design, tee, onClose }: { design: Design; tee: Colour; o
             )}
             <div className="flex gap-6">
               {canShare(shot.blob) ? <button onClick={() => share(shot.blob)} className="font-semibold hover:text-white/70">share</button> : null}
-              <a href={shot.url} download={`still-breathing-${look}.${ext(shot.blob)}`} className="font-semibold hover:text-white/70">save</a>
+              <a href={shot.url} download={`sahn-${look}.${ext(shot.blob)}`} className="font-semibold hover:text-white/70">save</a>
               <button onClick={() => setShot(null)} className="text-white/70 hover:text-white">back</button>
             </div>
           </div>

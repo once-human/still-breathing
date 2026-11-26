@@ -68,7 +68,7 @@ async function develop(img: ImageData, look: Look, cap: Caption): Promise<Blob> 
   g.textBaseline = "top";
   g.fillStyle = inkOn(0, pad * 2);
   g.font = `800 ${Math.round(W * 0.04)}px ${face}`;
-  g.fillText("still breathing", pad, pad);
+  g.fillText("sahn", pad, pad);
   g.font = `500 ${Math.round(W * 0.028)}px ${face}`;
   g.fillStyle = quietOn(0, pad * 2);
   const lu = "lineup 01";

@@ -32,7 +32,7 @@ export function Countdown({ short = false }: { short?: boolean }) {
   const city = useShowCity();
   if (!m) return <span>&nbsp;</span>;
   const t = m * 60_000, s = showFor(city, t);
-  if (!s) return <span>{city ? (short ? `${city} done` : `${city} has been. still breathing.`) : short ? "tour done" : "the india shows are done. still breathing."}</span>;
+  if (!s) return <span>{city ? (short ? `${city} done` : `${city} has been.`) : short ? "tour done" : "the india shows are done."}</span>;
   const left = s.start - t;
   if (left <= 0) return <span>● {s.city} {short ? "tonight" : "is on tonight"}</span>;
   const d = Math.floor(left / 86_400_000), h = Math.floor((left % 86_400_000) / 3_600_000);

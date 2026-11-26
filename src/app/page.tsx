@@ -8,7 +8,7 @@ import { CURRENT, fmtDays, paperStill, shirtHref, shirtsOf, wornStill, STILL_H, 
 import { pageMeta } from "@/lib/site";
 
 export const metadata: Metadata = pageMeta({
-  description: "still breathing makes one shirt per moment. Lineup 01: five fan-made shirts for Fred again..'s December shows in India, drawn by hand from the crowd and the grounds, made to order and sent anywhere in India.",
+  description: "sahn makes one shirt per moment. Lineup 01: five fan-made shirts for Fred again..'s December shows in India, drawn by hand from the crowd and the grounds, made to order and sent anywhere in India.",
   path: "/",
 });
 
@@ -24,10 +24,10 @@ export default function Home() {
           <span className="hidden text-quiet md:block">made to order, sent anywhere in india</span>
           <span className="hidden text-right tnum md:block"><Countdown short /></span>
         </div>
-        <h1 className="page-in-2 bigword mt-5 text-[17vw]" aria-label="still breathing">
-          <span className="block">still</span>
-          <span className="block md:-mt-[0.02em] md:pl-[0.9em]">breathing</span>
-        </h1>
+        <div className="mt-4 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+          <h1 className="page-in-2 bigword text-[46vw] md:text-[30vw]">sahn</h1>
+          <p className="page-in-3 max-w-[18ch] pb-[1.2vw] text-[clamp(22px,2.4vw,36px)] leading-[1.02] font-extrabold tracking-[-0.04em] md:text-right">one shirt per moment.<span className="block text-quiet">lineup {l.no} is on now.</span></p>
+        </div>
       </section>
 
       {/* lineup 01, up front */}
@@ -65,9 +65,9 @@ export default function Home() {
       {/* what this is */}
       <section className="mt-40 grid grid-cols-1 gap-x-4 px-4 md:grid-cols-12">
         <div className="md:col-span-12 lg:col-span-10 lg:col-start-2">
-          <Label>still breathing</Label>
+          <Label>sahn</Label>
           <p className="reveal max-w-[22ch] text-[clamp(32px,5.2vw,80px)] leading-[0.98] font-extrabold tracking-[-0.045em]">
-            one shirt per moment. <span className="text-quiet">a night you were there, drawn by hand and worn after.</span>
+            a night you were there, <span className="text-quiet">drawn by hand and worn after.</span>
           </p>
         </div>
         <div className="mt-12 grid grid-cols-1 gap-x-4 gap-y-6 text-[15px] text-ink/85 md:col-span-12 md:grid-cols-12 lg:col-span-10 lg:col-start-2 lg:grid-cols-10">

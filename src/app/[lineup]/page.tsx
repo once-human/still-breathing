@@ -16,7 +16,7 @@ export const generateStaticParams = () => LINEUPS.map((l) => ({ lineup: l.slug }
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const l = lineupOf((await params).lineup);
   if (!l) return {};
-  return pageMeta({ title: `lineup ${l.no} · ${l.title} · ${l.tag}`, description: `${l.lede} Lineup ${l.no} of still breathing, ${l.when}.`, path: `/${l.slug}`, image: l.slug });
+  return pageMeta({ title: `lineup ${l.no} · ${l.title} · ${l.tag}`, description: `${l.lede} Lineup ${l.no} of sahn, ${l.when}.`, path: `/${l.slug}`, image: l.slug });
 }
 
 export default async function LineupPage({ params }: Params) {
