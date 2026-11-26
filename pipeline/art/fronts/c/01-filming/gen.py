@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-01 crowd, front 01: "filming". Left chest, about 10 cm.
+01 crowd, front 01: "filming". Left chest, about 8 cm.
 The one thing everyone at the show did, drawn once and drawn properly: a hand holding a phone up over the crowd, the
 screen toward us, and on it the drop as a phone sees it from far back: a handful of marigold beams going up off a
 stage too small to see, the black line of heads in front, the rec dot on. The forearm runs down out of the hand and
@@ -30,14 +30,12 @@ sp, L, R = a.tube([T(-1, 18), T(-2, 33), (31, 95), (26, 108)], [14.0, 13.6, 14.5
 a.knock(L + R[::-1])
 a.ink(L[2:], LW, a0=0.8, a1=9.0, pv=0.14)
 a.ink(R[2:], LW, a0=0.8, a1=7.0, pv=0.14)
-a.line([(33.4, 89.0), (34.8, 86.4)], LD, wob=0.1, trem=0, a0=0.5, a1=1.2)          # tendons at the wrist
-a.line([(38.6, 90.6), (39.8, 87.9)], LD, wob=0.1, trem=0, a0=0.5, a1=1.2)
 ARM = L + R[::-1]
 for k, (col, wd) in enumerate((('Y', 1.6), ('B', 2.3))):                         # a thread and a band round the wrist
     y = 92.0 + k * 3.9
     def paint(t, y=y, k=k, col=col, wd=wd):
-        t.line([(22 + k * 1.0, y + 4.2), (34, y + 1.1), (46 - k * 0.6, y - 3.0)], wd, layer=col, wob=0.1, trem=0.06,
-               a0=0.3, a1=0.3, pv=0.1)
+        t.line([(27.4 + k * 0.6, y + 1.6), (31.0, y + 3.2), (36.0, y + 2.6), (40.6 - k * 0.5, y - 1.0)], wd, layer=col,
+               wob=0.08, trem=0.05, a0=0.3, a1=0.3, pv=0.1)
     a.masked(ARM, col, paint)
 
 # ------------------------------------------------------------------ the phone: steady (a made object), the hand round it wobbles
@@ -48,62 +46,44 @@ body = a.hand([T(u, v) for u, v in corners], closed=True, wob=0.05, trem=0.03, s
 a.knock(body)
 SI = 2.7                                            # the bezel
 scr = [(-PW / 2 + SI, -PH / 2 + 3.3), (PW / 2 - SI, -PH / 2 + 3.3), (PW / 2 - SI, PH / 2 - 3.3), (-PW / 2 + SI, PH / 2 - 3.3)]
-a.blob([T(u, v) for u, v in scr], 'G', scale=(0.995, 1.005), jit=0.006, shift=0.15, gap=0.0, n=44)
 
-# on the screen: the drop, as a phone sees it from row forty
-# the beams: from lamps hidden behind the heads, fanning up and out (each a brush stroke that lifts off at the top);
-# the two middle ones nearly upright, the outer ones leaning away, none crossing: what a phone catches at the drop
-SB = 17.0                                           # where the lamps are (v), behind the heads
-beams = [(-8.6, -0.36, 26), (-5.2, -0.20, 33), (-1.8, -0.05, 37), (1.6, 0.07, 36), (5.0, 0.22, 32), (8.4, 0.40, 26)]
+# on the screen, which is dark like the night it films: the drop, as a phone sees it from row forty.
+# a small lit stage low on the screen (its LED wall the one sliver of green), beams fanning up off its roof,
+# and the heads in front as one cream line, one hand up
+SV = 12.5                                           # the deck's top (v)
+deck = [T(-10.4, SV), T(10.4, SV - 0.1), T(10.6, SV + 2.2), T(-10.5, SV + 2.3)]
+a.blob(deck, 'Y', scale=(0.99, 1.01), jit=0.015, shift=0.08, gap=0.0, n=24)
+wall = [T(-4.6, SV - 4.4), T(4.6, SV - 4.5), T(4.7, SV - 1.2), T(-4.6, SV - 1.1)]
+a.blob(wall, 'G', scale=(0.99, 1.01), jit=0.015, shift=0.12, gap=0.0, n=24)
+# the beams: off the roof, fanning up and out, brush strokes that lift off near the top of the screen
+beams = [(-6.6, -0.58, 26), (-4.2, -0.32, 32), (-1.4, -0.09, 35), (1.4, 0.10, 35), (4.2, 0.33, 32), (6.6, 0.60, 26)]
 for u0, ang, ln in beams:
     ang += rng.gauss(0, 0.015)
+    v0 = SV - 6.8 + abs(u0) * 0.25
     pts = []
     for f in (0.0, 0.5, 1.0):
-        uu, vv = u0 + math.sin(ang) * ln * f, SB - math.cos(ang) * ln * f
-        uu = max(-PW / 2 + SI + 1.4, min(PW / 2 - SI - 1.4, uu))
-        vv = max(-PH / 2 + 12.5, vv)
+        uu, vv = u0 + math.sin(ang) * (ln * f + 1.2), v0 - math.cos(ang) * (ln * f + 1.2)
+        uu = max(-PW / 2 + SI + 1.0, min(PW / 2 - SI - 1.0, uu))
+        vv = max(-PH / 2 + 12.0, vv)
         pts.append(T(uu, vv))
-    a.line(pts, 1.3, layer='Y', wob=0.04, trem=0.02, a0=0.4, a1=7.0, pv=0.08)
-# the stage's light behind the heads: one flat marigold band the heads stand against (the deck's glare)
-glow = [T(-PW / 2 + SI - 0.4, SB - 1.2), T(0, SB - 2.2), T(PW / 2 - SI + 0.4, SB - 1.2), T(PW / 2 - SI + 0.4, PH / 2 - 3.0),
-        T(-PW / 2 + SI - 0.4, PH / 2 - 3.0)]
-a.blob(glow, 'Y', scale=(1.0, 1.0), jit=0.01, shift=0.05, gap=0.0, n=30)
-a.knock([T(-PW / 2 - 1, PH / 2 - 3.3), T(PW / 2 + 1, PH / 2 - 3.3), T(PW / 2 + 1, PH / 2 + 3), T(-PW / 2 - 1, PH / 2 + 3)],
-        layers=('Y',))
-
-
-# the heads in front: one black silhouette across the bottom of the screen (the shirt showing through the green),
-# heads of different sizes, two pairs of arms up
-def hole(pts, layers=('G', 'Y')):
-    p = a.hand([T(u, v) for u, v in pts], closed=True, wob=0.05, trem=0.02, step=0.3)
-    for l in layers:
-        a.D[l].polygon(h.P(p), fill=0)
-
-
-VH = 24.0                                           # where the heads' crowns are (v)
-crowd = [(-PW / 2 + SI - 0.6, PH / 2 - 2.0), (-PW / 2 + SI - 0.6, VH + 1.8)]
-u = -PW / 2 + SI - 0.6
-heads = []
+    a.line(pts, 1.25, layer='Y', wob=0.03, trem=0.02, a0=0.4, a1=8.0, pv=0.08)
+# the heads in front: one cream line of heads and shoulders across the screen, one hand up holding its own phone
+VH = 21.6
+heads, u = [], -PW / 2 + SI + 1.0
 while u < PW / 2 - SI - 3.0:
-    hr = rng.uniform(1.7, 2.3)
-    heads.append((u + hr, VH + rng.uniform(-0.8, 0.8), hr))
-    u += hr * 2.0 - rng.uniform(0.1, 0.6)
-for hx, hy, hr in heads:                      # each head a round, a little taller than wide, on its shoulders
-    head = [(hx + hr * math.cos(q / 12 * math.tau), hy + hr * 1.1 * math.sin(q / 12 * math.tau)) for q in range(12)]
-    hole(head)
-crowd += [(PW / 2 - SI + 0.6, VH + 1.8), (PW / 2 - SI + 0.6, PH / 2 - 2.0)]
-hole(crowd)                                   # the shoulders, one dark mass under the heads
-hole([(-5.6, VH + 1.0), (-7.2, VH - 7.0), (-5.6, VH - 7.4), (-4.0, VH + 0.6)])          # one arm up, a fist
-hole([(-7.9, VH - 6.6), (-7.4, VH - 9.4), (-5.2, VH - 9.6), (-4.9, VH - 6.8)])
-hole([(5.2, VH + 1.0), (6.2, VH - 5.6), (7.8, VH - 5.4), (7.0, VH + 1.0)])             # one arm up with a phone
-hole([(5.4, VH - 5.0), (5.8, VH - 9.6), (8.6, VH - 9.6), (8.3, VH - 5.0)])
+    hr = rng.uniform(1.75, 2.15)
+    heads.append((u + hr, VH + rng.uniform(-0.9, 0.9), hr))
+    u += hr * 2.0 + rng.uniform(0.9, 1.6)
+shoulders = [T(-PW / 2 + SI + 0.2, VH + 4.6)]
+for hx, hy, hr in heads:               # each head a small closed round in the cream line, its shoulders under it
+    ring = [T(hx + hr * math.cos(q / 9 * math.tau), hy + hr * 1.1 * math.sin(q / 9 * math.tau)) for q in range(9)]
+    a.ink(a.hand(ring, closed=True, wob=0.06, trem=0.02, step=0.25), 1.12, closed=True, a0=0.4, a1=0.5, pv=0.06)
+    shoulders += [T(hx - hr * 1.5, hy + hr * 1.1 + 2.4), T(hx, hy + hr * 1.1 + 1.0), T(hx + hr * 1.5, hy + hr * 1.1 + 2.4)]
+shoulders.append(T(PW / 2 - SI - 0.2, VH + 4.6))
+a.line(shoulders, 1.15, wob=0.04, trem=0.02, a0=0.4, a1=0.6, pv=0.06)
 
 # the rec dot, top left, blue, with its running time as one short cream tick beside it
-a.knock([T(-PW / 2 + 6.4 + 2.5 * math.cos(k / 10 * math.tau), -PH / 2 + 8.0 + 2.5 * math.sin(k / 10 * math.tau)) for k in range(10)],
-        layers=('G',))
 pen.disc(a, *T(-PW / 2 + 6.4, -PH / 2 + 8.0), 1.5, 'B', rng=rng)
-a.knock([T(-PW / 2 + 9.6, -PH / 2 + 6.6), T(-PW / 2 + 16.4, -PH / 2 + 6.6), T(-PW / 2 + 16.4, -PH / 2 + 9.4),
-         T(-PW / 2 + 9.6, -PH / 2 + 9.4)], layers=('G',))
 a.line([T(-PW / 2 + 10.6, -PH / 2 + 8.0), T(-PW / 2 + 15.4, -PH / 2 + 8.0)], 1.25, wob=0.03, trem=0, a0=0.4, a1=0.5)
 # the camera slit at the top of the bezel, then the phone's edge over everything
 a.line([T(-4.0, -PH / 2 + 1.6), T(4.0, -PH / 2 + 1.6)], 1.15, wob=0.03, trem=0, a0=0.4, a1=0.6)
@@ -115,7 +95,7 @@ a.ink(body[k0:] + body[1:k0 + 1], LW, a0=0.6, a1=0.6, pv=0.1)
 # four pads curled round the phone from behind, nails toward us, each overlapping the one below; drawn top to bottom
 # so each lower finger's knock cuts the line of the one above it cleanly
 E = PW / 2
-fingers = [(-10.6, 4.4, 3.1, 0.10), (-4.2, 5.6, 3.3, 0.04), (2.2, 5.2, 3.2, -0.03), (8.2, 3.8, 2.7, -0.10)]
+fingers = [(-11.0, 5.0, 3.2, 0.12), (-4.5, 5.8, 3.3, 0.05), (1.9, 4.9, 3.1, -0.04), (7.5, 3.0, 2.4, -0.14)]
 for k, (v, ln, hf, tw) in enumerate(fingers):
     def F(du, dv):
         return T(E + du, v + dv + du * tw)
@@ -143,7 +123,7 @@ a.line([T(-E - 6.4, 25.0), T(-E - 5.6, 30.0), T(-E - 2.0, 34.0), T(-8.6, 36.5)],
 
 # ------------------------------------------------------------------ the word, beside the forearm
 S = 14.0
-x0, y0 = 48.5, 103.0
+x0, y0 = 50.0, 97.0
 wa = pen.word(a, 'line', 'again', 'bric', S, x0, y0, weight=800, rng=rng, jit=0.02, turn=0.012)
 pen.dots(a, 'Y', x0 + wa + 0.9, y0, S, rng=rng)
 

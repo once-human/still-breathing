@@ -1,4 +1,7 @@
-# 01 crowd: fronts (two, per the owner's change)
+# 01 crowd: fronts
 
-1. **01 filming** (left chest, about 10 cm): a hand holding a phone up, the drop on its screen, again.. beside the wrist. Work in progress: six passes, critic pass and rework still to do.
-2. **02 drawn** (centre chest, about 20 cm): fred again.. drawn in the back's cream pen with loose off-register green, marigold and blue fills. First draft only (gen.py); the critic's fixes are not done yet (specks, the g, a steadier line, less misregistration).
+The owner changed the job from eight fronts to two, the artist's pick, done properly. BRAINSTORM.md holds the 16 ideas
+and the first eight drafts' thinking.
+
+1. **01 filming** (left chest, 8.0 cm): a hand holding a phone up, the drop on its dark screen (a lit stage, marigold beams, a row of heads), again.. beside the forearm.
+2. **02 drawn** (centre chest, 20.9 cm): fred again.. drawn in the back's cream pen over loose off-register green, marigold and blue screens, with mumbai · bengaluru · december 2026 under it.

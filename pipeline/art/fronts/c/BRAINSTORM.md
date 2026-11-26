@@ -67,3 +67,18 @@ cleaned with an octagon opening (1 mm strokes survive at any angle) and checked 
 Lettering is set from the lineup's fonts (Bricolage Grotesque for again.., the Noto scripts, Gochi Hand for the
 back's note hand) and then worked by hand: each glyph nudged off the baseline and turned a hair, the edges spread
 like ink on cotton, and the hand-held parts (marker, stamp, weave) drawn with the pen.
+
+## Change: two fronts, not eight
+
+The owner then asked for two fronts, the artist's pick, made as well as possible. The first round of eight drafts
+went to one critic. Its read: the drawn objects (hands especially) and the font-made handwriting were the weak
+point, filming was the most on-brand idea, and the wordmark drawn in the back's own technique tied best to the back.
+The two picked:
+
+- **01 filming**: the liked idea, taken further. The screen is dark like the night, the stage small and lit, and the
+  hand drawn properly.
+- **02 drawn** (was 08): fred again.. drawn in the back's pen and loose spot screens; new, and the closest tie to
+  the back without using its picture.
+
+The other six (holding on, two nights, one line, wristband, tape, stamp) were dropped. Two nights and one line were
+clean but light; the rest failed in the drawing or read as clip-art.

@@ -258,7 +258,8 @@ def contours(mask):
 
 
 def letters(art, layer, txt, fname, size_mm, x, y, weight=None, lw=1.4, fill=None, fill_shift=(0.9, 0.7), res=2.5,
-            rng=None, lang=None, jit=0.025, turn=0.015, wob=0.16, every=1.4, track=0.0, fill_grow=-0.3):
+            rng=None, lang=None, jit=0.025, turn=0.015, wob=0.16, every=1.4, track=0.0, fill_grow=-0.3, trem=0.12,
+            shift_jit=0.25, min_loop=0.0, close=None, shift_turn=0.0):
     """draw txt as hand-drawn outline letters: each glyph's outline (and its counters) traced from the font, then
     redrawn with the pen, wobbling and pressing; `fill` = a spot layer (or a list, one per glyph) laid under it,
     loose and off register like the back's spot screens. Baseline-left at (x, y) mm. Returns the width in mm."""
@@ -281,6 +282,9 @@ def letters(art, layer, txt, fname, size_mm, x, y, weight=None, lw=1.4, fill=Non
         ox, oy = pad - bb[0], pad - bb[1]
         ImageDraw.Draw(m).text((ox, oy), ch, font=f, fill=255, anchor='ls', **kw)
         m = m.filter(ImageFilter.GaussianBlur(0.6)).point(lambda p: 255 if p > 127 else 0)
+        if close and ch in close:                 # close narrow gaps (mm) so near-touching strokes trace as one form
+            kk = int(close[ch] * res) | 1
+            m = m.filter(ImageFilter.MaxFilter(kk)).filter(ImageFilter.MinFilter(kk))
         dy = rng.gauss(0, jit * size_mm * 0.5)
         r = rng.gauss(0, turn * 0.6)
         gx, gy = x + dx, y + dy
@@ -289,11 +293,17 @@ def letters(art, layer, txt, fname, size_mm, x, y, weight=None, lw=1.4, fill=Non
         def to_mm(px, py):
             u, v = (px - ox) / res, (py - oy) / res
             return (gx + u * ca - v * sa, gy + u * sa + v * ca)
-        loops = contours(np.asarray(m))
+        loops = [lp for lp in contours(np.asarray(m)) if abs(_area(lp)) / res ** 2 >= min_loop]
         layer_fill = fill[i % len(fill)] if isinstance(fill, (list, tuple)) else fill
+        if layer_fill == '-':
+            layer_fill = None
         if layer_fill:
             # the spot screen: the glyph's own shape, shifted off register and grown or shrunk a hair
-            sx, sy = fill_shift[0] + rng.gauss(0, 0.25), fill_shift[1] + rng.gauss(0, 0.25)
+            fs = fill_shift[i % len(fill_shift)] if isinstance(fill_shift[0], (list, tuple)) else fill_shift
+            sx, sy = fs[0] + rng.gauss(0, shift_jit), fs[1] + rng.gauss(0, shift_jit)
+            if shift_turn:                        # each screen slips its own way (turned up to shift_turn radians)
+                q = rng.uniform(-shift_turn, shift_turn)
+                sx, sy = sx * math.cos(q) - sy * math.sin(q), sx * math.sin(q) + sy * math.cos(q)
             mm_ = Image.new('L', (art.L[layer_fill].width, art.L[layer_fill].height), 0)
             dr = ImageDraw.Draw(mm_)
             sgn = math.copysign(1, _area(max(loops, key=lambda q: abs(_area(q))))) if loops else 1
@@ -314,7 +324,7 @@ def letters(art, layer, txt, fname, size_mm, x, y, weight=None, lw=1.4, fill=Non
             L = h.cumlen(pts)[-1]
             n = max(6, int(L / every))
             ctrl = h.resample(pts + [pts[0]], n)
-            p = art.hand(ctrl, closed=True, wob=wob, trem=0.12, rng=rng, step=0.35)
+            p = art.hand(ctrl, closed=True, wob=wob, trem=trem, rng=rng, step=0.35)
             art.ink(p, lw, layer=layer, closed=True, rng=rng, a0=0.6, a1=1.2, pv=0.14, close_frac=rng.uniform(0.98, 1.03))
     return f.getlength(txt, **kw) / res + track * (len(txt) - 1)
 
