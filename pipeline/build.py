@@ -117,7 +117,11 @@ def pose_arm(side, deg_below, frame):
     R = bn.matrix_local.to_quaternion()
     pb.rotation_mode = "QUATERNION"; pb.rotation_quaternion = R.inverted() @ qw @ R
     pb.keyframe_insert("rotation_quaternion", frame=frame)
-ARM_DOWN = 64
+# how far below level the arms hang standing: 64 deg, or the body's own "arm_down" (people.py's man: 58, near his
+# sculpt's own 59; pulled down past it, his upper arm traps the sleeve against his lats and the cloth bunches into
+# the armpit and drags across the back)
+ARM_DOWN = float(body.get("arm_down", 64))
+print("arms down", ARM_DOWN)
 for side in ("L", "R"):
     pb = rig.pose.bones["upperarm01." + side]; pb.rotation_mode = "QUATERNION"
     pb.rotation_quaternion = (1, 0, 0, 0); pb.keyframe_insert("rotation_quaternion", frame=1); pb.keyframe_insert("rotation_quaternion", frame=80)

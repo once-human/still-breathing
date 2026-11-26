@@ -34,6 +34,7 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 - The actual size button is called artwork.
 
 ### Fixed
+- His tee sits better at the arms: his arms hang a little more open, as his build makes them, so the sleeves no longer bunch up into folds at the armpits or pull tight across the back of the arm.
 - The 3D view is much lighter on a laptop: the slow motion on its own (breathing, the breeze, the slow turn) is drawn at an even 30 frames a second, and only what you do yourself (turning, zooming) at 60 or more; it draws past the screen's own sharpness only when the graphics card has most of its time to spare, so the rest of the computer stays smooth.
 - No more spikes of cloth: a few points of the tee that the simulation had thrown out (a spike off his sleeve, torn-off flaps when sitting or with hands up) sit back in the cloth, in the shop and in fit mode.
 - The tee's inside is plain cotton again, as in the renders, instead of carrying the prints; and the 3D draws the outside of the tee first, so what it covers (its inside, the body under it) is never lit only to be hidden: about a fifth less work for the graphics card every frame.

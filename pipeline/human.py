@@ -42,7 +42,7 @@ if HBM:
     hands.relax(body.data, rig, body.get("sex") == "female", {"L": 1.1, "R": 0.92})
 
 
-# ---------- the stand pose, exactly as build.py sets it (arms 64 degrees below horizontal) ----------
+# ---------- the stand pose, exactly as build.py sets it (arms 64 degrees below horizontal, or the body's own) ----------
 def arm_target(side, deg_below, fwd=0.06):
     s = 1 if side == "L" else -1
     return Vector((s * math.cos(math.radians(deg_below)), -fwd, -math.sin(math.radians(deg_below)))).normalized()
@@ -57,7 +57,7 @@ def pose_arm(side, deg_below):
 
 
 for side in ("L", "R"):
-    pose_arm(side, 64)
+    pose_arm(side, float(body.get("arm_down", 64)))       # as build.py hung them (the body may say its own)
 upd()
 
 

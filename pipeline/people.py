@@ -303,6 +303,8 @@ for o in [art] + eyes:
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import regions
 regions.mark(art, eyes, SEX == "female", newrig)
-art["sex"] = SEX; art["height"] = HEIGHT; art["offset"] = (float(-cx), 0.0, float(-zmin)); art["scale"] = float(k)
+art["sex"] = SEX; art["height"] = HEIGHT
+if SEX == "male": art["arm_down"] = 58.0     # build.py and human.py hang his arms here (his own hang is 59)
+art["offset"] = (float(-cx), 0.0, float(-zmin)); art["scale"] = float(k)
 bpy.ops.wm.save_as_mainfile(filepath=OUT, compress=True)
 print("saved", OUT, flush=True)
