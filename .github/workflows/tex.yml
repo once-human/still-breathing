@@ -33,4 +33,4 @@ jobs:
           git diff --cached --quiet && { echo "nothing new"; exit 0; }
           git commit -m "Try-on maps: ${{ inputs.tees }}"
           git reset -q --hard HEAD   # the atlases and detail maps the run wrote are not to be kept
-          for i in 1 2 3 4 5; do git pull --rebase -q -X theirs && git push && exit 0; git rebase --abort 2>/dev/null; sleep $((i * 7)); done; exit 1
+          for i in 1 2 3 4 5; do git pull --rebase -q -X theirs && git push && exit 0; git rebase --abort 2>/dev/null || true; sleep $((i * 7)); done; exit 1
