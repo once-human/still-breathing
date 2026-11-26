@@ -22,7 +22,7 @@ const PARTS: Part[] = [
     id: "orders", title: "orders",
     body: (
       <>
-        <p>every shirt is made to order: nothing sits in a warehouse. each is {rupees(SHOP.price)}, tax and shipping included. yours is made once you&apos;ve paid, in the size you picked, then packed and sent.</p>
+        <p>every shirt is made to order: nothing sits in a warehouse. each is {rupees(SHOP.price)}, all taxes and shipping included. yours is made once you&apos;ve paid, in the size you picked, then packed and sent.</p>
         {shopOpen() ? <p>every order email links to your order&apos;s page, or <Link href="/order">find your order</Link> with its number and your email.</p> : null}
       </>
     ),

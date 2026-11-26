@@ -10,7 +10,7 @@ import { pageMeta } from "@/lib/site";
 
 export const metadata: Metadata = pageMeta({
   title: "shop",
-  description: `Every sahn shirt: fred again.. india, five fan-made shirts for the December shows, ${rupees(SHOP.price)} each with tax and shipping included, made to order and sent anywhere in India.`,
+  description: `Every sahn shirt: fred again.. india, five fan-made shirts for the December shows, ${rupees(SHOP.price)} each with all taxes and shipping included, made to order and sent anywhere in India.`,
   path: "/shop",
   image: LINEUPS[0].slug,
 });
@@ -21,7 +21,7 @@ export default function Shop() {
     <div className="px-4 pt-6">
       <div className="page-in grid grid-cols-2 gap-4 border-t border-line pt-1.5 text-[13px] md:grid-cols-4">
         <span className="font-semibold">shop</span>
-        <span className="text-right text-quiet md:text-left">{rupees(SHOP.price)} each, tax and shipping included</span>
+        <span className="text-right text-quiet md:text-left">{rupees(SHOP.price)} each, all taxes and shipping included</span>
         <span className="hidden text-quiet md:block">made to order</span>
         <span className="hidden text-right text-quiet md:block">sent anywhere in india</span>
       </div>

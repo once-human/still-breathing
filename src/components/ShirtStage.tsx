@@ -84,7 +84,7 @@ export function ShirtStage() {
           </h1>
           <p className="mt-5 flex items-baseline gap-3">
             <span className="text-[28px] font-extrabold tracking-[-0.03em] tnum">{rupees(priceOf(design))}</span>
-            <span className="text-[13px] text-quiet">tax and shipping included</span>
+            <span className="text-[13px] text-quiet">all taxes and shipping included</span>
           </p>
           <p className="mt-4 max-w-[40ch] text-ink/85">{s.about}</p>
 

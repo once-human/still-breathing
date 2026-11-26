@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Countdown } from "@/components/Countdown";
-import { BagSlot } from "@/components/ShopSlots";
+import { AccountSlot, BagSlot } from "@/components/ShopSlots";
 import { setFocusCity } from "@/lib/city";
 import { NAV, BRAND } from "@/lib/site";
 import { CURRENT, fmtDays, paperStill, shirtHref, shirtLabel, shirtsOf, STILL_H, STILL_W } from "@/content/lineups";
@@ -80,7 +80,7 @@ export function Header() {
           ))}
 
           <span className={`${cell} border-line hidden text-quiet tnum lg:col-start-8 lg:block`}><Countdown short /></span>
-          <span className={`${cell} border-line text-right md:col-start-7 lg:col-start-9`}><BagSlot /></span>
+          <span className={`${cell} border-line flex justify-end gap-4 md:col-start-7 lg:col-start-9`}><AccountSlot className="hidden text-quiet md:inline" /><BagSlot /></span>
           <button
             onClick={() => setMenu(!menu)}
             aria-expanded={menu}
@@ -133,6 +133,7 @@ export function Header() {
             </li>
           ))}
         </ul>
+        <p className="mt-6 text-[15px]"><AccountSlot className="font-semibold" /></p>
         <p className="mt-10 border-t border-line pt-1.5 text-[13px] text-quiet">{CURRENT.title} · the shirts</p>
         <ul className="mt-3 grid grid-cols-5 gap-2">
           {shirtsOf(CURRENT).map((d) => (
