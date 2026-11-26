@@ -7,7 +7,7 @@
 # body's region weights and its step across the body; everything here is placed by the body itself (the mouth,
 # the jaw, each knuckle, the tendons from the wrist to each knuckle). Each texel is the average of four points
 # across it, and its relief is the slope across it, so nothing is finer than a texel can show. Features are millimetres and up: knuckle creases, tendons and veins on the back of the hands,
-# forearm hair, a short trimmed beard, the lip line, neck creases, the hairline's fade. No pores (they are well
+# forearm hair, a short beard trimmed to shape, the lip line, neck creases, the hairline's fade. No pores (they are well
 # under a pixel here), no grain.
 import sys, os, json
 import numpy as np
@@ -106,20 +106,25 @@ def shade(P, N, lips, ears, nails, scalp, handw, hairw=None, flow=None):
     hairv = sm(0.3, 0.6, scalp) * hairline * nape * sm(0.02 if SHE else 0.038, 0.032 if SHE else 0.05, earD + edge) * isHead
     if HBM:      # regions.py drew the hairline round the head: it only needs to wander, and stay off the ears
         hairv = sm(0.2, 0.8, scalp + edge * 10.0 * 4 * scalp * (1 - scalp)) * sm(0.006, 0.012, earD + 0.5 * edge) * isHead
-        if SHE:      # her hairline thins out over its last few millimetres: fine short hairs, skin between them
-            hairv = sm(0.05, 0.95, scalp + edge * 6.0 * 4 * scalp * (1 - scalp)) * sm(0.006, 0.012, earD + 0.5 * edge) * isHead
-            hairv *= 0.55 + 0.45 * sm(0.4, 0.95, scalp)
-    # a short trimmed beard: moustache, chin and jaw; the cheek line rises from the mouth's corner to the
-    # sideburn, the neck line sits a finger's width under the jaw; thinner high on the cheeks
+        # the hairline thins out over its last few millimetres: fine short hairs, skin between them (his too: a
+        # hard edge reads as a cap's)
+        hairv = sm(0.05, 0.95, scalp + edge * 6.0 * 4 * scalp * (1 - scalp)) * sm(0.006, 0.012, earD + 0.5 * edge) * isHead
+        hairv *= (0.55 if SHE else 0.6) + (0.45 if SHE else 0.4) * sm(0.4, 0.95, scalp)
+    # a short beard, kept trimmed and shaped: moustache, chin and jaw, all one even length. Its lines are clean,
+    # as a barber leaves them: the cheek line runs straight from the mouth's corner up to the sideburn, the neck
+    # line sits a finger's width under the jaw and rises behind it to under the ear, and they wander a millimetre
+    # at most (a line that wanders by centimetres reads as a beard left to grow)
     dy = d[:, 1]
-    cheek = mouth[2] + 0.008 + 0.45 * np.maximum(0, dy - 0.015) + edge
-    neckl = mouth[2] - 0.085 + 0.6 * np.maximum(0, dy - 0.04) + edge
-    beard = (1 - sm(cheek - 0.008, cheek + 0.004, z)) * sm(neckl - 0.004, neckl + 0.01, z)
-    sideburn = sm(0.075, 0.085, dy) * sm(mouth[2] + 0.0, mouth[2] + 0.015, z) * (1 - sm(eyeL[2] - 0.005, eyeL[2] + 0.008, z + edge))
-    beard = np.maximum(beard, sideburn) * (1 - sm(0.095, 0.105, dy)) * sm(0.03, 0.04, earD + edge)
-    mous = (1 - sm(0.024, 0.032, np.abs(d[:, 0]) - edge)) * sm(0.005, 0.009, d[:, 2]) * (1 - sm(0.018, 0.024, d[:, 2] + edge)) * (dy < 0.03)
+    bedge = 0.0012 * vnoise(P * 90.0) + 0.0005 * vnoise(P * 260.0)
+    cheek = mouth[2] + 0.009 + 0.42 * np.maximum(0, dy - 0.015) + bedge
+    neckl = mouth[2] - 0.066 + 0.72 * np.maximum(0, dy - 0.02) + bedge
+    beard = (1 - sm(cheek - 0.0025, cheek + 0.0015, z)) * sm(neckl - 0.0015, neckl + 0.0025, z)
+    sideburn = sm(0.077, 0.081, dy + bedge) * sm(mouth[2] + 0.0, mouth[2] + 0.015, z) * (1 - sm(eyeL[2] - 0.005, eyeL[2] + 0.008, z + edge))
+    beard = np.maximum(beard, sideburn) * (1 - sm(0.097, 0.101, dy + bedge)) * sm(0.03, 0.036, earD + bedge)
+    mous = (1 - sm(0.027, 0.03, np.abs(d[:, 0]) - bedge)) * sm(0.005, 0.0075, d[:, 2]) * (1 - sm(0.019, 0.021, d[:, 2] + bedge)) * (dy < 0.03)
     beard = np.maximum(beard, mous) * (1 - sm(0.08, 0.35, lips)) * isHead * (0.0 if SHE else 1.0)
-    beard *= 1 - 0.4 * sm(mouth[2] + 0.005, mouth[2] + 0.035, z) * sm(0.025, 0.05, np.abs(d[:, 0]))   # thinner high on the cheek
+    # under the neck line the skin is shaved: only the faint shadow of the hair under it
+    shaved = sm(neckl - 0.03, neckl - 0.002, z) * (1 - beard) * (dy > -0.02) * (dy < 0.1) * isHead * (0.0 if SHE else 1.0)
     # a short beard is hairs, not a shade: each a few millimetres long, lying down the face (out and down on the
     # cheeks, straight down on the chin and jaw, down and out from the middle on the moustache), skin showing
     # between them, thicker in patches; every hair raised a little so the light picks them out
@@ -128,8 +133,10 @@ def shade(P, N, lips, ears, nails, scalp, handw, hairw=None, flow=None):
     dn /= np.linalg.norm(dn, axis=1, keepdims=True)
     hairs = vnoise(along(P * 2600.0, dn, 7.0))                       # single hairs, about 0.4 mm apart
     clumps = vnoise(along(P * 900.0, dn, 3.0))                       # where they grow thicker or thinner
-    patch = fbm(P * 90.0, 2)                                          # a beard is never even
-    dens_b = np.clip(beard * (0.5 + 0.38 * sm(-0.35, 0.45, hairs) + 0.12 * clumps + 0.12 * patch), 0, 1)
+    patch = fbm(P * 90.0, 2)
+    # trimmed, it covers evenly: dense all over, the single hairs only breaking up its surface
+    dens_b = np.clip(beard * (0.84 + 0.1 * sm(-0.35, 0.45, hairs) + 0.03 * clumps + 0.03 * patch), 0, 1)
+    dens_b = np.maximum(dens_b, 0.1 * shaved * (0.8 + 0.2 * hairs))
     C = C * (1 - dens_b[:, None]) + HAIR * (0.85 + 0.3 * sm(-0.2, 0.6, hairs))[:, None] * dens_b[:, None]
     R = R * (1 - dens_b) + (0.62 + 0.12 * hairs) * dens_b
     H += dens_b * (0.00016 * sm(-0.3, 0.6, hairs) + 0.00006 * clumps)

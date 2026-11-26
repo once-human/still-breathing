@@ -6,8 +6,8 @@
 #     and back faded to the skin (skin.py's painted fade)
 #   - her: a bob, open: parted in the middle, over the head with some body, falling straight from the head's
 #     widest to just under the jaw (a little longer toward the face), the ends turned under, framing the face
-#   the depth eases in over 2 cm from the hair's edge (measured over the head), so it rises out of the painted
-#   hairline with no step
+#   the depth eases in over 2 cm from the hair's edge (measured over the head; 9 mm along his forehead, where the
+#   quiff grows from the hairline itself), so it rises out of the painted hairline with no step
 # Each vertex of the hair carries the way its strands lie ("flow", along the surface) for skin.py.
 import heapq, math
 import bmesh
@@ -41,11 +41,20 @@ def grow(b, SRC, wt, she, eyeL, eyeR, mouth):
     top = max(head, key=lambda v: v.co.z).co.copy()
 
     # the hair's depth at each vertex of the head (metres; 0 = none), before it is eased in from its edge
+    cy = (ears[0].y + ears[1].y) / 2
+
+    def front(p):
+        """1 over the forehead, 0 from the temples round: where his hair grows full right from the hairline"""
+        th = math.degrees(math.atan2(abs(p.x), -(p.y - cy)))
+        return 1.0 - sm(45.0, 70.0, th)
+
     def depth(v):
         p = v.co; s = wt(v[SRC], "scalp")
         if s < 0.5: return 0.0
         if she: return 0.006
-        d = 0.011 * sm(eyeZ + 0.055, eyeZ + 0.085, p.z)        # the sides and back faded to the skin
+        # the sides and back faded to the skin; over the forehead the quiff grows full from the hairline itself
+        # (a band of short hair under it read as a cap's edge with the quiff set on top)
+        d = 0.011 * max(front(p), sm(eyeZ + 0.055, eyeZ + 0.085, p.z))
         return d * (1 + 0.15 * noise.noise(p * 70.0) + 0.07 * noise.noise(p * 160.0))   # loose tufts
 
     D = {v.index: depth(v) for v in head}
@@ -63,7 +72,7 @@ def grow(b, SRC, wt, she, eyeL, eyeR, mouth):
             o = e.other_vert(v)
             if o in G and d + e.calc_length() < G[o]: G[o] = d + e.calc_length(); heapq.heappush(pq, (G[o], o.index, o))
     FULL = 0.006 if she else 0.011
-    for v in sv: D[v.index] *= sm(0.0, 0.02, G[v])
+    for v in sv: D[v.index] *= sm(0.0, 0.02 if she else 0.02 - 0.011 * front(v.co), G[v])
     crown = top + Vector((0, 0.035, -0.012))
 
     def flow_at(p, n):

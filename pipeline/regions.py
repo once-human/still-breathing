@@ -10,7 +10,7 @@
 #   - fingernails: the five fingertips are the points of the hand farthest from the wrist over its surface; the
 #     nail is on the back of each, 1 to 13 mm behind the tip (scaled to the finger), as wide as the finger allows
 #   - scalp: above a hairline that runs round the head, high at the forehead, dipping at the temples, over the
-#     ears and down behind them to the nape (lower on her)
+#     ears and down behind them to the nape (lower on her; his set back a touch at the temple corners)
 # people.py calls mark() before it saves; run on its own, it updates a body .blend.
 import heapq, math
 import bmesh
@@ -87,9 +87,15 @@ def mark(body, eyes, she, rig):
     # ---------- scalp: above a hairline running round the head ----------
     headc = np.array([0.0, (earC[0][1] + earC[1][1]) / 2, E])
     th = np.degrees(np.arctan2(np.abs(P[:, 0]), -(P[:, 1] - headc[1])))         # 0 the front, 180 the back
-    A = [0, 35, 70, 92, 120, 150, 180]
-    H = ([E + 0.05, E + 0.046, E + 0.03, earTop + 0.006, earTop - 0.02, stom + 0.01, stom - 0.004] if she else
-         [E + 0.058, E + 0.052, E + 0.036, earTop + 0.008, earTop - 0.012, stom + 0.03, stom + 0.018])
+    if she:
+        A = [0, 35, 70, 92, 120, 150, 180]
+        H = [E + 0.05, E + 0.046, E + 0.03, earTop + 0.006, earTop - 0.02, stom + 0.01, stom - 0.004]
+    else:
+        # his: a man's hairline, not a cap's edge: across the forehead a soft curve about 4 cm over the brows,
+        # set back a little at the corners over the temples (where a grown man's hairline recedes a touch), then
+        # turning down in front of the temple to the sideburn
+        A = [0, 18, 36, 50, 64, 78, 92, 120, 150, 180]
+        H = [E + 0.061, E + 0.061, E + 0.064, E + 0.059, E + 0.047, E + 0.032, earTop + 0.008, earTop - 0.012, stom + 0.03, stom + 0.018]
     hz = np.interp(th, A, H)
     head = (P[:, 2] > stom - 0.06) & (np.abs(P[:, 0]) < 0.13)
     sc_ = sm(hz - 0.004, hz + 0.007, P[:, 2]) * head * (ear < 0.5)
