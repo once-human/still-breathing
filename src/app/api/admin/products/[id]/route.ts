@@ -5,7 +5,9 @@ import { PRODUCTS_TAG, productById, saveProduct, type Product } from "@/lib/shop
 
 export const dynamic = "force-dynamic";
 
-const FIELDS = ["status", "cost", "margin", "fixedPrice", "skus"] as const;
+const FIELDS = ["status", "cost", "margin", "fixedPrice", "skus", "name", "about", "sort"] as const;
+/** the words are shown on every page, so they're checked here before the shop saves them */
+const TEXT: Record<string, number> = { name: 60, about: 600 };
 
 /** a shirt's changes, through the shop's saveProduct (which checks each field); from → to in the audit log */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -17,6 +19,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const patch: Record<string, unknown> = {};
   for (const k of FIELDS) if (k in g.body) patch[k] = g.body[k];
   if (!Object.keys(patch).length) return ok({ error: "nothing to change" }, 400);
+  for (const [k, max] of Object.entries(TEXT)) {
+    if (!(k in patch)) continue;
+    const v = typeof patch[k] === "string" ? (patch[k] as string).replace(/[\u0000-\u001f<>]/g, " ").replace(/\s+/g, " ").trim() : "";
+    if (!v || v.length > max) return ok({ error: `${k}: 1 to ${max} characters` }, 400);
+    patch[k] = v;
+  }
+  if ("sort" in patch && !(Number.isInteger(patch.sort) && (patch.sort as number) >= 0 && (patch.sort as number) <= 999)) return ok({ error: "order: a whole number, 0 to 999" }, 400);
   try {
     const after = await saveProduct(before.id, patch as Partial<Product>, g.admin.email);
     const changed = Object.fromEntries(Object.keys(patch).map((k) => [k, [before[k as keyof Product], after?.[k as keyof Product]]]));

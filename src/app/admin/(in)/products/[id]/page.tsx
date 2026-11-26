@@ -16,8 +16,8 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
     <>
       <PageHead title={`${p.no} ${p.name}${p.city ? ` ${p.city}` : ""}`} sub={`/${p.slug}`} />
       <ProductForm p={p} shopMargin={s.margin} />
-      <Section title="on the shirt's page" className="mt-12" aside="from the code today (src/content/tee.ts)">
-        <KV items={[["about", p.about], ["front", p.frontText], ["back", p.backText], ["colour", p.colour === "cream" ? "off white" : p.colour]]} />
+      <Section title="fixed in the code" className="mt-12" aside="src/content/tee.ts: they tie to the print files and the 3D">
+        <KV items={[["number", p.no], ["address", `/${p.slug}`], ["city", p.city ?? "the tour"], ["colour", p.colour === "cream" ? "off white" : p.colour]]} />
       </Section>
     </>
   );

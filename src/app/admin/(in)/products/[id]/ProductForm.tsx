@@ -18,6 +18,9 @@ export function ProductForm({ p, shopMargin }: { p: Product; shopMargin: number 
   const post = useAdminPost();
   const router = useRouter();
   const [status, setStatus] = useState<ProductStatus>(p.status);
+  const [name, setName] = useState(p.name);
+  const [about, setAbout] = useState(p.about);
+  const [sort, setSort] = useState(String(p.sort));
   const [cost, setCost] = useState(String(p.cost));
   const [margin, setMargin] = useState(p.margin == null ? "" : String(p.margin));
   const [fixed, setFixed] = useState(p.fixedPrice == null ? "" : String(p.fixedPrice));
@@ -25,11 +28,15 @@ export function ProductForm({ p, shopMargin }: { p: Product; shopMargin: number 
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const wordsOk = name.trim().length >= 1 && about.trim().length >= 1 && Number.isInteger(Number(sort));
 
   const c = Number(cost), m = margin === "" ? shopMargin : Number(margin), f = fixed === "" ? null : Number(fixed);
   const price = f ?? (Number.isFinite(c) && Number.isFinite(m) ? rule(c, m) : NaN);
   const patch: Record<string, unknown> = {};
   if (status !== p.status) patch.status = status;
+  if (name.trim() !== p.name) patch.name = name.trim();
+  if (about.trim() !== p.about) patch.about = about.trim();
+  if (Number(sort) !== p.sort) patch.sort = Number(sort);
   if (c !== p.cost) patch.cost = c;
   if ((margin === "" ? null : Number(margin)) !== p.margin) patch.margin = margin === "" ? null : Number(margin);
   if (f !== p.fixedPrice) patch.fixedPrice = f;
@@ -50,12 +57,25 @@ export function ProductForm({ p, shopMargin }: { p: Product; shopMargin: number 
     <div className="grid max-w-2xl gap-8">
       <fieldset className="grid gap-2">
         <legend className="mb-2 text-[12px] font-semibold uppercase tracking-[0.12em] text-quiet">status</legend>
-        {([["live", "on sale", "the buy button works in every size with a sku"], ["soldout", "sold out", "the shirt stays on the site, its button says sold out"], ["draft", "draft", "off sale: the button says sold out too"]] as const).map(([v, label, hint]) => (
+        {([["live", "on sale", "the buy button works in every size with a sku"], ["soldout", "sold out", "the shirt stays on the site, its button says sold out"], ["draft", "draft", "hidden: off the shop, the lineup and the header, its own page is not found"]] as const).map(([v, label, hint]) => (
           <label key={v} className="flex items-baseline gap-3 text-[14px]">
             <input type="radio" name="status" checked={status === v} onChange={() => setStatus(v)} className="accent-[var(--blue)]" />
             <span>{label} <span className="text-[12px] text-quiet">{hint}</span></span>
           </label>
         ))}
+      </fieldset>
+
+      <fieldset className="grid gap-3">
+        <legend className="mb-2 text-[12px] font-semibold uppercase tracking-[0.12em] text-quiet">on the site</legend>
+        <label className="grid gap-1 text-[12px] text-quiet">name <span>the shirt&apos;s title on its page, cards, the header and share text</span>
+          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} className={`${field} text-ink`} />
+        </label>
+        <label className="grid gap-1 text-[12px] text-quiet">about <span>the short words on its page and in its share description ({about.trim().length}/600)</span>
+          <textarea value={about} onChange={(e) => setAbout(e.target.value)} maxLength={600} rows={5} className="resize-y bg-transparent p-2 text-[14px] leading-snug text-ink ring-1 ring-line focus:ring-ink focus:outline-none" />
+        </label>
+        <label className="flex items-center justify-between gap-4 text-[14px]"><span>order <span className="block text-[12px] text-quiet">lower comes first, within its group</span></span>
+          <input type="number" step="1" value={sort} onChange={(e) => setSort(e.target.value)} className={`${field} w-24 text-right`} />
+        </label>
       </fieldset>
 
       <fieldset className="grid gap-3">
@@ -94,7 +114,7 @@ export function ProductForm({ p, shopMargin }: { p: Product; shopMargin: number 
             <button type="button" onClick={() => setConfirm(false)} className={BTN.plain}>no</button>
           </>
         ) : (
-          <button type="button" disabled={!changes.length || !Number.isFinite(price)} onClick={() => { setMsg(null); setConfirm(true); }} className={BTN.main}>save changes</button>
+          <button type="button" disabled={!changes.length || !Number.isFinite(price) || !wordsOk} onClick={() => { setMsg(null); setConfirm(true); }} className={BTN.main}>save changes</button>
         )}
         {msg ? <span className={`text-[12px] ${msg.ok ? "text-[#8fd19e]" : "text-[#f08a7a]"}`}>{msg.text}</span> : null}
       </div>
