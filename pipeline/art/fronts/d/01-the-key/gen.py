@@ -12,7 +12,7 @@ import math, os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 import front as F
 
-WMM, HMM = 104, 170
+WMM, HMM = 104, 162
 F.setup(WMM, HMM)
 import hand
 from hand import Art, hatch_poly
@@ -111,9 +111,9 @@ for ry in (R1, R2):
     art.line([(X0 - 1.5, ry + 0.25), (X0 + SW * 0.5, ry), (BUF, ry - 0.1)], 1.1, layer='key', wob=0.04, trem=0.04,
              a0=3.0, a1=0.3)
 xx = X0 + 0.6
-while xx < X0 + 6.5:                     # sleepers, only where the train isn't
+while xx < X0 + 5.0:                     # sleepers, only where the train isn't
     art.line([(xx, R1 - 1.5), (xx + 0.1, R2 + 1.5)], 1.1, layer='key', wob=0.02, trem=0.0, a0=0.2, a1=0.2)
-    xx += rng.uniform(2.9, 3.3)
+    xx += rng.uniform(3.6, 4.0)
 art.line([(BUF + 0.4, y + 0.9), (BUF + 0.7, y + 9.3)], 1.8, layer='key', wob=0.02, trem=0.0, a0=0.3, a1=0.3)
 # the train from above: three solid cars nose to tail, the front one rounded, a hair short of the buffer
 tx0, tx1 = X0 + 7.2, BUF - 1.3
@@ -184,15 +184,15 @@ yb = yf + 3.2
 bx0 = X0 + 15.5
 bx1 = bx0 + 100 * F.MM_PER_M
 seg = (bx1 - bx0) / 4
-art.line([(bx0, yb - 0.75), (bx1, yb - 0.6)], 1.1, layer='key', wob=0.03, trem=0.03, a0=0.3, a1=0.3)
-art.line([(bx0, yb + 0.75), (bx1, yb + 0.85)], 1.1, layer='key', wob=0.03, trem=0.03, a0=0.3, a1=0.3)
+art.line([(bx0, yb - 1.45), (bx1, yb - 1.35)], 1.1, layer='key', wob=0.03, trem=0.03, a0=0.3, a1=0.3)
+art.line([(bx0, yb + 1.45), (bx1, yb + 1.55)], 1.1, layer='key', wob=0.03, trem=0.03, a0=0.3, a1=0.3)
 for k in (0, 2):
     xx = bx0 + seg * k
-    art.fill([(xx, yb - 1.25), (xx + seg, yb - 1.2), (xx + seg, yb + 1.35), (xx, yb + 1.3)], 'key')
+    art.fill([(xx, yb - 1.7), (xx + seg, yb - 1.65), (xx + seg, yb + 1.8), (xx, yb + 1.75)], 'key')
 for k in range(5):
     xx = bx0 + seg * k
-    hgt = 2.6 if k in (0, 4) else 1.7
-    art.line([(xx, yb - hgt), (xx + 0.1, yb + 1.3)], 1.1, layer='key', wob=0.02, trem=0.0, a0=0.3, a1=0.3)
+    hgt = 3.4 if k in (0, 4) else 1.7
+    art.line([(xx, yb - hgt), (xx + 0.1, yb + 1.7)], 1.1, layer='key', wob=0.02, trem=0.0, a0=0.3, a1=0.3)
 
 order = ('green', 'accent', 'key')
 inks = art.finish(order=order, shifts={'green': (0.3, -0.25), 'accent': (0.15, 0.25)}, trim=False)

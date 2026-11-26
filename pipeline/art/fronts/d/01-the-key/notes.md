@@ -6,6 +6,6 @@
 
 **With the back.** Same three inks (line, grass green, sound blue) and the back's note hand. Every swatch is the back's mark for a thing, but the key itself is a new object, not a piece of the map's picture.
 
-**Process.** Three draft rounds, one critic pass, then a rework (frame + cartouche title, seven entries, solid train, worn patches in the grass, clumped people, three inks instead of four, ink traps closed in the wordmark).
+**Process.** Three draft rounds, one critic pass, then a rework (frame + cartouche title, seven entries, solid train, worn patches in the grass, clumped people, three inks instead of four, ink traps closed in the wordmark), then passes on the train, the foot and the scale bar: eight render-look-fix rounds in all.
 
-**Weak spots.** The scale bar's alternate open segments close up and it prints as one solid bar. The sleepers left of the train read a little like a "#". The wordmark is still the lineup face worked by hand, not lettered from scratch. Tall for a left chest (about 16 cm).
+**Weak spots.** The two sleepers left of the train still read a little like a "#". The wordmark is still the lineup face worked by hand, not lettered from scratch. Tall for a left chest (10.4 x 15.4 cm). The scale bar was reworked last so its open segments stay open at print size.

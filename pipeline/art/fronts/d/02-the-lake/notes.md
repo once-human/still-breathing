@@ -6,6 +6,6 @@
 
 **With the back.** The back's line, lake blue and sound blue; the broken rings rhyme with its sound.
 
-**Process.** Three draft rounds and one critic pass. **The rework is not done yet** (the usage limit cut it off). The critic's fixes still to make: a lumpier, tilted coast with a cove, a headland and a spit running out to the dots; water lines varied in weight and drifting into short horizontal strokes further out; the water lines bending round the islets so the dots read as islands, not stray punctuation; no strokes under ~6 mm.
+**Process.** Three draft rounds, one critic pass, then the rework over four more rounds: the shore made a coast (tilted, a cove on the north shore and another to the south-west, headlands west and east; a spit was tried and cut because it turned the island into a speech bubble, then a fish); two close echo lines drawn in long runs of different weights; beyond them the open water in rows of short wave strokes, the way the back draws its lake, thinning out away from the island and never landing on it; the two dots out past the east headland as islets with clear water round them; no stroke under about 1 cm; the wordmark's ink traps closed.
 
-**Weak spots.** As it stands the shore is too even an oval, so the piece leans toward a badge or a fingerprint; the dots sit apart from the island.
+**Weak spots.** The two echo lines still follow the shore closely enough that, at a glance, the island can read as a badge before it reads as land. The water lines don't bend visibly round the islets (they part well before them). The wordmark is the lineup's face worked by hand, not lettered from scratch.
