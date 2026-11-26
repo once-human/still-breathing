@@ -48,6 +48,7 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 - The actual size button is called artwork.
 
 ### Fixed
+- The site's own address is www.sahn.in everywhere: search results, share cards, the sitemap and the links in order emails no longer point at the old vercel.app address. sahn.in on its own takes you there.
 - Fingernails sit on every fingertip again (the thumb's was missing, some were a few stray spots).
 - His tee sits better at the arms: his arms hang a little more open, as his build makes them, so the sleeves no longer bunch up into folds at the armpits or pull tight across the back of the arm.
 - The 3D view is much lighter on a laptop: the slow motion on its own (breathing, the breeze, the slow turn) is drawn at an even 30 frames a second, and only what you do yourself (turning, zooming) at 60 or more; it draws past the screen's own sharpness only when the graphics card has most of its time to spare, so the rest of the computer stays smooth.

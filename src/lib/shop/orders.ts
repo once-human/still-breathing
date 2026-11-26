@@ -8,6 +8,7 @@ import { ShopError } from "./errors";
 import { getJson, kv, once, setJson, withLock } from "./kv";
 import { partnerStatus, sendToPrint, type ShipTo } from "./partner";
 import { createPayment, fetchPayment } from "./razorpay";
+import { SITE_URL } from "@/lib/site";
 
 /**
  * An order, from the moment the buyer goes to pay to the shirt in their hands:
@@ -80,7 +81,7 @@ export async function startOrder(bag: { design: Design; size: Size; quantity: nu
 
 export const orderForPayment = (rzpOrderId: string) => kv<string | null>("GET", `rzp:${rzpOrderId}`);
 
-const site = () => process.env.SHOP_SITE_URL?.replace(/\/$/, "") ?? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL ?? "still-breathing-studio.vercel.app"}`;
+const site = () => process.env.SHOP_SITE_URL?.replace(/\/$/, "") ?? SITE_URL;
 const shirt = (d: Design) => `${DESIGNS[d].no} ${DESIGNS[d].name}${DESIGNS[d].city ? ` ${DESIGNS[d].city}` : ""}`;
 const rs = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 const itemsText = (o: Order) => o.lines.map((l) => `${shirt(l.design)}, size ${l.size} × ${l.quantity}  ${rs(l.unitPrice * l.quantity)}`).join("\n");

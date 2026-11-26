@@ -2,12 +2,11 @@ import { CURRENT } from "@/content/lineups";
 import { POLICIES, POLICIES_READY, POLICY_ORDER } from "@/content/policies";
 
 /**
- * The address the site is served from, for metadata, Open Graph and the sitemap: this Vercel project's own production
- * domain. sahn.in today still serves another project (behind Cloudflare); once Onkar attaches sahn.in here as the
- * production domain, Vercel hands it in and every canonical, share card and sitemap entry follows with no edit.
- * Locally (no Vercel), the brand's domain.
+ * The address the site is served from, for metadata, Open Graph, the sitemap and order links: www.sahn.in, where
+ * sahn.in itself redirects. Fixed rather than taken from Vercel's production URL, which can name a vercel.app address;
+ * previews point their canonicals here too, as they should. SITE_URL in the environment overrides it.
  */
-export const SITE_URL = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL || "sahn.in"}`;
+export const SITE_URL = (process.env.SITE_URL?.trim() || "https://www.sahn.in").replace(/\/$/, "");
 
 export const BRAND = "sahn";
 
