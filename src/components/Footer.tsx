@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CURRENT, shirtHref, shirtLabel, shirtsOf } from "@/content/lineups";
 import { DESIGNS } from "@/content/tee";
 import { HELP_LINKS, POLICY_LINKS } from "@/lib/site";
+import { shopOpen } from "@/lib/shop/config";
 import pkg from "../../package.json";
 
 const col = "border-t border-line pt-1.5";
@@ -23,7 +24,10 @@ export function Footer() {
         </div>
         <div className={`${col} lg:col-span-3`}>
           <p className="font-semibold">help</p>
-          <ul className="mt-3 space-y-1">{HELP_LINKS.map((l) => <li key={l.href}><Link href={l.href} className={link}>{l.label}</Link></li>)}</ul>
+          <ul className="mt-3 space-y-1">
+            {HELP_LINKS.map((l) => <li key={l.href}><Link href={l.href} className={link}>{l.label}</Link></li>)}
+            {shopOpen() ? <li><Link href="/order" className={link}>find your order</Link></li> : null}
+          </ul>
         </div>
         <div className={`${col} lg:col-span-3`}>
           <p className="font-semibold">sahn</p>

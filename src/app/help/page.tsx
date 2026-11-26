@@ -6,6 +6,7 @@ import { CURRENT } from "@/content/lineups";
 import { SHOP } from "@/content/shop";
 import { OPERATOR, POLICIES_READY } from "@/content/policies";
 import { rupees } from "@/lib/shop/money";
+import { shopOpen } from "@/lib/shop/config";
 import { POLICY_LINKS, pageMeta } from "@/lib/site";
 
 export const metadata: Metadata = pageMeta({
@@ -22,7 +23,7 @@ const PARTS: Part[] = [
     body: (
       <>
         <p>every shirt is made to order: nothing sits in a warehouse. each is {rupees(SHOP.price)}, tax and shipping included. yours is made once you&apos;ve paid, in the size you picked, then packed and sent.</p>
-        <p>every order email links to your order&apos;s page, or <Link href="/order">find your order</Link> with its number and your email.</p>
+        {shopOpen() ? <p>every order email links to your order&apos;s page, or <Link href="/order">find your order</Link> with its number and your email.</p> : null}
       </>
     ),
   },

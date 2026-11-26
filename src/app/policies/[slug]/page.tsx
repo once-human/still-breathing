@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Label } from "@/components/Label";
 import { POLICIES, POLICIES_READY, POLICIES_UPDATED, POLICY_ORDER, type PolicySlug } from "@/content/policies";
 import { pageMeta } from "@/lib/site";
+import { shopOpen } from "@/lib/shop/config";
 
 type Params = { params: Promise<{ slug: string }> };
 
@@ -22,12 +23,12 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   return pageMeta({ title: p.title, description: p.summary.charAt(0).toUpperCase() + p.summary.slice(1), path: `/policies/${p.slug}` });
 }
 
-/** The words are plain text: an email address and the /order path in them become links. */
+/** The words are plain text: an email address becomes a link, and the /order path too while the shop is open (closed, it's a 404). */
 const LINKY = /([\w.+-]+@[\w-]+(?:\.[\w-]+)+|\/order\b)/g;
 function linked(text: string) {
   return text.split(LINKY).map((part, i) =>
     i % 2 === 0 ? part
-      : part.startsWith("/") ? <Link key={i} href={part}>{part}</Link>
+      : part.startsWith("/") ? (shopOpen() ? <Link key={i} href={part}>{part}</Link> : part)
       : <a key={i} href={`mailto:${part.replace(/\.$/, "")}`}>{part}</a>,
   );
 }
