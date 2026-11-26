@@ -170,6 +170,7 @@ export const POLICIES: Record<PolicySlug, Policy> = {
         body: [
           "when you order: your name, email, phone number, delivery address, what you bought and what you paid. you give these at checkout, and we need them to make and send your shirt.",
           "when you just look: nothing that names you. no ad trackers, no analytics cookies, no third-party pixels.",
+          "the site counts its own visits, and nobody else sees the counts: which page was opened, whether you came from a link, a search or a post (the site, never who), the kind of device and the country and state. no cookie and no address are kept: a visit is tied together by a code that changes every day and can't be traced back to you. do not track or global privacy control turns it off. the counts are kept for about a year.",
           "the bag is kept in your own browser (which shirts, which sizes, how many) until you pay or empty it. no cookies are set for it.",
           "if you sign in (with a code we email you, no password), we keep your name, phone and up to five delivery addresses so checkout fills itself in, and one cookie that keeps you signed in for 30 days. your account shows every order placed with your email. you can sign out any time, and ask us to delete the account.",
           "to show the nearest show, the site uses the rough city your connection comes from (the hosting service adds it to every request). it's rounded to about 10 km, used once for the distance and never stored.",

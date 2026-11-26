@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { SmoothScroll } from "@/components/SmoothScroll";
+import { Beacon } from "@/components/Beacon";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { SITE_URL, og } from "@/lib/site";
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${face.variable} ${hand.variable}`}>
       <body>
         <SmoothScroll />
+        <Beacon />
         <Header />
         <main id="main" className="min-h-[70vh] pt-[5.25rem] md:pt-[5.75rem]">{children}</main>
         <Footer />
