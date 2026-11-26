@@ -68,9 +68,9 @@ export function Header() {
               key={n.href}
               href={n.href}
               onMouseEnter={"lineup" in n ? openShelf : closeShelf}
-              onFocus={"lineup" in n ? openShelf : undefined}
+              onFocus={"lineup" in n ? openShelf : closeShelf}
               aria-expanded={"lineup" in n ? shelf : undefined}
-              className={`${cell} ${rule(n.href)} hidden md:block ${n.href === "/size-guide" ? "md:hidden lg:block" : ""} ${on(path, n.href) ? "text-ink" : "text-quiet hover:text-ink"}`}
+              className={`${cell} ${rule(n.href)} ${n.href === "/size-guide" ? "hidden lg:block" : "hidden md:block"} ${on(path, n.href) ? "text-ink" : "text-quiet hover:text-ink"}`}
             >{n.label}</Link>
           ))}
 
