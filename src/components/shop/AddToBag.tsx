@@ -17,7 +17,7 @@ export function AddToBag({ design, size }: { design: Design; size: Size }) {
   const open = !!shirt;
   const canBuy = open && shirt.sizes[size] === true;
   const price = shirt?.price ?? SHOP.price;
-  const label = loading ? "add to bag" : !open ? OPENING_SOON : shirt.sizes[size] === undefined ? `not made in ${size}` : !canBuy ? `${size} sold out` : busy ? "adding.." : "add to bag";
+  const label = loading ? "\u00a0" : !open ? OPENING_SOON : shirt.sizes[size] === undefined ? `not made in ${size}` : !canBuy ? `${size} sold out` : busy ? "adding.." : "add to bag";
 
   return (
     <div data-shop="add-to-bag">
