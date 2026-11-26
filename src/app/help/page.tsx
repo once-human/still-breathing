@@ -4,6 +4,7 @@ import { Label } from "@/components/Label";
 import { THE_TEE } from "@/content/tee";
 import { CURRENT } from "@/content/lineups";
 import { SHOP } from "@/content/shop";
+import { OPERATOR, POLICIES_READY } from "@/content/policies";
 import { rupees } from "@/lib/shop/money";
 import { POLICY_LINKS, pageMeta } from "@/lib/site";
 
@@ -18,7 +19,12 @@ type Part = { id: string; title: string; body: React.ReactNode };
 const PARTS: Part[] = [
   {
     id: "orders", title: "orders",
-    body: <p>every shirt is made to order: nothing sits in a warehouse. each is {rupees(SHOP.price)}, tax and shipping included. yours is made once you&apos;ve paid, in the size you picked, then packed and sent.</p>,
+    body: (
+      <>
+        <p>every shirt is made to order: nothing sits in a warehouse. each is {rupees(SHOP.price)}, tax and shipping included. yours is made once you&apos;ve paid, in the size you picked, then packed and sent.</p>
+        <p>every order email links to your order&apos;s page, or <Link href="/order">find your order</Link> with its number and your email.</p>
+      </>
+    ),
   },
   {
     id: "shipping", title: "shipping",
@@ -32,6 +38,15 @@ const PARTS: Part[] = [
     id: "care", title: "care",
     body: <ul>{THE_TEE.care.map((c) => <li key={c}>{c}</li>)}</ul>,
   },
+  ...(POLICIES_READY ? [{
+    id: "contact", title: "contact",
+    body: (
+      <>
+        <p>write to <a href={`mailto:${OPERATOR.email}`}>{OPERATOR.email}</a>{OPERATOR.phone ? <>, or call {OPERATOR.phone}</> : null}. more on the <Link href="/policies/contact">contact page</Link>.</p>
+        <p>returns and refunds: <Link href="/policies/refunds">how they work</Link>.</p>
+      </>
+    ),
+  }] : []),
 ];
 
 export default function Help() {
