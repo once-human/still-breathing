@@ -61,7 +61,7 @@ def width(text, xh, w, track=0.16, sx=1.0):
 
 
 def write(art, text, x, y, xh, w, layer, rng=None, track=0.16, skip='', dot_r=None, wob=None, trem=None,
-          rot_j=1.4, base_j=0.025, size_j=0.03, a0=0.5, a1=0.8, pv=0.1, slant=0.0, sizes=None, lay=None, space_w=None, sx=1.0):
+          rot_j=1.4, base_j=0.025, size_j=0.03, a0=0.5, a1=0.8, pv=0.1, slant=0.0, sizes=None, lay=None, space_w=None, sx=1.0, pad=0.0, rise=0.0):
     """draw text with its left edge at x and its baseline at y (mm). xh: x-height (mm), w: stroke (mm).
     skip: characters whose strokes AND dots are left out (their places are still returned, so a version can draw
     its own dots). lay: a separate rng for the layout (size, baseline, tilt), so several passes of one word (bands,
@@ -78,7 +78,7 @@ def write(art, text, x, y, xh, w, layer, rng=None, track=0.16, skip='', dot_r=No
     for k, ch in enumerate(text):
         strokes, adv, dot = G[ch]
         s = xh * (sizes[k] if sizes else 1.0) * (1 + lay.uniform(-size_j, size_j))
-        by = y + lay.uniform(-base_j, base_j) * xh
+        by = y + lay.uniform(-base_j, base_j) * xh - rise * (cx - x)
         a = math.radians(lay.uniform(-rot_j, rot_j))
         ca, sa = math.cos(a), math.sin(a)
         ox = cx + adv * s * sx / 2
@@ -92,7 +92,10 @@ def write(art, text, x, y, xh, w, layer, rng=None, track=0.16, skip='', dot_r=No
             rec['dot'] = T(dot)
         if ch not in skip:
             for st in strokes:
-                art.line([T(p) for p in st], w, layer=layer, rng=rng, wob=wob, trem=trem, a0=a0, a1=a1, pv=pv)
+                pts = [T(p) for p in st]
+                art.line(pts, w, layer=layer, rng=rng, wob=wob, trem=trem, a0=a0, a1=a1, pv=pv)
+                if pad:                    # a fingertip presses before it moves: a fatter round start
+                    art.dot(pts[0][0], pts[0][1], w * pad / 2, layer=layer, rng=rng)
             if dot:
                 dx, dy = rec['dot']
                 art.dot(dx, dy, dot_r, layer=layer, rng=rng)
