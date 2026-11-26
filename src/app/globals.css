@@ -65,3 +65,40 @@ html.lenis, html.lenis body { height: auto; }
 
 /* a thumb-sized hit area around small text buttons, without moving the layout */
 .hit { padding-block: 0.6rem; margin-block: -0.6rem; }
+
+/* ---- the store's motion: slow in, never bouncy, and none at all for anyone who asks for less ---- */
+@keyframes rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+@keyframes menu-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* a page settles in when you arrive on it */
+.page-in { animation: rise 700ms cubic-bezier(.2,.7,.2,1) both; }
+.page-in-2 { animation: rise 800ms cubic-bezier(.2,.7,.2,1) 90ms both; }
+.page-in-3 { animation: rise 900ms cubic-bezier(.2,.7,.2,1) 180ms both; }
+.menu-in { animation: menu-in 500ms cubic-bezier(.2,.7,.2,1) both; }
+
+/* parts of a page rise as they come into view, driven by the scroll itself (no script); browsers without it show them as they are */
+@supports (animation-timeline: view()) {
+  .reveal { animation: rise linear both; animation-timeline: view(); animation-range: entry 0% entry 45%; }
+}
+
+/* a link that draws its underline from the left */
+.draw { background: linear-gradient(currentColor, currentColor) no-repeat 0 100% / 0 1px; transition: background-size 500ms cubic-bezier(.2,.7,.2,1), color 300ms; }
+.draw:hover, .draw:focus-visible { background-size: 100% 1px; }
+
+/* the phone menu holds the page still under it */
+html.menu-open, html.menu-open body { overflow: hidden; }
+
+@media (prefers-reduced-motion: reduce) {
+  .page-in, .page-in-2, .page-in-3, .menu-in, .reveal { animation: none !important; }
+  * { scroll-behavior: auto !important; }
+}
+
+/* long-form text (help, policies) */
+.prose-sb p, .prose-sb li { max-width: 64ch; color: color-mix(in srgb, var(--ink) 85%, transparent); }
+.prose-sb p + p { margin-top: 0.9em; }
+.prose-sb ul { list-style: none; padding: 0; }
+.prose-sb li { position: relative; padding-left: 1.1em; }
+.prose-sb li::before { content: ""; position: absolute; left: 0; top: 0.62em; width: 0.4em; height: 1px; background: var(--quiet); }
+.prose-sb li + li { margin-top: 0.35em; }
+.prose-sb a { color: var(--blue); }
+.prose-sb a:hover { color: var(--ink); }

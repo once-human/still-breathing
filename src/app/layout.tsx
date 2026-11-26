@@ -1,15 +1,23 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { SmoothScroll } from "@/components/SmoothScroll";
+import { Header } from "@/components/Header";
+import { Footer } from "@/components/Footer";
+import { SITE_URL, og } from "@/lib/site";
 
-const description = "again..: shirts for the December shows in India. Two for the whole tour, the crowd and breath, and a map of the ground for each city, Mumbai and Bengaluru. Lineup 01 of Still Breathing.";
+const description = "still breathing makes one shirt per moment. Lineup 01: five fan-made shirts for Fred again..'s December shows in India, drawn by hand from the crowd and the grounds, made to order and sent anywhere in India.";
 
 export const metadata: Metadata = {
-  title: "still breathing",
+  metadataBase: new URL(SITE_URL),
+  title: { default: "still breathing", template: "%s · still breathing" },
   description,
-  openGraph: { type: "website", siteName: "still breathing", title: "still breathing", description, locale: "en_IN" },
+  applicationName: "still breathing",
+  openGraph: { type: "website", siteName: "still breathing", title: "still breathing", description, locale: "en_IN", images: [og("home")] },
+  twitter: { card: "summary_large_image" },
 };
+
+export const viewport: Viewport = { themeColor: "#0d0d0c", colorScheme: "dark" };
 
 /** Bricolage Grotesque: optical sizes, so the same face is quiet at 13 px and loud at 300 px. */
 const face = localFont({
@@ -28,7 +36,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${face.variable} ${hand.variable}`}>
       <body>
         <SmoothScroll />
-        {children}
+        <Header />
+        <main id="main" className="min-h-[70vh] pt-14 md:pt-16">{children}</main>
+        <Footer />
       </body>
     </html>
   );

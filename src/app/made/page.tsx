@@ -2,12 +2,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Label } from "@/components/Label";
 import { BigWord } from "@/components/BigWord";
-import pkg from "../../../package.json";
+import { CURRENT } from "@/content/lineups";
+import { pageMeta } from "@/lib/site";
 
-export const metadata: Metadata = {
-  title: "how it's made · still breathing",
+export const metadata: Metadata = pageMeta({
+  title: "how it's made",
   description: "How a still breathing shirt is drawn, cut, simulated and shown: hand-made art from real places, a pattern graded on Indian bodies, cloth physics, and a path tracer that runs in your browser.",
-};
+  path: "/made",
+  image: CURRENT.slug,
+});
 
 type Part = { no: string; title: string; note?: string; body: string[]; facts?: [string, string][] };
 
@@ -69,20 +72,14 @@ const PARTS: Part[] = [
 export default function Made() {
   return (
     <>
-      <nav aria-label="Main" className="fixed inset-x-0 top-0 z-50 grid grid-cols-4 gap-3 bg-paper px-4 pt-3 pb-2 text-[13px] sm:gap-4 sm:text-[15px] md:grid-cols-7 lg:grid-cols-9">
-        <Link href="/" className="truncate border-t border-line pt-1.5 font-semibold">still breathing</Link>
-        <span className="hidden truncate border-t border-line pt-1.5 text-quiet lg:block">lineup 01</span>
-        <span className="truncate border-t border-line pt-1.5">how it&apos;s made</span>
-        <Link href="/#studio" className="truncate border-t border-line pt-1.5 text-quiet hover:text-ink">the tee</Link>
-      </nav>
-      <main className="pt-20">
-        <BigWord word="how it's made" as="h1" className="px-4 text-[13vw] md:text-[10vw]" />
-        <p className="mt-6 max-w-[56ch] px-4 text-[15px] text-ink/85">
+      <div className="pt-6">
+        <BigWord word="how it's made" as="h1" className="page-in px-4 text-[13vw] md:text-[10vw]" />
+        <p className="page-in-2 mt-6 max-w-[56ch] px-4 text-[15px] text-ink/85">
           a shirt for a night you were there. here is everything between the idea and the tee on your back, minus the parts that are ours to keep.
         </p>
         <div className="mt-20 space-y-20 px-4">
           {PARTS.map((p) => (
-            <section key={p.no} className="grid grid-cols-1 gap-x-4 md:grid-cols-12">
+            <section key={p.no} className="reveal grid grid-cols-1 gap-x-4 md:grid-cols-12">
               <div className="md:col-span-7 lg:col-span-6 lg:col-start-2">
                 <Label note={p.note}><span className="mr-3 text-quiet tnum">{p.no}</span>{p.title}</Label>
                 <div className="space-y-4 text-[15px] leading-relaxed text-ink/85">
@@ -100,15 +97,9 @@ export default function Made() {
           ))}
         </div>
         <div className="mt-24 px-4">
-          <Link href="/#studio" className="text-[clamp(28px,5vw,64px)] font-extrabold tracking-[-0.04em] hover:text-blue">see the tee →</Link>
+          <Link href={`/${CURRENT.slug}`} className="text-[clamp(28px,5vw,64px)] font-extrabold tracking-[-0.04em] hover:text-blue">see lineup {CURRENT.no} →</Link>
         </div>
-      </main>
-      <footer className="mt-32 grid grid-cols-2 gap-3 px-4 pb-4 text-[13px] md:grid-cols-4">
-        <span className="border-t border-line pt-1.5">still breathing, lineup 01</span>
-        <span className="border-t border-line pt-1.5 text-quiet">made to order</span>
-        <span className="hidden border-t border-line pt-1.5 text-quiet md:block">made in india</span>
-        <span className="hidden border-t border-line pt-1.5 text-right text-quiet md:block">v{pkg.version}</span>
-      </footer>
+      </div>
     </>
   );
 }

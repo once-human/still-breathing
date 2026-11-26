@@ -1,84 +1,90 @@
-import { Nav } from "@/components/Nav";
-import { Product } from "@/components/Product";
-import { BigWord } from "@/components/BigWord";
+import type { Metadata } from "next";
+import Link from "next/link";
 import { Label } from "@/components/Label";
 import { Now } from "@/components/Now";
-import { SIZES, SIZE_ORDER, SHOWS, THE_TEE } from "@/content/tee";
-import pkg from "../../package.json";
+import { Countdown } from "@/components/Countdown";
+import { ShirtCard } from "@/components/ShirtCard";
+import { CURRENT, fmtDays, paperStill, shirtHref, shirtsOf, wornStill, STILL_H, STILL_W } from "@/content/lineups";
+import { pageMeta } from "@/lib/site";
 
-const ROWS: [string, "chest_round" | "length" | "shoulder"][] = [["chest, all round", "chest_round"], ["length, shoulder to hem", "length"], ["shoulder, seam to seam", "shoulder"]];
+export const metadata: Metadata = pageMeta({
+  description: "still breathing makes one shirt per moment. Lineup 01: five fan-made shirts for Fred again..'s December shows in India, drawn by hand from the crowd and the grounds, made to order and sent anywhere in India.",
+  path: "/",
+});
 
+/** The front door: the name, the lineup that's on now, its shirts, and what the label is. Stills only, no 3D. */
 export default function Home() {
+  const l = CURRENT, shirts = shirtsOf(l);
   return (
     <>
-      <Nav />
-      <main id="top" className="pt-20">
-        <Product />
-
-        <div className="mt-24"><Now /></div>
-
-        <BigWord word="still breathing" marquee className="mt-28 text-[22vw] md:text-[16vw]" />
-
-        <div className="mt-20 grid grid-cols-1 gap-x-4 px-4 md:grid-cols-12">
-          <section className="md:col-span-7 lg:col-span-6 lg:col-start-2">
-            <Label id="sizes" note="cm, on the garment">sizes</Label>
-            <table className="w-full text-[14px] tnum">
-              <thead>
-                <tr className="text-quiet"><th className="py-1 text-left font-normal" />{SIZE_ORDER.map((s) => <th key={s} className="py-1 text-right font-normal">{s}</th>)}</tr>
-              </thead>
-              <tbody>
-                {ROWS.map(([label, k]) => (
-                  <tr key={k} className="border-t border-line">
-                    <td className="py-2 text-quiet">{label}</td>
-                    {SIZE_ORDER.map((s) => <td key={s} className="py-2 text-right">{SIZES[s][k]}</td>)}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="mt-4 max-w-[52ch] text-[13px] text-quiet">
-              to check, lay a tee you love flat and measure it the same way: armpit to armpit (double it for all round), and from the top of the shoulder by the collar down to the hem.
-            </p>
-          </section>
-
-          <section className="mt-20 md:col-span-5 md:mt-0 lg:col-span-4 lg:col-start-9">
-            <Label id="cloth">cloth</Label>
-            <dl className="space-y-2 text-[14px]">
-              {THE_TEE.cloth.map(([k, v]) => (
-                <div key={k} className="grid grid-cols-[6.5rem_1fr] gap-3"><dt className="text-quiet">{k}</dt><dd>{v}</dd></div>
-              ))}
-            </dl>
-            <Label id="care" className="mt-16">care</Label>
-            <ul className="space-y-1 text-[14px]">{THE_TEE.care.map((c) => <li key={c}>{c}</li>)}</ul>
-          </section>
+      <section className="px-4 pt-6">
+        <div className="page-in grid grid-cols-2 gap-4 border-t border-line pt-1.5 text-[13px] md:grid-cols-4">
+          <Link href={`/${l.slug}`} className="font-semibold hover:text-blue">lineup {l.no} · {l.title}</Link>
+          <span className="text-right text-quiet md:text-left">{l.tag}</span>
+          <span className="hidden text-quiet md:block">made to order, sent anywhere in india</span>
+          <span className="hidden text-right tnum md:block"><Countdown short /></span>
         </div>
+        <h1 className="page-in-2 bigword mt-5 text-[17vw]" aria-label="still breathing">
+          <span className="block">still</span>
+          <span className="block md:-mt-[0.02em] md:pl-[0.9em]">breathing</span>
+        </h1>
+      </section>
 
-        <div className="mt-24 grid grid-cols-1 gap-x-4 px-4 md:grid-cols-12">
-          <section className="md:col-span-7 lg:col-span-6 lg:col-start-2">
-            <Label id="shows" note="lineup 01">the india shows</Label>
-            <ul className="text-[clamp(28px,5vw,64px)] leading-[1] font-extrabold tracking-[-0.04em]">
-              {SHOWS.map((s) => (
-                <li key={s.city} className="flex items-baseline justify-between border-t border-line py-2">
-                  <span>{s.city}</span>
-                  <span className="text-[0.45em] font-normal tracking-normal text-quiet tnum">{s.days.map((d) => d.slice(8, 10)).join(" + ")}.12</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-          <section className="mt-16 md:col-span-5 md:mt-0 lg:col-span-4 lg:col-start-9">
-            <Label>about this tee</Label>
-            <p className="max-w-[40ch] text-[14px] text-ink/85">
-              still breathing makes one shirt per moment. lineup 01 is for the december shows in india: two for the whole tour, the crowd and breath, both nights in each, and a map of the ground for each city, mumbai and bengaluru. each one is made to order and sent anywhere in india.
-            </p>
-          </section>
+      {/* lineup 01, up front */}
+      <section className="mt-14 grid grid-cols-1 gap-x-4 gap-y-10 px-4 md:grid-cols-12">
+        <Link href={shirtHref(l.hero)} className="page-in-3 group relative block overflow-hidden bg-[#0b0a0a] md:col-span-7">
+          <img src={wornStill(l.hero, 180)} alt="the crowd, worn at the show, from behind" width={STILL_W} height={STILL_H} fetchPriority="high" className="aspect-[880/1120] w-full object-cover transition-transform duration-[1.6s] ease-[cubic-bezier(.2,.7,.2,1)] group-hover:scale-[1.02]" />
+          <span className="absolute bottom-3 left-3 text-[13px] text-white/75">01 crowd, worn at the show</span>
+        </Link>
+        <div className="flex flex-col md:col-span-5 lg:col-span-4 lg:col-start-9">
+          <Label note={l.when}>lineup {l.no}</Label>
+          <p className="text-[clamp(30px,3.6vw,54px)] leading-[0.95] font-extrabold tracking-[-0.045em]">{l.title}<span className="block text-quiet">{l.tag}</span></p>
+          <p className="mt-6 max-w-[38ch] text-[16px] text-ink/85">{l.lede}</p>
+          <ul className="mt-6 space-y-0.5 text-[14px] tnum">
+            {l.shows.map((x) => <li key={x.city} className="flex justify-between border-t border-line py-1"><span>{x.city}</span><span className="text-quiet">{fmtDays(x.days)}</span></li>)}
+          </ul>
+          <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-[15px] font-semibold">
+            <Link href={`/${l.slug}`} className="draw text-blue hover:text-ink">see the lineup →</Link>
+            <a href="#shirts" className="draw hover:text-blue">the five shirts ↓</a>
+          </div>
+          <div className="mt-auto hidden grid-cols-2 gap-4 pt-12 md:grid">
+            <Link href={shirtHref("a")} className="group block bg-studio"><img src={paperStill("a", "q")} alt="map, mumbai, on the studio paper" width={STILL_W} height={STILL_H} loading="lazy" className="aspect-[880/1120] w-full object-cover transition-opacity group-hover:opacity-85" /></Link>
+            <Link href={shirtHref("e")} className="group block bg-studio"><img src={paperStill("e", "front")} alt="i am a party, the front, on the studio paper" width={STILL_W} height={STILL_H} loading="lazy" className="aspect-[880/1120] w-full object-cover transition-opacity group-hover:opacity-85" /></Link>
+          </div>
         </div>
-      </main>
+      </section>
 
-      <footer className="mt-32 grid grid-cols-2 gap-3 px-4 pb-4 text-[13px] md:grid-cols-4">
-        <span className="border-t border-line pt-1.5">still breathing, lineup 01</span>
-        <span className="border-t border-line pt-1.5 text-quiet">made to order</span>
-        <a href="/made" className="border-t border-line pt-1.5 text-quiet hover:text-ink">how it&apos;s made</a>
-        <span className="hidden border-t border-line pt-1.5 text-right text-quiet md:block">v{pkg.version}</span>
-      </footer>
+      {/* the shirts */}
+      <section id="shirts" className="mt-36 scroll-mt-20 px-4">
+        <Label note={<Link href={`/${l.slug}`} className="draw hover:text-ink">by city, with the shows</Link>}>lineup {l.no} · the shirts</Label>
+        <ul className="grid grid-cols-2 gap-x-4 gap-y-10 md:grid-cols-3 lg:grid-cols-5">
+          {shirts.map((d) => <li key={d} className="reveal"><ShirtCard d={d} /></li>)}
+        </ul>
+      </section>
+
+      {/* what this is */}
+      <section className="mt-40 grid grid-cols-1 gap-x-4 px-4 md:grid-cols-12">
+        <div className="md:col-span-12 lg:col-span-10 lg:col-start-2">
+          <Label>still breathing</Label>
+          <p className="reveal max-w-[22ch] text-[clamp(32px,5.2vw,80px)] leading-[0.98] font-extrabold tracking-[-0.045em]">
+            one shirt per moment. <span className="text-quiet">a night you were there, drawn by hand and worn after.</span>
+          </p>
+        </div>
+        <div className="mt-12 grid grid-cols-1 gap-x-4 gap-y-6 text-[15px] text-ink/85 md:col-span-12 md:grid-cols-12 lg:col-span-10 lg:col-start-2 lg:grid-cols-10">
+          <p className="reveal max-w-[40ch] md:col-span-6 lg:col-span-4">
+            every back is a real place on a real night: the ground from above, the crowd from behind, the walk home after. drawn by hand from maps and the horizon you&apos;d actually see from the field, in a few inks and a little blue.
+          </p>
+          <p className="reveal max-w-[40ch] md:col-span-6 lg:col-span-4 lg:col-start-6">
+            heavy 240 gsm cotton, cut loose for a long night on your feet, fitted on indian bodies, made one at a time when you order it. the 3d you can turn on each shirt is the same tee, cut from the same size chart.
+          </p>
+          <div className="flex gap-6 font-semibold md:col-span-12 lg:col-span-10">
+            <Link href="/made" className="draw text-blue hover:text-ink">how it&apos;s made →</Link>
+            <Link href="/lineups" className="draw hover:text-blue">all lineups →</Link>
+          </div>
+        </div>
+      </section>
+
+      <div className="mt-36"><Now /></div>
     </>
   );
 }

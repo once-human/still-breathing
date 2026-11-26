@@ -5,7 +5,7 @@
   "scripts": {
     "predev": "node scripts/hash-assets.mjs",
     "dev": "next dev",
-    "prebuild": "node scripts/hash-assets.mjs",
+    "prebuild": "node scripts/hash-assets.mjs && (node scripts/og.mjs || echo og pictures kept as committed)",
     "build": "next build",
     "start": "next start",
     "pretypecheck": "node scripts/hash-assets.mjs",
