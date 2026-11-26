@@ -66,7 +66,8 @@ if __name__ == "__main__":
     # C, the tour crowd: art from art-crowd-tour/gen.py plus its lettering exported from Figma at print size.
     # D, the Bengaluru map: art from art-d-map/gen.py plus its lettering exported from Figma at print size.
     # E, breath for the tour: art from art/breath (crowd.py on a runner, then post.py) plus its lettering (art/breath/letter.py).
-    art = {"A": "art-a-map", "B": "art-b-lines", "C": "art-crowd-tour", "D": "art-d-map", "E": "art-e-breath"}[design]
+    # F, 22° for Bengaluru: art from art-f-22/gen.py, notes from art-f-22/notes.py, title from art/wordmark.py.
+    art = {"A": "art-a-map", "B": "art-b-lines", "C": "art-crowd-tour", "D": "art-d-map", "E": "art-e-breath", "F": "art-f-22"}[design]
     TEE = {"black": (21, 21, 21), "cream": (255, 250, 231)}[tee]
     atlas = Image.new("RGBA", (W * 2, H), TEE + (255,)); mask = Image.new("L", (W * 2, H), 0)
     def place(img, cx_cm, top_cm, w_cm, panel):

@@ -1,0 +1,95 @@
+{
+  "concept": "22°: Bengaluru at 1:42 a.m., after Fred again.. at NICE Grounds, in the soft drizzle the city is known for. From a footbridge you look down a wet street (Church Street, 100 Feet Road and MG Road folded into one) roofed by huge old rain trees. At the end of it the set is still going: a DJ stage under a pale sheet roof on a box truss, line arrays hung each side, one small figure at a booth at the front with one hand up, soft grainy footage on the LED screen behind him, a crowd of heads, hands and phones in front, five thin white beams fanning up into a low night-blue cloud deck drawn in curling echo strokes. The street lamps' light on the ground is only their reflections and a little warm wet shine; the drizzle shows as one slant of long fine strokes where light is behind it. Shutters are down, a post clock on its stand says 1:42, the chai stall still steams, autos wait, a guard dozes, the last Green Line train comes in from Madavara, and a couple hold one jacket over their laughing heads as an auto pulls out past them. Each light lays one column in the road, at its own place and width, and a few broken puddles hold the light near the viewer.",
+  "medium": "hand-drawn white-line ink on black with misregistered spot screens: pressure-pen contours, continuous hatching for tone, woodblock-style echo scallops for the rain-tree canopies, clouds as curling echo strokes stepping up from round bellies (ice where the beams pass), white beams as segmented strokes cutting their own black slots, colour fills laid as directional brush strokes. Light is never a glow, a ring or a dot pool. Drizzle is one slant of long fine strokes only where light is behind it; reflections are one broken column per light of stacked tapered horizontal strokes, plus broken puddles. DTG on a black tee, binary alpha, every mark >= 1 mm.",
+  "palette": {
+    "blue": "#3E63C9",
+    "green": "#3D9C5E",
+    "copper": "#D2673A",
+    "amber": "#F2A33A",
+    "ice": "#D3E4F0",
+    "yellow": "#F4CD3A",
+    "key": "#EFE6CF"
+  },
+  "type_zones": [
+    {
+      "name": "title",
+      "x": 230,
+      "y": 70,
+      "w": 740,
+      "h": 165
+    },
+    {
+      "name": "line",
+      "x": 380,
+      "y": 1492,
+      "w": 440,
+      "h": 64
+    }
+  ],
+  "annotations": [
+    {
+      "text": "always 22° somewhere",
+      "x": 60,
+      "y": 640,
+      "rotation": -4,
+      "points_to": [
+        107,
+        848
+      ]
+    },
+    {
+      "text": "one jacket, two people",
+      "x": 60,
+      "y": 1300,
+      "rotation": -4,
+      "points_to": [
+        175,
+        1050
+      ]
+    },
+    {
+      "text": "chai's still on",
+      "x": 1015,
+      "y": 1000,
+      "rotation": 2,
+      "points_to": [
+        1011,
+        902
+      ]
+    },
+    {
+      "text": "last train from madavara",
+      "x": 870,
+      "y": 300,
+      "rotation": -3,
+      "points_to": [
+        833,
+        317
+      ]
+    },
+    {
+      "text": "nice grounds, one man at a table",
+      "x": 250,
+      "y": 600,
+      "rotation": -2,
+      "points_to": [
+        559,
+        540
+      ]
+    },
+    {
+      "text": "rain trees don't mind",
+      "x": 1010,
+      "y": 560,
+      "rotation": 5,
+      "points_to": [
+        1146,
+        748
+      ]
+    }
+  ],
+  "focal_point": [
+    559,
+    540
+  ]
+}
