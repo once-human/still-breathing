@@ -36,8 +36,14 @@ function headline(o: OrderView): [string, string] {
     case "out": return ["out for delivery.", "keep your phone on: the courier calls before coming."];
     case "delivered": return ["with you.", "if anything is wrong with it, write to us within 7 days with an unboxing video and photos, and we'll put it right."];
     case "attention": return ["we're on it.", "something held your order up on the way. we've been told and will write to you; nothing more is needed from you."];
-    case "cancelled":
-      return ["cancelled.", o.refund?.status === "processed" ? `nothing will be made or sent. ${rupees(o.refund.amount)} has been refunded; banks usually show it within 5–7 working days, often sooner for UPI.` : o.refund?.status === "failed" ? "nothing will be made or sent. the refund needs a hand from us: we've been told and will write to you." : `nothing will be made or sent. your ${o.refund ? rupees(o.refund.amount) : ""} refund is on its way back; banks usually show it within 5–7 working days.`];
+    case "cancelled": {
+      const r = o.refunds.filter((x) => x.status !== "failed");
+      const failed = o.refunds.some((x) => x.status === "failed") && !r.length;
+      return ["cancelled.", failed ? "nothing will be made or sent. the refund needs a hand from us: we've been told and will write to you."
+        : !r.length ? "nothing will be made or sent. we'll write to you about your payment."
+        : r.every((x) => x.status === "processed") ? `nothing will be made or sent. ${rupees(o.refunded)} has been refunded; banks usually show it within 5–7 working days, often sooner for UPI.`
+        : `nothing will be made or sent. your ${rupees(o.refunded)} refund is on its way back; banks usually show it within 5–7 working days.`];
+    }
   }
 }
 
@@ -55,7 +61,7 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
       const o = found.o;
       let n: Order | null = o;
       if (o.stage === "paying" || (o.stage === "paid" && !o.partnerId)) n = await advance(id);
-      else if (o.stage === "cancelled" && o.refund?.status === "pending") n = await syncRefund(id).catch(() => o);
+      else if (o.refunds?.some((r) => r.status === "pending")) n = await syncRefund(id).catch(() => o);
       else if (o.partnerId && o.stage !== "delivered" && (!o.syncedAt || Date.now() - Date.parse(o.syncedAt) > 15 * 60_000)) n = await sync(id).catch(() => o);
       if (n) found = { ...found, o: n };
     }
@@ -133,7 +139,7 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
           </ul>
           <p className="mt-3 flex justify-between"><span>{v.stage === "paying" ? "to pay" : "paid"}</span><span className="tnum font-semibold">{rupees(v.total)}</span></p>
           {v.payment?.at && <p className="mt-1 text-[13px] text-quiet">{v.payment.label ? `by ${v.payment.label}, ` : ""}{when(v.payment.at)}{v.payment.id ? <> · <span className="tnum">{v.payment.id}</span></> : null}</p>}
-          {v.refund && <p className="mt-1 text-[13px] text-quiet">refund {rupees(v.refund.amount)}: {v.refund.status === "processed" ? `sent ${when(v.refund.doneAt ?? v.refund.at)}` : v.refund.status === "failed" ? "needs a hand from us" : "on its way"} · <span className="tnum">{v.refund.id}</span></p>}
+          {v.refunds.map((r) => <p key={r.id} className="mt-1 text-[13px] text-quiet">refund {rupees(r.amount)}{r.reason && r.reason !== "cancelled" ? ` (${r.reason})` : ""}: {r.status === "processed" ? `sent ${when(r.doneAt ?? r.at)}` : r.status === "failed" ? "needs a hand from us" : "on its way"} · <span className="tnum">{r.id}</span></p>)}
           <p className="mt-1 text-[12px] text-quiet">all taxes and shipping included.</p>
 
           {v.ship && !v.changeUntil && (

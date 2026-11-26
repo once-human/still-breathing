@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { POLICIES_READY } from "@/content/policies";
-import { SHOP, priceOf } from "@/content/shop";
+import { SHOP } from "@/content/shop";
 import { shirtName } from "@/components/shop/BagDrawer";
-import { bagCount, bagPayable, bagTotal, shop, useShop } from "@/lib/shop/client";
+import { bagCount, bagPayable, bagTotal, priceIn, shop, useShop } from "@/lib/shop/client";
 import { AddressFields, EMPTY, addressLine } from "@/components/shop/AddressFields";
 import type { Account } from "@/lib/shop/account";
 import { checkDetails, type Details } from "@/lib/shop/india";
@@ -89,7 +89,7 @@ export function Checkout({ saved = null }: { saved?: Account | null }) {
     }
   }
 
-  const total = bagTotal(bag);
+  const total = bagTotal(bag, payView);
   const live = bagPayable(bag, payView);
 
   return (
@@ -125,7 +125,7 @@ export function Checkout({ saved = null }: { saved?: Account | null }) {
           {bag.map((l) => (
             <li key={`${l.design}-${l.size}`} className="flex justify-between border-b border-line py-2">
               <span>{shirtName(l.design)}<span className="text-quiet"> · {l.size} × {l.quantity}</span></span>
-              <span className="tnum">{rupees(priceOf(l.design) * l.quantity)}</span>
+              <span className="tnum">{rupees(priceIn(payView, l.design) * l.quantity)}</span>
             </li>
           ))}
         </ul>

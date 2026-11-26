@@ -30,6 +30,7 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 
 ### Changed
 - Checkout checks a Maharashtra pin code is really in Maharashtra. Where the shop sends is one setting now (still anywhere in india).
+- Prices, which shirts are on sale and whether the shop is taking orders now come from the shop's own settings, so they can change without a new version of the site; checkout always charges the price the server works out, and the buttons, bag and checkout show that same price. A shirt can be marked sold out: its buy button says so. An order's page and receipt list every refund on it with its reference, and the receipt shows what was paid after refunds. Refunds go at normal speed (free; banks show them in 5–7 working days).
 - Orders, sign-ins and the order marks are kept in a Postgres database on Neon (Singapore) instead of Upstash; the privacy policy says so.
 - The label is called sahn now: in the header, the footer, every page's title and share card, the words on the photos you save from the 3D and the try-on, and their file names. The site's own addresses (in search results and share cards) follow its domain, sahn.in once it points here. Lineup 01 is still lineup 01 · fred again.. india · fan made.
 - Nothing on the site says soon: no buy button, contact or policy link shows until it's real.

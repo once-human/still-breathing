@@ -35,15 +35,19 @@ async function sql(query: string, params: (string | number | null)[] = []): Prom
   return j.rows;
 }
 
-/** the tables, made once per server instance (CREATE ... IF NOT EXISTS, so any instance may go first) */
-const db = (query: string, params: (string | number | null)[] = []) => {
+/**
+ * The one SQL client: every table the site keeps (the shop's kv and zset, settings, products, the admin's own) goes
+ * through this. Parameters only, never string-built values. Rows come back as arrays of text (or null), in column
+ * order. The shop's tables are made first, once per server instance (CREATE ... IF NOT EXISTS, so any may go first).
+ */
+export const query = (text: string, params: (string | number | null)[] = []) => {
   ready ??= (async () => {
     for (const s of SCHEMA) await sql(s);
   })().catch((e) => {
     ready = null;
     throw e;
   });
-  return ready.then(() => sql(query, params));
+  return ready.then(() => sql(text, params));
 };
 
 const LIVE = "(expires_at IS NULL OR expires_at > now())";
@@ -57,10 +61,10 @@ export async function kv<T = unknown>(...cmd: Cmd): Promise<T> {
   const [op, key, ...a] = cmd.map(String);
   const k = key ?? "";
   // now and then, clear what has expired (reads already skip it)
-  if (Math.random() < 0.02) db("DELETE FROM kv WHERE expires_at < now() - interval '1 hour'").catch(() => {});
+  if (Math.random() < 0.02) query("DELETE FROM kv WHERE expires_at < now() - interval '1 hour'").catch(() => {});
   switch (op.toUpperCase()) {
     case "GET": {
-      const r = await db(`SELECT value FROM kv WHERE key = $1 AND ${LIVE}`, [k]);
+      const r = await query(`SELECT value FROM kv WHERE key = $1 AND ${LIVE}`, [k]);
       return (r[0]?.[0] ?? null) as T;
     }
     case "SET": {
@@ -74,7 +78,7 @@ export async function kv<T = unknown>(...cmd: Cmd): Promise<T> {
       }
       const exp = ms === null ? "NULL" : "now() + ($3::double precision * interval '1 millisecond')";
       const params = ms === null ? [k, value] : [k, value, ms];
-      const r = await db(
+      const r = await query(
         `INSERT INTO kv (key, value, expires_at) VALUES ($1, $2, ${exp})
          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, expires_at = EXCLUDED.expires_at
          ${nx ? "WHERE kv.expires_at IS NOT NULL AND kv.expires_at <= now()" : ""} RETURNING 1`,
@@ -84,7 +88,7 @@ export async function kv<T = unknown>(...cmd: Cmd): Promise<T> {
     }
     case "DEL": {
       const keys = [k, ...a];
-      const r = await db(
+      const r = await query(
         `WITH k AS (SELECT jsonb_array_elements_text($1::jsonb) AS key),
               a AS (DELETE FROM kv WHERE key IN (SELECT key FROM k) RETURNING key),
               b AS (DELETE FROM zset WHERE key IN (SELECT key FROM k) RETURNING key)
@@ -94,7 +98,7 @@ export async function kv<T = unknown>(...cmd: Cmd): Promise<T> {
       return Number(r[0]?.[0] ?? 0) as T;
     }
     case "INCR": {
-      const r = await db(
+      const r = await query(
         `INSERT INTO kv (key, value, expires_at) VALUES ($1, '1', NULL)
          ON CONFLICT (key) DO UPDATE SET
            value = CASE WHEN kv.expires_at IS NOT NULL AND kv.expires_at <= now() THEN '1' ELSE (kv.value::bigint + 1)::text END,
@@ -107,19 +111,19 @@ export async function kv<T = unknown>(...cmd: Cmd): Promise<T> {
     case "EXPIRE":
     case "PEXPIRE": {
       const ms = num(a[0], op) * (op.toUpperCase() === "EXPIRE" ? 1000 : 1);
-      const r = await db(`UPDATE kv SET expires_at = now() + ($2::double precision * interval '1 millisecond') WHERE key = $1 AND ${LIVE} RETURNING 1`, [k, ms]);
+      const r = await query(`UPDATE kv SET expires_at = now() + ($2::double precision * interval '1 millisecond') WHERE key = $1 AND ${LIVE} RETURNING 1`, [k, ms]);
       return (r.length ? 1 : 0) as T;
     }
     case "ZADD": {
       let n = 0;
       for (let i = 0; i + 1 < a.length; i += 2) {
-        const r = await db("INSERT INTO zset (key, member, score) VALUES ($1, $2, $3) ON CONFLICT (key, member) DO UPDATE SET score = EXCLUDED.score RETURNING (xmax = 0)", [k, a[i + 1], num(a[i], "score")]);
+        const r = await query("INSERT INTO zset (key, member, score) VALUES ($1, $2, $3) ON CONFLICT (key, member) DO UPDATE SET score = EXCLUDED.score RETURNING (xmax = 0)", [k, a[i + 1], num(a[i], "score")]);
         if (r[0]?.[0] === "t") n++;
       }
       return n as T;
     }
     case "ZREM": {
-      const r = await db("DELETE FROM zset WHERE key = $1 AND member IN (SELECT jsonb_array_elements_text($2::jsonb)) RETURNING 1", [k, JSON.stringify(a)]);
+      const r = await query("DELETE FROM zset WHERE key = $1 AND member IN (SELECT jsonb_array_elements_text($2::jsonb)) RETURNING 1", [k, JSON.stringify(a)]);
       return r.length as T;
     }
     case "ZRANGE":
@@ -127,7 +131,7 @@ export async function kv<T = unknown>(...cmd: Cmd): Promise<T> {
       const start = num(a[0], "start"), stop = num(a[1], "stop");
       if (start < 0 || stop < start) throw new ShopError("store: only plain ranges");
       const dir = op.toUpperCase() === "ZRANGE" ? "ASC" : "DESC";
-      const r = await db(`SELECT member FROM zset WHERE key = $1 ORDER BY score ${dir}, member ${dir} OFFSET $2 LIMIT $3`, [k, start, stop - start + 1]);
+      const r = await query(`SELECT member FROM zset WHERE key = $1 ORDER BY score ${dir}, member ${dir} OFFSET $2 LIMIT $3`, [k, start, stop - start + 1]);
       return r.map((row) => row[0] as string) as T;
     }
     default:

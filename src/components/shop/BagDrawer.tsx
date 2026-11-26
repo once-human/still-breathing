@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { POLICIES_READY } from "@/content/policies";
-import { SHOP, priceOf } from "@/content/shop";
+import { SHOP } from "@/content/shop";
 import { DESIGNS } from "@/content/tee";
-import { bagCount, bagTotal, claimDrawer, releaseDrawer, shop, useShop } from "@/lib/shop/client";
+import { bagCount, bagTotal, claimDrawer, priceIn, releaseDrawer, shop, useShop } from "@/lib/shop/client";
 import { rupees } from "@/lib/shop/money";
 
 /** Mount anywhere; only one on the page draws (the bag button and every buy button include it). */
@@ -60,7 +60,7 @@ function BagDrawer() {
         ) : (
           <ul className="mt-6 flex-1 overflow-y-auto">
             {bag.map((l) => {
-              const name = shirtName(l.design), price = priceOf(l.design);
+              const name = shirtName(l.design), price = priceIn(pay, l.design);
               return (
                 <li key={`${l.design}-${l.size}`} className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 border-t border-line py-3 text-[14px]">
                   <p className="font-semibold">{name}<span className="block font-normal text-quiet">size {l.size}</span></p>
@@ -80,7 +80,7 @@ function BagDrawer() {
 
         {bag.length > 0 && (
           <div className="mt-auto border-t border-line pt-3">
-            <p className="flex items-baseline justify-between text-[15px]"><span>total</span><span className="tnum font-semibold">{rupees(bagTotal(bag))}</span></p>
+            <p className="flex items-baseline justify-between text-[15px]"><span>total</span><span className="tnum font-semibold">{rupees(bagTotal(bag, pay))}</span></p>
             <p className="mt-1 text-[12px] text-quiet">All taxes included. Free shipping across {SHOP.shipsTo}. Made for you: {m0}–{m1} days to make, then {r0}–{r1} on the road.</p>
             <Link href="/checkout" onClick={shop.close}
               className="mt-4 flex h-12 w-full items-center justify-between bg-ink px-4 text-[15px] font-semibold text-paper transition hover:bg-ink/90">

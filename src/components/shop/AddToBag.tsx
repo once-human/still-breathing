@@ -1,9 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { priceOf } from "@/content/shop";
 import type { Design, Size } from "@/content/tee";
-import { notMade, shop, useShop } from "@/lib/shop/client";
+import { notMade, priceIn, shop, useShop } from "@/lib/shop/client";
 import { rupees } from "@/lib/shop/money";
 import { BagDrawerHost } from "./BagDrawer";
 
@@ -15,8 +14,9 @@ import { BagDrawerHost } from "./BagDrawer";
 export function AddToBag({ design, size, variant }: { design: Design; size: Size; variant?: "bar" }) {
   const { pay } = useShop();
   const router = useRouter();
-  const missing = notMade(pay, design, size);
-  const price = rupees(priceOf(design));
+  const soldOut = pay?.status?.[design] === "soldout" || pay?.status?.[design] === "draft";
+  const missing = soldOut || notMade(pay, design, size);
+  const price = rupees(priceIn(pay, design));
   const bar = variant === "bar";
   const h = bar ? "h-11" : "h-12";
 
@@ -34,7 +34,7 @@ export function AddToBag({ design, size, variant }: { design: Design; size: Size
         disabled={missing}
         className={`${h} flex min-w-0 flex-1 items-center justify-between gap-3 bg-ink px-4 text-[15px] font-semibold text-paper transition hover:bg-ink/90 disabled:bg-transparent disabled:font-normal disabled:text-quiet disabled:ring-1 disabled:ring-line`}
       >
-        <span className="truncate">{missing ? `not made in ${size}` : "add to bag"}</span>
+        <span className="truncate">{soldOut ? "sold out" : missing ? `not made in ${size}` : "add to bag"}</span>
         <span className="tnum">{price}</span>
       </button>
       <button

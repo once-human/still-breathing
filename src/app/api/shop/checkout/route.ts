@@ -1,6 +1,7 @@
 import { SHOP } from "@/content/shop";
 import { cleanBag } from "@/lib/shop/catalog";
-import { razorpayKeys, shopOpen } from "@/lib/shop/config";
+import { razorpayKeys } from "@/lib/shop/config";
+import { shopAccepting } from "@/lib/shop/settings";
 import { failed, guardWrite, json } from "@/lib/shop/guard";
 import { checkDetails } from "@/lib/shop/india";
 import { startOrder } from "@/lib/shop/orders";
@@ -13,11 +14,11 @@ export const dynamic = "force-dynamic";
  * amount is fixed on a Razorpay order, and the page gets only what it needs to open Razorpay's payment window.
  */
 export async function POST(req: Request) {
-  if (!shopOpen()) return json({ error: "the shop isn't taking orders right now" }, 503);
+  if (!(await shopAccepting())) return json({ error: "the shop isn't taking orders right now" }, 503);
   const g = await guardWrite(req, "checkout", 8);
   if ("fail" in g) return g.fail;
   const b = g.body as { bag?: unknown; details?: unknown };
-  const bag = cleanBag(b?.bag);
+  const bag = await cleanBag(b?.bag).catch(() => null);
   if (!bag) return json({ error: "the bag changed: open it again and check it" }, 400);
   const d = checkDetails(b?.details);
   if ("error" in d) return json({ error: d.error, field: d.field }, 400);

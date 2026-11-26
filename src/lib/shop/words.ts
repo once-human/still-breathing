@@ -24,6 +24,8 @@ export const EVENT_WORD: Record<EventKind, string> = {
   trouble: "held up",
   cancelled: "cancelled",
   refunded: "refunded",
+  admin: "by sahn",
+  note: "note",
 };
 
 const IST = "Asia/Kolkata";

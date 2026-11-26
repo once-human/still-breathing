@@ -53,7 +53,8 @@ export default async function Receipt({ params, searchParams }: { params: Promis
       </table>
 
       <p className="mt-2 text-quiet">{v.payment?.at ? `paid ${when(v.payment.at)}${v.payment.label ? ` by ${v.payment.label}` : ""}${v.payment.id ? `, payment ${v.payment.id}` : ""}, through Razorpay.` : ""}</p>
-      {v.refund && <p className="mt-1 text-quiet">refunded {rupees(v.refund.amount)}{v.refund.status === "processed" ? ` on ${dayYear(v.refund.doneAt ?? v.refund.at)}` : " (on its way)"}, refund {v.refund.id}. order cancelled.</p>}
+      {v.refunds.filter((r) => r.status !== "failed").map((r) => <p key={r.id} className="mt-1 text-quiet">refunded {rupees(r.amount)}{r.status === "processed" ? ` on ${dayYear(r.doneAt ?? r.at)}` : " (on its way)"}, refund {r.id}{r.reason ? `: ${r.reason}` : ""}.</p>)}
+      {v.refunded > 0 && <p className="mt-1 font-semibold">net paid {rupees(v.total - v.refunded)}{v.stage === "cancelled" ? ", order cancelled" : ""}.</p>}
       <p className="mt-8 text-[12px] text-quiet">all taxes and shipping included. this is a receipt for your payment, not a GST tax invoice.</p>
     </div>
   );

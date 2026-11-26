@@ -102,7 +102,9 @@ export const shop = {
 const SERVER: State = { pay: null, bag: [], drawer: false };
 export const useShop = () => useSyncExternalStore(subscribe, () => state, () => SERVER);
 
-export const bagTotal = (bag: BagItem[]) => bag.reduce((t, l) => t + priceOf(l.design) * l.quantity, 0);
+/** a shirt's price as the server charges it now (the code's rule until the catalog has answered) */
+export const priceIn = (p: PayView | null, d: Design) => p?.prices?.[d] ?? priceOf(d);
+export const bagTotal = (bag: BagItem[], p: PayView | null) => bag.reduce((t, l) => t + priceIn(p, l.design) * l.quantity, 0);
 export const bagCount = (bag: BagItem[]) => bag.reduce((t, l) => t + l.quantity, 0);
 /** whether every line of this bag can be paid for right now */
 export const bagPayable = (bag: BagItem[], p: PayView | null) => !!p?.pay && bag.length > 0 && bag.every((l) => p.payable[l.design]?.includes(l.size));
