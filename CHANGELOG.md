@@ -31,7 +31,7 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 
 ### Changed
 - Prices: the rule is now the print partner's cost plus ₹500, rounded up to the next ₹10, and for now every shirt sells at a fixed ₹1,170 (which beats the rule; the admin can still set its own).
-- Every back now prints at 13.5 x 18 in, the largest the print partner prints at the art's shape (it turns away 15 x 20). The 3D, the true-size view, the try-on, the hover cards and every studio and turntable picture show it at that size, and the price follows the rule: ₹1,210.
+- Every back now prints at 13.5 x 18 in, the largest the print partner prints at the art's shape (it turns away 15 x 20). The 3D, the true-size view, the try-on, the hover cards and every studio and turntable picture show it at that size.
 - Checkout checks a Maharashtra pin code is really in Maharashtra. Where the shop sends is one setting now (still anywhere in india).
 - Prices, which shirts are on sale and whether the shop is taking orders now come from the shop's own settings, so they can change without a new version of the site; checkout always charges the price the server works out, and the buttons, bag and checkout show that same price. A shirt can be marked sold out: its buy button says so. An order's page and receipt list every refund on it with its reference, and the receipt shows what was paid after refunds. Refunds go at normal speed (free; banks show them in 5–7 working days).
 - Orders, sign-ins and the order marks are kept in a Postgres database on Neon (Singapore) instead of Upstash; the privacy policy says so.
