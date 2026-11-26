@@ -1,4 +1,4 @@
-# python3 art/wordmark.py : the lineup 01 titles (again.. / i am a party / mumbai / bengaluru / 22°), drawn by rules
+# python3 art/wordmark.py : the lineup 01 titles (again.. / i am a party / mumbai / bengaluru / actual life), drawn by rules
 #
 # Each title is Shantell Sans (SemiBold, fully informal, no bounce): a marker hand, set straight. Every letter the
 # same size on one level baseline, no tilt, one ink (the old per-letter jitter made an "a" jump up and a "g" drop).
@@ -26,7 +26,7 @@ PRINTS = {
     "e": ("i am a party", (169, 39, 1032, 292), BLACK, ["ov-back-E-black-hi.png"]),
     "a": ("mumbai", (303, 53, 1023, 367), CREAM, ["ov-back-A-cream-hi.png", "ov-back-cream.png"]),
     "d": ("bengaluru", (217, 1196, 971, 1485), CREAM, ["ov-back-D-cream-hi.png"]),
-    "f": ("22°", (230, 70, 970, 235), BLACK, ["ov-back-F-black-hi.png"]),
+    "f": ("actual life", (200, 60, 1000, 250), BLACK, ["ov-back-F-black-hi.png"]),
 }
 
 def font(px):

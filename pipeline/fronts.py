@@ -14,4 +14,7 @@ FRONTS = {
     # the collar seam is 11.5 cm under the shoulder point at the centre; the seal starts 3.5 cm under it and centres
     # about on the chest line
     "e": ("art/fronts/e/05-the-seal/art.png", 0.0, 15.0, 21.1),
+    # actual life: the wristband (picks no. 09), on the wearer's left chest, 11 cm across, its inner edge 3.5 cm off
+    # the centre front and its top 15 cm under the shoulder point, like the lettering's spot
+    "f": ("art/fronts/c/05-wristband/art.png", 3.5 + 11.0 / 2, 15.0, 11.0),
 }

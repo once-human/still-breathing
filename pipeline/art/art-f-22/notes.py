@@ -11,12 +11,12 @@ LINE = ImageFont.truetype(os.path.join(PIPE, "fonts", "Gaegu-Bold.ttf"), 46 * K)
 
 # text, anchor point (units), text anchor, tilt (deg), arrow from (units) -> to (units), arrow bend
 NOTES = [
-    ("one jacket, two people", (60, 1345), "ls", -2, (170, 1310), (175, 1240), 0.3),
-    ("we stayed for the last one", (1165, 1435), "rs", -2, (1010, 1398), (930, 1325), 0.3),
-    ("chai's still on", (1170, 1065), "rs", 3, (1050, 1040), (1010, 975), 0.35),
+    ("who needs an umbrella", (60, 1345), "ls", -2, (170, 1310), (175, 1240), 0.3),
+    ("nobody's going home yet", (1165, 1435), "rs", -2, (1010, 1398), (930, 1325), 0.3),
+    ("coffee's still on", (1170, 1065), "rs", 3, (1050, 1040), (1010, 975), 0.35),
     ("last train from madavara", (1170, 405), "rs", -2, (975, 372), (880, 318), -0.3),
 ]
-LINE_TEXT, LINE_AT = "bengaluru . 1:42 . light rain", (600, 1540)
+LINE_TEXT, LINE_AT = "bengaluru . 1:42 am . 22°c", (600, 1540)
 
 def layer():
     return Image.new("L", (1200 * K, 1600 * K), 0)
@@ -52,7 +52,13 @@ out = Image.new("RGBA", (1200 * K, 1600 * K), (0, 0, 0, 0))
 cream = layer()
 for txt, at, anc, tilt, a, b, bend in NOTES:
     cream.paste(255, (0, 0), text_mask(txt, NOTE, at, anc, tilt)); cream.paste(255, (0, 0), arrow_mask(a, b, bend))
-blue = text_mask(LINE_TEXT, LINE, LINE_AT, "ms", 0)
+# the line's font has no degree sign: the text is set with a gap there and the ring drawn by hand
+pre, post = LINE_TEXT.split("°")
+GAP = "\u2009\u2009"
+blue = text_mask(pre + GAP + post, LINE, LINE_AT, "ms", 0)
+x0 = LINE_AT[0] * K - LINE.getlength(pre + GAP + post) / 2 + LINE.getlength(pre)
+gw = LINE.getlength(GAP); r = max(gw * 0.42, 14); cx, cy = x0 + gw / 2, LINE_AT[1] * K - 46 * K * 0.62
+ImageDraw.Draw(blue).ellipse((cx - r, cy - r, cx + r, cy + r), outline=255, width=11)
 both = layer(); both.paste(255, (0, 0), cream); both.paste(255, (0, 0), blue)
 out.alpha_composite(ink(grow(both, 14), EDGE))
 out.alpha_composite(ink(blue, BLUE)); out.alpha_composite(ink(cream, CREAM))
