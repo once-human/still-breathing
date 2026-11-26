@@ -1,0 +1,231 @@
+import { SHOP } from "@/content/shop";
+
+/**
+ * The shop's policies: shipping, returns and refunds, terms, privacy, contact. The facts follow how the shirts are
+ * really made and sent (made to order, printed in 1–5 days, dispatched in 2–3, 2–7 days on the road; faults
+ * reported within 7 days with an unboxing video) and the payment gateway's activation checks (it reads these pages).
+ * The site-pages session draws them at /policies/<slug>; this file only holds the words.
+ *
+ * Who runs the shop and how to reach it are Onkar's to give. Until all of OPERATOR is filled in, POLICIES_READY is
+ * false and no page links to them: a policy page without a real name and email to write to isn't one.
+ */
+export const OPERATOR = {
+  /** the legal name the shop runs under: a person's full name, or a firm */
+  legalName: null as string | null,
+  /** the email that answers orders */
+  email: null as string | null,
+  /** a phone number, or null for none */
+  phone: null as string | null,
+  /** where the shop is run from, as "city, state" (also where disputes are heard) */
+  place: null as string | null,
+};
+
+export const POLICIES_READY = !!(OPERATOR.legalName && OPERATOR.email && OPERATOR.place);
+
+/** the day these words last changed, yyyy-mm-dd */
+export const POLICIES_UPDATED = "2026-11-26";
+
+export type PolicySlug = "shipping" | "refunds" | "terms" | "privacy" | "contact";
+export type Policy = { slug: PolicySlug; title: string; summary: string; sections: { heading: string; body: string[] }[] };
+
+const who = () => OPERATOR.legalName ?? "the owner of sahn";
+const mail = () => OPERATOR.email ?? "our order email";
+const [m0, m1] = SHOP.make, [r0, r1] = SHOP.road;
+const price = `₹${SHOP.price.toLocaleString("en-IN")}`;
+
+export const POLICIES: Record<PolicySlug, Policy> = {
+  shipping: {
+    slug: "shipping",
+    title: "shipping",
+    summary: `free across india. made for you in ${m0}–${m1} days, then ${r0}–${r1} days on the road.`,
+    sections: [
+      {
+        heading: "where we send",
+        body: [
+          "anywhere in india with a pin code a courier reaches. we don't send abroad yet.",
+          "shipping is free: the price you see is what you pay, GST included.",
+        ],
+      },
+      {
+        heading: "how long it takes",
+        body: [
+          `every shirt is made to order once you've paid. making it (printing, checking and packing) takes ${m0}–${m1} working days.`,
+          `then it's ${r0}–${r1} days on the road, depending on your pin code. most of india gets it in about a week and a half from ordering.`,
+          "a few remote pin codes are only reached by india post, which takes 3–15 working days and gives less tracking.",
+          "these are what usually happens, not promises: couriers, weather and holidays can slow things down. if you want it for a show, order early.",
+        ],
+      },
+      {
+        heading: "tracking",
+        body: [
+          "we email you the courier and a tracking link the moment it leaves, and every step after that. the link in any of our emails opens your order's page, which always shows where it is.",
+        ],
+      },
+      {
+        heading: "if it doesn't arrive",
+        body: [
+          "if the courier hasn't reached you within 20 days of dispatch, write to us: we make it again and send it at no cost, or refund you in full, whichever you'd like.",
+          "if a parcel comes back to us because the address was wrong or incomplete, or nobody could be reached at the phone number given, we can send it again once you cover the shipping for the second trip, or refund the shirt less the shipping both ways.",
+          "check your address and phone number at checkout: the courier calls before delivering.",
+        ],
+      },
+    ],
+  },
+
+  refunds: {
+    slug: "refunds",
+    title: "returns and refunds",
+    summary: "made for you, so no returns for a change of mind. anything wrong with it, we put right.",
+    sections: [
+      {
+        heading: "if something's wrong",
+        body: [
+          "if your shirt arrives misprinted, damaged, faulty, or isn't the shirt or size you ordered, tell us within 7 days of delivery and we make it right: a new one made and sent free, or a full refund, your choice.",
+          `write to ${mail()} with your order number, an unboxing video (from the sealed parcel to the shirt out of it), and clear photos of the problem and of the packaging. the video is how we can show the fault to be ours and fix it fast; without it we may not be able to.`,
+          "no need to send the shirt back unless we ask you to. if we do, we arrange and pay for the pickup.",
+        ],
+      },
+      {
+        heading: "what isn't a fault",
+        body: [
+          "each shirt is printed for you, so we can't take it back if you change your mind or it isn't the fit you hoped for. sizes are measured on the garment in the size guide, and fit shows it on a body like yours: please check before ordering.",
+          "measurements can differ by up to about 1.5 cm from the size guide, and printed colours can look a little different from a screen. neither counts as a fault.",
+          "damage from washing against the care label, wear, or cutting the parcel open with something sharp isn't covered.",
+        ],
+      },
+      {
+        heading: "changing your mind before it's made",
+        body: [
+          `you can cancel until your shirt goes to print. write to ${mail()} with your order number as soon as you can: printing can start within a day of ordering. if it hasn't started, we cancel it and refund you in full. once printing has started it can't be cancelled.`,
+          "the size or the address can be changed on the same terms.",
+        ],
+      },
+      {
+        heading: "how refunds are paid",
+        body: [
+          "refunds go back the way you paid (UPI, card, net banking or wallet), in full, within 2 working days of us agreeing them. your bank then takes 5–7 working days to show the money.",
+        ],
+      },
+    ],
+  },
+
+  terms: {
+    slug: "terms",
+    title: "terms",
+    summary: "the agreement between you and us when you buy a shirt.",
+    sections: [
+      {
+        heading: "who we are",
+        body: [
+          `sahn (this site and its shirts) is run by ${who()}${OPERATOR.place ? `, from ${OPERATOR.place}` : ""}, india. "we" and "us" here mean them; "you" means whoever buys or uses the site.`,
+        ],
+      },
+      {
+        heading: "the shirts",
+        body: [
+          "every shirt is made to order after you pay: printed for you, in the size you picked. what's shown on the site (the 3D, the renders, fit) is drawn from the real print files and garment measurements, but a screen can't show colour exactly.",
+          "lineup 01 is fan made: our own drawings, made by fans for the shows. it isn't affiliated with, sponsored or endorsed by fred again.., the artists, the venues or the shows' promoters. names are used only to say which nights the shirts are about.",
+          "the drawings, lettering and everything else on this site are ours. you can share pictures of your shirt and of the site; please don't copy or sell the designs.",
+        ],
+      },
+      {
+        heading: "prices and payment",
+        body: [
+          `prices are in indian rupees and include GST and shipping within india; one shirt is ${price} unless the site says otherwise. the price charged is the one at checkout.`,
+          "payment is taken on a secure checkout hosted by Shopify and processed by Razorpay. your card and UPI details go only to them; we never see or store them.",
+          "an order is ours to make once the payment is confirmed. if a price is ever shown wrongly or we can't make an order, we tell you and refund it in full.",
+          `you can buy at most ${SHOP.maxPerBag} shirts in one order.`,
+        ],
+      },
+      {
+        heading: "delivery, returns and refunds",
+        body: [
+          "how and when shirts are sent, and what happens if something's wrong, are set out in the shipping and the returns and refunds policies, which are part of these terms.",
+        ],
+      },
+      {
+        heading: "liability",
+        body: [
+          "if something goes wrong with an order, the most we owe you is to make it again or refund what you paid for it. nothing here takes away your rights under the Consumer Protection Act, 2019 or any other law that protects you.",
+        ],
+      },
+      {
+        heading: "the law",
+        body: [
+          `these terms are governed by the laws of india. any dispute is for the courts at ${OPERATOR.place ?? "the place we run from"}, though we'd always rather hear from you first and sort it out.`,
+          `we may update these terms; the version on this page when you order is the one that applies to that order. last updated ${POLICIES_UPDATED}.`,
+        ],
+      },
+    ],
+  },
+
+  privacy: {
+    slug: "privacy",
+    title: "privacy",
+    summary: "what we know about you, why, and who else sees it. no ads, no trackers.",
+    sections: [
+      {
+        heading: "what we collect",
+        body: [
+          "when you order: your name, email, phone number, delivery address, what you bought and what you paid. you give these at checkout, and we need them to make and send your shirt.",
+          "when you just look: nothing that names you. no ad trackers, no analytics cookies, no third-party pixels.",
+          "the bag is kept in one cookie, which holds only your bag's ID, can't be read by scripts on the page, and expires after 10 days.",
+          "to show the nearest show, the site uses the rough city your connection comes from (the hosting service adds it to every request). it's rounded to about 10 km, used once for the distance and never stored.",
+        ],
+      },
+      {
+        heading: "who sees it",
+        body: [
+          "Shopify runs our store and checkout and stores your order. Razorpay processes your payment; your card, UPI or bank details go only to it, never to us.",
+          "our production partner, who prints, packs and sends your shirt, and the courier who delivers it get your name, address and phone number, only to do that.",
+          "we don't sell, rent or share your details with anyone else, or use them for ads.",
+        ],
+      },
+      {
+        heading: "what we use it for",
+        body: [
+          "making and sending your order, emailing you about it (confirmation, dispatch, tracking, delivery), answering you, and keeping the records indian tax law requires.",
+          "we only email you about your orders. if we ever start a newsletter, it will be one you choose to join.",
+        ],
+      },
+      {
+        heading: "how long we keep it",
+        body: [
+          "order records are kept for as long as GST law requires (about 6 years), then deleted. emails you send us are kept while we're helping you and for a year after.",
+        ],
+      },
+      {
+        heading: "your rights",
+        body: [
+          `under the Digital Personal Data Protection Act, 2023 you can ask what we hold about you, have it corrected, or have it erased (apart from what tax law makes us keep). write to ${mail()}; we answer within 7 days. ${who()} handles these requests and any complaint about how your data is used.`,
+          `last updated ${POLICIES_UPDATED}.`,
+        ],
+      },
+    ],
+  },
+
+  contact: {
+    slug: "contact",
+    title: "contact",
+    summary: "a person reads every email.",
+    sections: [
+      {
+        heading: "write to us",
+        body: [
+          `${mail()}: about an order (put its number in), a size, a fault, anything. we answer within 2 working days, usually sooner.`,
+          ...(OPERATOR.phone ? [`phone: ${OPERATOR.phone}, 11 am – 7 pm, monday to saturday.`] : []),
+        ],
+      },
+      {
+        heading: "your order",
+        body: ["every order email has a link to your order's page. or open /order and put in the order number and your email."],
+      },
+      {
+        heading: "who runs sahn",
+        body: [`${who()}${OPERATOR.place ? `, ${OPERATOR.place}` : ""}, india.`],
+      },
+    ],
+  },
+};
+
+export const POLICY_ORDER: PolicySlug[] = ["shipping", "refunds", "terms", "privacy", "contact"];

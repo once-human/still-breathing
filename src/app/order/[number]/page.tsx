@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { SHOP } from "@/content/shop";
+import { OPERATOR, POLICIES_READY } from "@/content/policies";
 import { ordersOpen } from "@/lib/shop/config";
 import { clientIp, limited } from "@/lib/shop/guard";
 import { rupees } from "@/lib/shop/money";
@@ -107,7 +108,7 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
           </ul>
           <p className="mt-3 flex justify-between"><span>paid</span><span className="tnum font-semibold">{rupees(o.total)}</span></p>
           <p className="mt-6 text-[13px] text-quiet">
-            something not right? <Link href="/help#returns" className="draw hover:text-ink">returns</Link> · <Link href="/help#contact" className="draw hover:text-ink">write to us</Link> with order #{o.number}.
+            something not right? <Link href={POLICIES_READY ? "/policies/refunds" : "/help"} className="draw hover:text-ink">returns</Link>{OPERATOR.email ? <> · write to <a href={`mailto:${OPERATOR.email}?subject=${encodeURIComponent(`order #${o.number}`)}`} className="draw hover:text-ink">{OPERATOR.email}</a></> : null} with order #{o.number}.
           </p>
         </div>
       </div>

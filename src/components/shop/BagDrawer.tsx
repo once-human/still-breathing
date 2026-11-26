@@ -83,7 +83,7 @@ function BagDrawer() {
                 <span>{busy ? "one moment.." : "checkout"}</span><span aria-hidden>→</span>
               </button>
               <p className="mt-2 text-[12px] text-quiet">
-                You pay on a secure checkout by UPI, card, net banking or wallet. <Link href="/help#returns" onClick={shop.close} className="draw hover:text-ink">returns</Link>
+                You pay on a secure checkout by UPI, card, net banking or wallet. <Link href="/help#shipping" onClick={shop.close} className="draw hover:text-ink">shipping</Link>
               </p>
             </>
           )}
