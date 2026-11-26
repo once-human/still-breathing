@@ -53,6 +53,7 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 - The actual size button is called artwork.
 
 ### Fixed
+- An order's page names the courier the way the print partner gives it, and shows no tracking link until there is an airway bill (before dispatch the partner's link is empty).
 - Test orders to the print partner's sandbox now ask for each shirt's own blank: black or off white, and its 2XL by the name the partner uses.
 - The privacy policy says how the site counts its own visits: the page, where a visit came from, the device and the region, with no cookie, no address kept and a code that changes daily; do not track and global privacy control turn it off.
 - Every price on the site (the shirt cards, the shirt pages, the shop, help, the facts, share descriptions) is the one checkout charges, read from the shop itself, so the two never disagree. Each shirt's name, its short description and the order the shirts come in follow the shop's catalog too, the same on every page, and a shirt taken off sale leaves every page.

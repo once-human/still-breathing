@@ -144,10 +144,12 @@ export type PartnerStatus = { status: string | null; awb: string | null; courier
 export async function partnerStatus(partnerId: string): Promise<PartnerStatus> {
   const j = await call(`/api/order?id=${encodeURIComponent(partnerId)}`, { method: "GET" });
   const url = dig(j, ["tracking_link", "tracking_url", "trackingUrl", "track_url"]);
+  const awb = dig(j, ["awb", "awb_no", "awb_number", "awbno", "tracking_number"]);
   return {
     status: dig(j, ["status", "order_status", "shipment_status", "current_status"]),
-    awb: dig(j, ["awb", "awb_no", "awb_number", "awbno", "tracking_number"]),
-    courier: dig(j, ["courier", "courier_name", "courier_partner", "shipping_partner"]),
-    trackingUrl: url && /^https:\/\//.test(url) ? url : null,
+    awb,
+    courier: dig(j, ["courier_provider_name", "courier", "courier_name", "courier_partner", "shipping_partner"]),
+    // before dispatch the partner already gives a link, with an empty airway bill on its end: no bill, no link
+    trackingUrl: awb && url && /^https:\/\//.test(url) && !url.endsWith("=") ? url : null,
   };
 }
