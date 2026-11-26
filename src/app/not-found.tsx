@@ -1,10 +1,12 @@
 import Link from "next/link";
-import { CURRENT, shirtHref, shirtLabel, shirtsOf } from "@/content/lineups";
+import { CURRENT, shirtHref, shirtsOf } from "@/content/lineups";
+import { named, shownList } from "@/lib/live";
 
 export const metadata = { title: "not here", robots: { index: false } };
 
 /** A wrong address: say so plainly, then give the way back in. */
-export default function NotFound() {
+export default async function NotFound() {
+  const shirts = await Promise.all((await shownList()).filter((d) => shirtsOf(CURRENT).includes(d)).map(async (d) => ({ d, label: (await named(d)).label })));
   return (
     <div className="px-4 pt-6">
       <div className="page-in grid grid-cols-2 gap-4 border-t border-line pt-1.5 text-[13px] md:grid-cols-4">
@@ -23,7 +25,7 @@ export default function NotFound() {
           <li><Link href="/help" className="hover:text-blue">help</Link></li>
         </ul>
         <ul className="space-y-1 text-[15px] md:col-span-4 md:col-start-8">
-          {shirtsOf(CURRENT).map((d) => <li key={d} className="border-t border-line pt-1"><Link href={shirtHref(d)} className="hover:text-blue">{shirtLabel(d)}</Link></li>)}
+          {shirts.map(({ d, label }) => <li key={d} className="border-t border-line pt-1"><Link href={shirtHref(d)} className="hover:text-blue">{label}</Link></li>)}
         </ul>
       </div>
     </div>

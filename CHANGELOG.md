@@ -54,7 +54,7 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 
 ### Fixed
 - The privacy policy says how the site counts its own visits: the page, where a visit came from, the device and the region, with no cookie, no address kept and a code that changes daily; do not track and global privacy control turn it off.
-- Every price on the site (the shirt cards, the shirt pages, the shop, help, the facts, share descriptions) is the one checkout charges, read from the shop itself, so the two never disagree; a shirt the shop takes off sale leaves every page.
+- Every price on the site (the shirt cards, the shirt pages, the shop, help, the facts, share descriptions) is the one checkout charges, read from the shop itself, so the two never disagree. Each shirt's name, its short description and the order the shirts come in follow the shop's catalog too, the same on every page, and a shirt taken off sale leaves every page.
 - The site's own address is www.sahn.in everywhere: search results, share cards, the sitemap and the links in order emails no longer point at the old vercel.app address. sahn.in on its own takes you there.
 - Fingernails sit on every fingertip again (the thumb's was missing, some were a few stray spots).
 - His tee sits better at the arms: his arms hang a little more open, as his build makes them, so the sleeves no longer bunch up into folds at the armpits or pull tight across the back of the arm.

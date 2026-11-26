@@ -1,25 +1,25 @@
 import Link from "next/link";
-import { CURRENT, shirtHref, shirtLabel, shirtsOf } from "@/content/lineups";
+import { CURRENT, shirtHref } from "@/content/lineups";
 import { HELP_LINKS, POLICY_LINKS } from "@/lib/site";
 import { shopOpen } from "@/lib/shop/config";
 import pkg from "../../package.json";
 import { SHOP } from "@/content/shop";
-import { shown } from "@/lib/live";
+import { named, shownList } from "@/lib/live";
 
 const col = "border-t border-line pt-1.5";
 const link = "text-quiet transition-colors hover:text-ink";
 
 /** Every page ends the same way: the shirts, help, the house and the small print, then the name, as big as it gets. */
 export async function Footer() {
-  const on = await shown();
+  const shirts = await Promise.all((await shownList()).map(async (d) => ({ d, label: (await named(d)).label })));
   return (
     <footer className="mt-40 overflow-hidden" aria-label="Site">
       <div className="grid grid-cols-2 gap-x-4 gap-y-10 px-4 text-[14px] md:grid-cols-4 lg:grid-cols-12">
         <div className={`${col} lg:col-span-3`}>
           <p className="font-semibold">{CURRENT.title}</p>
           <ul className="mt-3 space-y-1">
-            {shirtsOf(CURRENT).filter((d) => on.has(d)).map((d) => (
-              <li key={d}><Link href={shirtHref(d)} className={link}>{shirtLabel(d)}</Link></li>
+            {shirts.map(({ d, label }) => (
+              <li key={d}><Link href={shirtHref(d)} className={link}>{label}</Link></li>
             ))}
             <li className="pt-2"><Link href={`/${CURRENT.slug}`} className="text-blue hover:text-ink">all five, with the shows →</Link></li>
           </ul>

@@ -5,9 +5,9 @@ import { Label } from "@/components/Label";
 import { Now } from "@/components/Now";
 import { ShirtCard } from "@/components/ShirtCard";
 import { DESIGNS } from "@/content/tee";
-import { LINEUPS, lineupOf, fmtDays, paperStill, shirtHref, shirtLabel, shirtsOf, STILL_H, STILL_W } from "@/content/lineups";
+import { LINEUPS, lineupOf, fmtDays, paperStill, shirtHref, shirtsOf, STILL_H, STILL_W } from "@/content/lineups";
 import { pageMeta } from "@/lib/site";
-import { shown } from "@/lib/live";
+import { lineups, named, shownList } from "@/lib/live";
 
 type Params = { params: Promise<{ lineup: string }> };
 
@@ -21,9 +21,12 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 }
 
 export default async function LineupPage({ params }: Params) {
-  const l = lineupOf((await params).lineup);
+  const slug = (await params).lineup;
+  // the collection as the admin has it: drafts out, groups in its order
+  const l = lineupOf(slug) && (await lineups()).find((x) => x.slug === slug);
   if (!l) notFound();
-  const on = await shown(), shirts = shirtsOf(l).filter((d) => on.has(d));
+  const order = await shownList(), shirts = order.filter((d) => shirtsOf(l).includes(d));
+  const label = Object.fromEntries(await Promise.all(shirts.map(async (d) => [d, (await named(d)).label] as const)));
   const forCity = (city: string) => shirts.filter((d) => DESIGNS[d].city === null || DESIGNS[d].city === city);
 
   return (
@@ -55,7 +58,7 @@ export default async function LineupPage({ params }: Params) {
                 <span className="col-span-2 mt-2 text-[13px] text-quiet md:col-span-4 md:mt-0">
                   {x.ground}
                   <span className="mt-1 block text-ink">
-                    {forCity(x.city).map((d, i) => <span key={d}>{i ? ", " : ""}<Link href={shirtHref(d)} className="draw hover:text-blue">{shirtLabel(d)}</Link></span>)}
+                    {forCity(x.city).map((d, i) => <span key={d}>{i ? ", " : ""}<Link href={shirtHref(d)} className="draw hover:text-blue">{label[d]}</Link></span>)}
                   </span>
                 </span>
               </li>
@@ -72,7 +75,7 @@ export default async function LineupPage({ params }: Params) {
               <Label note={g.city ? `${g.shirts.length === 1 ? "its map" : "its map and its night"}` : "both cities in each"}>{g.label}</Label>
             </div>
             <ul className="grid grid-cols-2 gap-x-4 gap-y-10 md:col-span-12 md:grid-cols-3 lg:col-span-10 lg:col-start-2 lg:grid-cols-4">
-              {g.shirts.filter((d) => on.has(d)).map((d, i) => <li key={d} className="reveal"><ShirtCard d={d} big eager={g === l.groups[0] && i < 2} /></li>)}
+              {g.shirts.map((d, i) => <li key={d} className="reveal"><ShirtCard d={d} big eager={g === l.groups[0] && i < 2} /></li>)}
             </ul>
           </div>
         ))}

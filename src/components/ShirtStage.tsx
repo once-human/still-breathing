@@ -9,19 +9,21 @@ import { Countdown } from "@/components/Countdown";
 import { Fit, SHOP, WEARERS, type Wearer } from "@/components/Fit";
 import { AddToBagSlot } from "@/components/ShopSlots";
 import { priceIn, useShop } from "@/lib/shop/client";
+import { useShirtText } from "@/components/ShirtText";
 import { BuyFacts } from "@/components/BuyFacts";
 import { rupees } from "@/lib/shop/money";
 import type { Variant } from "@/lib/viewer/raster";
-import { COLOURS, DESIGNS, SIZES, SIZE_ORDER, THE_TEE, type Design, type Size } from "@/content/tee";
-import { fmtDays, lineupOf, paperStill, shirtBySlug, shirtHref, shirtTitle, STILL_H, STILL_W } from "@/content/lineups";
+import { COLOURS, DESIGNS, SIZES, SIZE_ORDER, THE_TEE, type Size } from "@/content/tee";
+import { fmtDays, lineupOf, paperStill, shirtBySlug, shirtHref, STILL_H, STILL_W } from "@/content/lineups";
 
 /**
  * The shirt page: the tee in 3D on the left; on the right its name, price, what's on it, the size and the buy button,
  * and on a phone a buy bar that stays at the bottom once that button has scrolled away. It lives in the shirts'
  * layout, so going from one shirt to the next keeps the 3D running and only swaps the shirt on it.
  */
-export function ShirtStage({ hidden = [] }: { hidden?: Design[] }) {
+export function ShirtStage() {
   const { pay } = useShop();
+  const words = useShirtText(), shirtTitle = words.title;
   const params = useParams<{ lineup: string; shirt: string }>();
   const lineup = lineupOf(params.lineup);
   const design = lineup ? shirtBySlug(lineup, params.shirt) : undefined;
@@ -55,10 +57,10 @@ export function ShirtStage({ hidden = [] }: { hidden?: Design[] }) {
     fromStage.current = false;
   }, [design]);
 
-  if (!lineup || !design || hidden.includes(design)) return null;
+  if (!lineup || !design || !words.shown(design)) return null;
   const s = DESIGNS[design], tee = s.colour, t = shirtTitle(design), z = SIZES[size];
   const group = lineup.groups.find((g) => g.shirts.includes(design))!;
-  const all = lineup.groups.flatMap((g) => g.shirts).filter((d) => !hidden.includes(d));
+  const all = words.order.filter((d) => lineup.groups.some((g) => g.shirts.includes(d)));
 
   return (
     <section aria-label={`${t.top} ${t.name}`} className="grid grid-cols-1 gap-x-4 gap-y-8 px-4 pt-4 md:grid-cols-12">
@@ -87,7 +89,7 @@ export function ShirtStage({ hidden = [] }: { hidden?: Design[] }) {
             <span className="text-[28px] font-extrabold tracking-[-0.03em] tnum">{rupees(priceIn(pay, design))}</span>
             <span className="text-[13px] text-quiet">all taxes and shipping included</span>
           </p>
-          <p className="mt-4 max-w-[40ch] text-ink/85">{s.about}</p>
+          <p className="mt-4 max-w-[40ch] text-ink/85">{words.about(design)}</p>
 
           <p className="mt-5 flex items-center gap-2 text-[13px]">
             <span className="inline-block h-3 w-3 rounded-full border border-line" style={{ background: COLOURS[tee].hex }} />
@@ -139,7 +141,7 @@ export function ShirtStage({ hidden = [] }: { hidden?: Design[] }) {
                     className={`group block ${d === design ? "" : "opacity-70 hover:opacity-100"}`} title={`${shirtTitle(d).top} ${shirtTitle(d).name}`}
                   >
                     <img src={paperStill(d, "back")} alt="" width={STILL_W} height={STILL_H} loading="lazy" className={`aspect-[880/1120] w-full bg-studio object-cover ${d === design ? "ring-[1.5px] ring-ink ring-offset-2 ring-offset-paper" : ""}`} />
-                    <span className="mt-1 block truncate text-[11px] text-quiet tnum group-hover:text-ink">{DESIGNS[d].no} {DESIGNS[d].name}</span>
+                    <span className="mt-1 block truncate text-[11px] text-quiet tnum group-hover:text-ink">{DESIGNS[d].no} {words.name(d)}</span>
                   </Link>
                 </li>
               ))}

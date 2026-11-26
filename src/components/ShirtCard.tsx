@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { COLOURS, DESIGNS, type Design } from "@/content/tee";
-import { livePrices } from "@/lib/live";
+import { livePrices, named } from "@/lib/live";
 import { rupees } from "@/lib/shop/money";
-import { paperStill, shirtHref, shirtTitle, STILL_H, STILL_W } from "@/content/lineups";
+import { paperStill, shirtHref, STILL_H, STILL_W } from "@/content/lineups";
 import { CardArt } from "@/components/CardArt";
 
 /**
@@ -10,7 +10,7 @@ import { CardArt } from "@/components/CardArt";
  * (CardArt). Stills only, never the 3D, so a page of them stays light.
  */
 export async function ShirtCard({ d, eager = false, big = false }: { d: Design; eager?: boolean; big?: boolean }) {
-  const t = shirtTitle(d), s = DESIGNS[d], price = (await livePrices())[d];
+  const t = await named(d), s = DESIGNS[d], price = (await livePrices())[d];
   return (
     <Link href={shirtHref(d)} className="group block focus-visible:outline-offset-4">
       <span className="relative block overflow-hidden bg-studio">

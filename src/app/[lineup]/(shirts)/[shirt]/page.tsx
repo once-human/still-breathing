@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { COLOURS, DESIGNS } from "@/content/tee";
-import { drafts, livePrices } from "@/lib/live";
+import { drafts, livePrices, named } from "@/lib/live";
 import { rupees } from "@/lib/shop/money";
-import { LINEUPS, lineupOf, shirtBySlug, shirtsOf, shirtTitle } from "@/content/lineups";
+import { LINEUPS, lineupOf, shirtBySlug, shirtsOf } from "@/content/lineups";
 import { pageMeta } from "@/lib/site";
 
 type Params = { params: Promise<{ lineup: string; shirt: string }> };
@@ -19,10 +19,10 @@ async function find(params: Params["params"]) {
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const f = await find(params);
   if (!f) return {};
-  const { l, d } = f, t = shirtTitle(d), s = DESIGNS[d];
+  const { l, d } = f, t = await named(d), s = DESIGNS[d];
   return pageMeta({
     title: `${t.top} ${t.name}`,
-    description: `${t.top}, ${t.name}: a ${COLOURS[s.colour].name} tee, ${l.title} (${l.tag}), ${rupees((await livePrices())[d])}. ${s.about.charAt(0).toUpperCase() + s.about.slice(1)} Heavy 240 gsm cotton, made to order and sent anywhere in India.`,
+    description: `${t.top}, ${t.name}: a ${COLOURS[s.colour].name} tee, ${l.title} (${l.tag}), ${rupees((await livePrices())[d])}. ${t.about.charAt(0).toUpperCase() + t.about.slice(1)} Heavy 240 gsm cotton, made to order and sent anywhere in India.`,
     path: `/${l.slug}/${s.slug}`,
     image: s.slug,
   });

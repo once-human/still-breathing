@@ -6,9 +6,9 @@ import { useEffect, useRef, useState } from "react";
 import { Countdown } from "@/components/Countdown";
 import { AccountSlot, BagSlot } from "@/components/ShopSlots";
 import { setFocusCity } from "@/lib/city";
-import { useShop } from "@/lib/shop/client";
+import { useShirtText } from "@/components/ShirtText";
 import { NAV, BRAND } from "@/lib/site";
-import { CURRENT, fmtDays, paperStill, shirtHref, shirtLabel, shirtsOf, STILL_H, STILL_W } from "@/content/lineups";
+import { CURRENT, fmtDays, paperStill, shirtHref, STILL_H, STILL_W } from "@/content/lineups";
 import { SHOP } from "@/content/shop";
 
 const cell = "border-t pt-1.5 truncate transition-colors duration-300";
@@ -20,9 +20,8 @@ const on = (path: string, href: string) => (href === "/" ? path === "/" : path =
  * its five shirts; on a phone everything is behind menu.
  */
 export function Header() {
-  const { pay } = useShop();
-  // a shirt the shop has back in draft leaves the shelf and the menu
-  const shirts = shirtsOf(CURRENT).filter((d) => pay?.status?.[d] !== "draft");
+  // the shirts on show, in the admin's order and names (a draft leaves the shelf and the menu)
+  const { order: shirts, label: shirtLabel } = useShirtText();
   const path = usePathname();
   const [menu, setMenu] = useState(false);
   const [shelf, setShelf] = useState(false);
