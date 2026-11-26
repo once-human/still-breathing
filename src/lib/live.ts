@@ -5,10 +5,11 @@ import type { Design } from "@/content/tee";
 
 /**
  * The shop's catalog as the public pages read it: the same prices and statuses checkout uses (lib/shop/products),
- * cached under the products tag so the pages stay static and the admin's revalidateTag refreshes them; an hour
+ * read fresh (past the shop's 30-second instance cache) and cached under the products tag, so the pages stay static
+ * and the admin's revalidateTag refreshes them with what was just saved; an hour
  * at most otherwise.
  */
-export const catalog = unstable_cache(products, ["public-catalog"], { tags: [PRODUCTS_TAG], revalidate: 3600 });
+export const catalog = unstable_cache(() => products({ fresh: true }), ["public-catalog"], { tags: [PRODUCTS_TAG], revalidate: 3600 });
 
 /** each shirt's price now */
 export const livePrices = async () => Object.fromEntries((await catalog()).map((p) => [p.id, p.price])) as Record<Design, number>;
