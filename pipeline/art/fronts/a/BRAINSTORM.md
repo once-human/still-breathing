@@ -60,5 +60,9 @@ The crossing (10) was the ninth; it lost to the waveform, which carries "actual 
 
 ## Change: two fronts, not eight
 
-The owner cut this shirt to two fronts, made as well as possible. The two kept are 01 the key and 02 looking up.
-The other six (03 to 08) were drafted and dropped before committing.
+The owner cut this shirt to two fronts, the artist's choice, made as well as possible. The six others (03 to 08) were
+drafted and dropped before committing. The two kept are the two he liked, pushed much further, because both already
+carry what the brief asks for (their own design, the back's language without its picture, room for a wordmark):
+
+- **01 the key**, titled fred again.., with a true fact moved in from idea 7: a "no moon" row (both nights moonless).
+- **02 looking up**, the real 10 pm sky, the name and a chart caption set along the horizon's curve.

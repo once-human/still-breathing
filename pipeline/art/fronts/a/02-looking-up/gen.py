@@ -88,6 +88,7 @@ for alt in (30, 60):
 FIG = [('meissa', 'betelgeuse'), ('meissa', 'bellatrix'), ('betelgeuse', 'bellatrix'), ('betelgeuse', 'alnitak'),
        ('bellatrix', 'mintaka'), ('mintaka', 'alnilam'), ('alnilam', 'alnitak'), ('alnitak', 'saiph'),
        ('mintaka', 'rigel'), ('aldebaran', 'elnath'), ('aldebaran', 'zeta_tau')]   # Orion, and the bull's two horns
+# (the Hyades' V is drawn and dropped: at 17 cm its corners crowd Aldebaran into a knot of dots)
 
 
 def dashes(a, b, layer, w=1.1, dash=(2.6, 4.2), gap=(1.6, 2.6), trim=3.2):
@@ -114,44 +115,45 @@ dashes((bx, by), S['sirius'][0], 'water', dash=(1.6, 2.4), gap=(2.6, 3.6), trim=
 
 
 # ---------------------------------------------------------------- the stars: hand-drawn marks, size by brightness
-def star(p, mag):
+HALO = []      # (x, y, r): sky kept clear round each star (the arcs and pointer break there)
+
+
+def star(p, mag, r_dot=None):
+    """one magnitude system: the first-magnitude stars a four-ray cross on a solid heart, Sirius the longest;
+    everything else a plain dot in three sizes"""
     x, y = p
-    if mag < 0.0:          # Sirius: eight rays, the long ones uneven, a solid heart
-        n, L0, w = 8, 7.4, 1.6
-    elif mag < 1.0:
-        n, L0, w = 6, 5.6 - mag * 1.0, 1.45
-    elif mag < 2.1:
-        n, L0, w = 4, 3.6 - (mag - 1) * 0.6, 1.3
-    elif mag < 3.0:
-        n, L0, w = 4, 2.2, 1.15
-    else:
-        art.dot(x, y, 0.85 + max(0, 3.9 - mag) * 0.12, layer='key')
+    if r_dot is None and mag < 1.0:
+        L = 3.6 + (1.0 - mag) * 1.5                      # Sirius 7.4, Aldebaran 3.8
+        ph = math.radians(-11) + rng.gauss(0, 0.05)     # a little off square, as a hand sets it
+        for i in range(2):
+            a = ph + math.pi / 2 * i
+            Li = L * (0.8 if i == 0 else 1.0) * rng.uniform(0.95, 1.05)     # the upright arm the longer
+            art.line([(x - math.cos(a) * Li, y - math.sin(a) * Li), (x, y), (x + math.cos(a) * Li, y + math.sin(a) * Li)],
+                     1.25, layer='key', wob=0.04, trem=0.0, a0=2.2, a1=2.2, pv=0.05)
+        art.dot(x, y, 1.25 + max(0, -mag) * 0.25, layer='key')
+        HALO.append((x, y, L + 1.4))
         return
-    ph = rng.uniform(0, math.pi / n)
-    for i in range(n):
-        a = ph + math.pi * 2 * i / n + rng.gauss(0, 0.06)
-        L = L0 * (1.0 if i % 2 == 0 else 0.62) * rng.uniform(0.85, 1.12)
-        art.line([(x - math.cos(a) * 0.4, y - math.sin(a) * 0.4), (x + math.cos(a) * L, y + math.sin(a) * L)], w,
-                 layer='key', wob=0.04, trem=0.0, a0=0.5, a1=2.2)
-    art.dot(x, y, w * (0.95 if mag < 1 else 0.75), layer='key')
+    r = r_dot or (1.35 if mag < 1.8 else 1.12 if mag < 2.5 else 0.98)
+    art.dot(x, y, r, layer='key')
+    HALO.append((x, y, r + 1.5))
 
 
 PLE = ('alcyone', 'atlas', 'electra', 'maia', 'merope', 'taygeta')
 pc = (sum(S[k][0][0] for k in PLE) / 6, sum(S[k][0][1] for k in PLE) / 6)
 for k in PLE:   # the Pleiades drawn spread (x2.3 about their middle) so the six read as six
     (x, y), m, a = S[k]
-    S[k] = ((pc[0] + (x - pc[0]) * 2.3, pc[1] + (y - pc[1]) * 2.3), m, max(a, 10))
+    S[k] = ((pc[0] + (x - pc[0]) * 4.2, pc[1] + (y - pc[1]) * 4.2), m, max(a, 10))
 for k, (p, mag, alt) in S.items():
     if not (inside(p) and alt > 9):
         continue
     if k in ('mintaka', 'alnilam', 'alnitak'):
-        star(p, 3.0)
-    elif k in ('alcyone', 'atlas', 'electra'):
-        star(p, 2.6)                      # the Pleiades kept as the three a city sky still shows
+        star(p, mag, r_dot=1.15)          # the belt: three clear, equal stars
+    elif k in PLE:
+        star(p, mag, r_dot=1.0)           # the Pleiades: a tight knot of six
     elif mag < 2.2:
         star(p, mag)
     elif any(k in pair for pair in FIG):
-        star(p, 3.0)                      # a figure's corner: a plain dot, so no dashed line ends in nothing
+        star(p, mag, r_dot=0.98)          # a figure's corner (the Hyades' V), so no dashed line ends in nothing
 
 # ---------------------------------------------------------------- the horizon: everything leans to the zenith
 def radial(az, alt0, alt1):
@@ -159,7 +161,7 @@ def radial(az, alt0, alt1):
 
 
 # the towers east of the course (any that would stand under a bright star are left out, so the star has clear sky) (Lower Parel side), over the trees: tall slabs, hatched, lit windows left as paper
-for az0, wdeg, top in [(AZC + 8.6, 3.4, 15.5), (AZC + 13.4, 2.6, 19.5), (AZC + 19.6, 3.8, 12.0), (AZC + 3.6, 2.2, 10.2),
+for az0, wdeg, top in [(AZC + 8.6, 3.4, 15.5), (AZC + 13.4, 2.6, 19.5), (AZC + 19.6, 3.8, 12.0),
                        (AZC + 24.2, 2.6, 14.6), (AZC - 7.2, 2.4, 12.4),
                        (AZC - 12.5, 3.0, 14.2), (AZC - 17.6, 2.4, 17.4), (AZC - 22.4, 3.2, 10.6)]:
     a0, a1 = az0 - wdeg / 2, az0 + wdeg / 2
@@ -183,13 +185,13 @@ for az0, wdeg, top in [(AZC + 8.6, 3.4, 15.5), (AZC + 13.4, 2.6, 19.5), (AZC + 1
 # than tall, its top a run of soft domes, its underside flat, a short forked trunk under it. Each crown is a loose
 # green screen with a paper gap round it where it overlaps the next, its domes inked in short strokes.
 crowns = []
-az = AZC - 26
-while az < AZC + 26:
-    edge = abs(az - AZC) / 26
+az = AZC - 22
+while az < AZC + 23:
+    edge = abs(az - AZC) / 23
     h = rng.uniform(3.6, 5.0) - 1.0 * edge
-    rad = rng.uniform(7.6, 10.2) * (1 - 0.4 * edge ** 2)          # smaller toward the ends, where the drawing stops
+    rad = rng.uniform(7.2, 11.5) * (0.9 + 0.25 * edge)            # every one an umbrella of its own size
     crowns.append((az, h, rad))
-    az += rng.uniform(3.6, 4.8) * (1 + 0.25 * edge)
+    az += rng.uniform(4.8, 6.4)
 rng.shuffle(crowns)
 for az, h, rad in crowns:
     c = sky(h, az)
@@ -220,17 +222,15 @@ for az, h, rad in crowns:
     while j < len(top) - 3:
         n = rng.randint(6, 11)
         seg = top[j:j + n]
-        if len(seg) > 3 and rng.random() < 0.75:
+        if False:   # the domes are left uninked: black strokes on the green read as a misprint
             art.line(seg[::2], 1.15, layer='key', wob=0.06, trem=0.06, a0=0.8, a1=1.8)
         j += n + rng.randint(1, 4)
     # the trunk: a short fork from the underside down to the ground, on the bigger trees
-    if False:   # forked trunks read as cartoon Ys at chest size: the crowns stand on the horizon instead
-        base = (c[0] - ux * rad * 0.16, c[1] - uy * rad * 0.16)
-        foot = (base[0] - ux * 3.6 + rng.uniform(-0.3, 0.3), base[1] - uy * 3.6)
-        for side in (-1, 1):
-            arm = (base[0] + side * -uy * rad * 0.32, base[1] + side * ux * rad * 0.32)
-            mid = (foot[0] + (base[0] - foot[0]) * 0.45, foot[1] + (base[1] - foot[1]) * 0.45)
-            art.line([foot, mid, arm], 1.15, layer='key', wob=0.05, trem=0.0, a0=0.8, a1=1.6)
+    if True:    # a short trunk under the crown, tapering into the ground
+        base = (c[0] - ux * rad * 0.22, c[1] - uy * rad * 0.22)
+        foot = (base[0] - ux * 2.4, base[1] - uy * 2.4)
+        art.line([(base[0] + ux * 0.6, base[1] + uy * 0.6), ((base[0] + foot[0]) / 2, (base[1] + foot[1]) / 2), foot],
+                 1.7, layer='key', wob=0.04, trem=0.0, a0=0.6, a1=2.6, pv=0.08)
 
 # the name, set along the horizon's curve under the trees (each letter upright to the zenith), dots in ring blue
 NAME, NSIZE = 'fred again', 15.0
@@ -251,14 +251,26 @@ for th in dot_th:
     r = RT - DR
     art.dot(ZX + r * math.sin(th), ZY + r * math.cos(th), DR, layer='ring')
 
+for x, y, r in HALO:          # the arcs and the pointer break round every star
+    n = 20
+    poly = [(x + math.cos(t / n * math.tau) * r, y + math.sin(t / n * math.tau) * r) for t in range(n)]
+    art.knock(poly, layers=('water', 'ring'))
+# the altitude circles named at their right ends, in their own pale blue
+ARC_LABELS = []
+for alt in (30, 60):
+    r = (90 - alt) / 90 * RH
+    a_end = max(a for a in [i / 200 * 2.4 - 1.2 for i in range(201)]
+                if inside((ZX + r * math.sin(a), ZY + r * math.cos(a)), 16))
+    ARC_LABELS.append((f'{alt}°', ZX + r * math.sin(a_end), ZY + r * math.cos(a_end)))
+
 order = ('green', 'water', 'ring', 'key')
 inks = art.finish(order=order, shifts={'green': (0.4, -0.3), 'water': (-0.3, 0.3), 'ring': (0.25, 0.4)}, trim=False)
 for k, (p, mag, alt) in S.items():
     print(f'{k:12s} alt {alt:5.1f}  at {p[0]:6.1f} {p[1]:6.1f}') if mag < 1.0 else None
-def curve_text(layer, text, fnt, size, r, grow=3):
+def curve_text(layer, text, fnt, size, r, grow=3, track=0.0):
     """set text along the circle of radius r round the zenith, centred under it, each letter upright to the zenith"""
-    adv_ = [fnt.getlength(c) / hand.R for c in text]
-    s_ = -sum(adv_) / 2
+    adv_ = [fnt.getlength(c) / hand.R + track for c in text]
+    s_ = -(sum(adv_) - track) / 2
     S_ = int(size * 2.2 * hand.R)
     for c, a in zip(text, adv_):
         th = (s_ + a / 2) / r
@@ -282,7 +294,10 @@ for c, th in letters:
     x, y = ZX + RT * math.sin(th), ZY + RT * math.cos(th)
     inks['key'].paste(255, (int(x * hand.R - S_ / 2), int(y * hand.R - S_ / 2)), im)
 # the chart's caption under the name: where, when, which way
-CAP = '8 dec, 10 pm, looking east'
-curve_text('ring', CAP, F.font('shantell', 8.6, 800), 8.6, RT + 13.4, grow=0)
+CAP = '8 dec, 10 pm'
+curve_text('ring', CAP, F.font('shantell', 8.4, 800), 8.4, RT + 12.6, grow=0, track=0.7)
+for txt, x, y in ARC_LABELS:
+    m = F.type_mask(txt, 'shantell', 7.8, wght=800)
+    F.ink_type(inks, 'water', m, x - m.width / hand.R / 2, y - 4.0 - m.height / hand.R)
 F.finish_out(art, inks, order, __file__)
 F.write_placement(__file__, 'centre chest', 17, 11)
