@@ -7,6 +7,7 @@ import { ShirtCard } from "@/components/ShirtCard";
 import { DESIGNS } from "@/content/tee";
 import { LINEUPS, lineupOf, fmtDays, paperStill, shirtHref, shirtLabel, shirtsOf, STILL_H, STILL_W } from "@/content/lineups";
 import { pageMeta } from "@/lib/site";
+import { shown } from "@/lib/live";
 
 type Params = { params: Promise<{ lineup: string }> };
 
@@ -22,7 +23,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 export default async function LineupPage({ params }: Params) {
   const l = lineupOf((await params).lineup);
   if (!l) notFound();
-  const shirts = shirtsOf(l);
+  const on = await shown(), shirts = shirtsOf(l).filter((d) => on.has(d));
   const forCity = (city: string) => shirts.filter((d) => DESIGNS[d].city === null || DESIGNS[d].city === city);
 
   return (
@@ -71,7 +72,7 @@ export default async function LineupPage({ params }: Params) {
               <Label note={g.city ? `${g.shirts.length === 1 ? "its map" : "its map and its night"}` : "both cities in each"}>{g.label}</Label>
             </div>
             <ul className="grid grid-cols-2 gap-x-4 gap-y-10 md:col-span-12 md:grid-cols-3 lg:col-span-10 lg:col-start-2 lg:grid-cols-4">
-              {g.shirts.map((d, i) => <li key={d} className="reveal"><ShirtCard d={d} big eager={g === l.groups[0] && i < 2} /></li>)}
+              {g.shirts.filter((d) => on.has(d)).map((d, i) => <li key={d} className="reveal"><ShirtCard d={d} big eager={g === l.groups[0] && i < 2} /></li>)}
             </ul>
           </div>
         ))}

@@ -5,7 +5,7 @@ import { THE_TEE } from "@/content/tee";
 import { CURRENT } from "@/content/lineups";
 import { SHOP } from "@/content/shop";
 import { OPERATOR, POLICIES_READY } from "@/content/policies";
-import { rupees } from "@/lib/shop/money";
+import { priceLine } from "@/lib/live";
 import { shopOpen } from "@/lib/shop/config";
 import { POLICY_LINKS, pageMeta } from "@/lib/site";
 
@@ -17,12 +17,12 @@ export const metadata: Metadata = pageMeta({
 
 type Part = { id: string; title: string; body: React.ReactNode };
 
-const PARTS: Part[] = [
+const parts = (each: string): Part[] => [
   {
     id: "orders", title: "orders",
     body: (
       <>
-        <p>every shirt is made to order: nothing sits in a warehouse. each is {rupees(SHOP.price)}, all taxes and shipping included. yours is made once you&apos;ve paid, in the size you picked, then packed and sent.</p>
+        <p>every shirt is made to order: nothing sits in a warehouse. each is {each}, all taxes and shipping included. yours is made once you&apos;ve paid, in the size you picked, then packed and sent.</p>
         {shopOpen() ? <p>every order email links to your order&apos;s page, or <Link href="/order">find your order</Link> with its number and your email.</p> : null}
       </>
     ),
@@ -50,7 +50,8 @@ const PARTS: Part[] = [
   }] : []),
 ];
 
-export default function Help() {
+export default async function Help() {
+  const p = await priceLine(), PARTS = parts(p.one ? p.from : `${p.from}, depending on the shirt`);
   return (
     <div className="pt-6">
       <div className="px-4">

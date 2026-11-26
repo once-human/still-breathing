@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { COLOURS, DESIGNS, type Design } from "@/content/tee";
-import { priceOf } from "@/content/shop";
+import { livePrices } from "@/lib/live";
 import { rupees } from "@/lib/shop/money";
 import { paperStill, shirtHref, shirtTitle, STILL_H, STILL_W } from "@/content/lineups";
 import { CardArt } from "@/components/CardArt";
@@ -9,8 +9,8 @@ import { CardArt } from "@/components/CardArt";
  * One shirt in a grid: the back on the studio paper; point at it and the artwork itself loops, front then back
  * (CardArt). Stills only, never the 3D, so a page of them stays light.
  */
-export function ShirtCard({ d, eager = false, big = false }: { d: Design; eager?: boolean; big?: boolean }) {
-  const t = shirtTitle(d), s = DESIGNS[d];
+export async function ShirtCard({ d, eager = false, big = false }: { d: Design; eager?: boolean; big?: boolean }) {
+  const t = shirtTitle(d), s = DESIGNS[d], price = (await livePrices())[d];
   return (
     <Link href={shirtHref(d)} className="group block focus-visible:outline-offset-4">
       <span className="relative block overflow-hidden bg-studio">
@@ -28,7 +28,7 @@ export function ShirtCard({ d, eager = false, big = false }: { d: Design; eager?
           <span className="block truncate text-quiet">{t.top}</span>
         </span>
         <span className="shrink-0 text-right">
-          <span className="block tnum">{rupees(priceOf(d))}</span>
+          <span className="block tnum">{rupees(price)}</span>
           <span className="flex items-center justify-end gap-1.5 text-[12px] text-quiet">
             <span className="inline-block h-2.5 w-2.5 rounded-full border border-line" style={{ background: COLOURS[s.colour].hex }} />
             {COLOURS[s.colour].name}

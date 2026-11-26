@@ -8,15 +8,16 @@ import { Facts } from "@/components/Facts";
 import { CURRENT, fmtDays, paperStill, shirtHref, shirtsOf, STILL_H, STILL_W } from "@/content/lineups";
 import { pageMeta } from "@/lib/site";
 import { SHOP } from "@/content/shop";
+import { shown } from "@/lib/live";
 
 export const metadata: Metadata = pageMeta({
-  description: "sahn makes one shirt per moment. Lineup 01: five fan-made shirts for Fred again..'s December shows in India, drawn by hand from the crowd and the grounds, made to order and sent anywhere in India.",
+  description: "sahn makes one shirt per moment. fred again.. india: five fan-made shirts for Fred again..'s December shows in India, drawn by hand from the crowd and the grounds, made to order and sent anywhere in India.",
   path: "/",
 });
 
 /** The front door: the name, the collection that's on now, its shirts, and what the label is. Stills only, no 3D. */
-export default function Home() {
-  const l = CURRENT, shirts = shirtsOf(l);
+export default async function Home() {
+  const on = await shown(), l = CURRENT, shirts = shirtsOf(l).filter((d) => on.has(d));
   return (
     <>
       <section className="px-4 pt-6">

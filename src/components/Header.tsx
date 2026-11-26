@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { Countdown } from "@/components/Countdown";
 import { AccountSlot, BagSlot } from "@/components/ShopSlots";
 import { setFocusCity } from "@/lib/city";
+import { useShop } from "@/lib/shop/client";
 import { NAV, BRAND } from "@/lib/site";
 import { CURRENT, fmtDays, paperStill, shirtHref, shirtLabel, shirtsOf, STILL_H, STILL_W } from "@/content/lineups";
 import { SHOP } from "@/content/shop";
@@ -19,6 +20,9 @@ const on = (path: string, href: string) => (href === "/" ? path === "/" : path =
  * its five shirts; on a phone everything is behind menu.
  */
 export function Header() {
+  const { pay } = useShop();
+  // a shirt the shop has back in draft leaves the shelf and the menu
+  const shirts = shirtsOf(CURRENT).filter((d) => pay?.status?.[d] !== "draft");
   const path = usePathname();
   const [menu, setMenu] = useState(false);
   const [shelf, setShelf] = useState(false);
@@ -105,7 +109,7 @@ export function Header() {
               </ul>
               <Link href={`/${CURRENT.slug}`} tabIndex={shelf ? 0 : -1} className="mt-4 inline-block text-blue hover:text-ink">all five, with the shows →</Link>
             </div>
-            {shirtsOf(CURRENT).map((d) => (
+            {shirts.map((d) => (
               <Link key={d} href={shirtHref(d)} tabIndex={shelf ? 0 : -1} className="group col-span-1 text-[13px]">
                 <span className="block overflow-hidden bg-studio">
                   {shelf ? <img src={paperStill(d, "back")} alt="" width={STILL_W} height={STILL_H} className="aspect-[880/1120] w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]" /> : <span className="block aspect-[880/1120]" />}
@@ -137,7 +141,7 @@ export function Header() {
         <p className="mt-6 text-[15px]"><AccountSlot className="font-semibold" /></p>
         <p className="mt-10 border-t border-line pt-1.5 text-[13px] text-quiet">{CURRENT.title} · the shirts</p>
         <ul className="mt-3 grid grid-cols-5 gap-2">
-          {shirtsOf(CURRENT).map((d) => (
+          {shirts.map((d) => (
             <li key={d}>
               <Link href={shirtHref(d)} className="block text-[11px] leading-tight">
                 {menu ? <img src={paperStill(d, "back")} alt="" width={STILL_W} height={STILL_H} className="aspect-[880/1120] w-full bg-studio object-cover" /> : null}

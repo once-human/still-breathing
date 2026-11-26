@@ -8,11 +8,11 @@ import { Viewer, warmDesign } from "@/components/Viewer";
 import { Countdown } from "@/components/Countdown";
 import { Fit, SHOP, WEARERS, type Wearer } from "@/components/Fit";
 import { AddToBagSlot } from "@/components/ShopSlots";
+import { priceIn, useShop } from "@/lib/shop/client";
 import { BuyFacts } from "@/components/BuyFacts";
-import { priceOf } from "@/content/shop";
 import { rupees } from "@/lib/shop/money";
 import type { Variant } from "@/lib/viewer/raster";
-import { COLOURS, DESIGNS, SIZES, SIZE_ORDER, THE_TEE, type Size } from "@/content/tee";
+import { COLOURS, DESIGNS, SIZES, SIZE_ORDER, THE_TEE, type Design, type Size } from "@/content/tee";
 import { fmtDays, lineupOf, paperStill, shirtBySlug, shirtHref, shirtTitle, STILL_H, STILL_W } from "@/content/lineups";
 
 /**
@@ -20,7 +20,8 @@ import { fmtDays, lineupOf, paperStill, shirtBySlug, shirtHref, shirtTitle, STIL
  * and on a phone a buy bar that stays at the bottom once that button has scrolled away. It lives in the shirts'
  * layout, so going from one shirt to the next keeps the 3D running and only swaps the shirt on it.
  */
-export function ShirtStage() {
+export function ShirtStage({ hidden = [] }: { hidden?: Design[] }) {
+  const { pay } = useShop();
   const params = useParams<{ lineup: string; shirt: string }>();
   const lineup = lineupOf(params.lineup);
   const design = lineup ? shirtBySlug(lineup, params.shirt) : undefined;
@@ -54,10 +55,10 @@ export function ShirtStage() {
     fromStage.current = false;
   }, [design]);
 
-  if (!lineup || !design) return null;
+  if (!lineup || !design || hidden.includes(design)) return null;
   const s = DESIGNS[design], tee = s.colour, t = shirtTitle(design), z = SIZES[size];
   const group = lineup.groups.find((g) => g.shirts.includes(design))!;
-  const all = lineup.groups.flatMap((g) => g.shirts);
+  const all = lineup.groups.flatMap((g) => g.shirts).filter((d) => !hidden.includes(d));
 
   return (
     <section aria-label={`${t.top} ${t.name}`} className="grid grid-cols-1 gap-x-4 gap-y-8 px-4 pt-4 md:grid-cols-12">
@@ -83,7 +84,7 @@ export function ShirtStage() {
             {t.top}<span className="block text-quiet">{t.name}</span>
           </h1>
           <p className="mt-5 flex items-baseline gap-3">
-            <span className="text-[28px] font-extrabold tracking-[-0.03em] tnum">{rupees(priceOf(design))}</span>
+            <span className="text-[28px] font-extrabold tracking-[-0.03em] tnum">{rupees(priceIn(pay, design))}</span>
             <span className="text-[13px] text-quiet">all taxes and shipping included</span>
           </p>
           <p className="mt-4 max-w-[40ch] text-ink/85">{s.about}</p>

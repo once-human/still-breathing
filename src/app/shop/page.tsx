@@ -5,23 +5,24 @@ import { ShirtCard } from "@/components/ShirtCard";
 import { Facts } from "@/components/Facts";
 import { LINEUPS, fmtDays } from "@/content/lineups";
 import { SHOP } from "@/content/shop";
-import { rupees } from "@/lib/shop/money";
+import { priceLine, shown } from "@/lib/live";
 import { pageMeta } from "@/lib/site";
 
-export const metadata: Metadata = pageMeta({
+export const generateMetadata = async (): Promise<Metadata> => pageMeta({
   title: "shop",
-  description: `Every sahn shirt: fred again.. india, five fan-made shirts for the December shows, ${rupees(SHOP.price)} each with all taxes and shipping included, made to order and sent anywhere in India.`,
+  description: `Every sahn shirt: fred again.. india, five fan-made shirts for the December shows, ${(await priceLine()).each} with all taxes and shipping included, made to order and sent anywhere in India.`,
   path: "/shop",
   image: LINEUPS[0].slug,
 });
 
 /** Every shirt there is, by collection and then by city; each card goes to its shirt. */
-export default function Shop() {
+export default async function Shop() {
+  const p = await priceLine(), on = await shown();
   return (
     <div className="px-4 pt-6">
       <div className="page-in grid grid-cols-2 gap-4 border-t border-line pt-1.5 text-[13px] md:grid-cols-4">
         <span className="font-semibold">shop</span>
-        <span className="text-right text-quiet md:text-left">{rupees(SHOP.price)} each, all taxes and shipping included</span>
+        <span className="text-right text-quiet md:text-left">{p.each}, all taxes and shipping included</span>
         <span className="hidden text-quiet md:block">made to order</span>
         <span className="hidden text-right text-quiet md:block">sent anywhere in {SHOP.where}</span>
       </div>
@@ -38,7 +39,7 @@ export default function Shop() {
             <div key={g.label} className="mt-12">
               <Label note={g.city ? g.city : "both cities"}>{g.label}</Label>
               <ul className="grid grid-cols-2 gap-x-4 gap-y-10 md:grid-cols-3 lg:grid-cols-4">
-                {g.shirts.map((d, i) => <li key={d} className="reveal"><ShirtCard d={d} big eager={g === l.groups[0] && i < 2} /></li>)}
+                {g.shirts.filter((d) => on.has(d)).map((d, i) => <li key={d} className="reveal"><ShirtCard d={d} big eager={g === l.groups[0] && i < 2} /></li>)}
               </ul>
             </div>
           ))}

@@ -52,6 +52,7 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 - The actual size button is called artwork.
 
 ### Fixed
+- Every price on the site (the shirt cards, the shirt pages, the shop, help, the facts, share descriptions) is the one checkout charges, read from the shop itself, so the two never disagree; a shirt the shop takes off sale leaves every page.
 - The site's own address is www.sahn.in everywhere: search results, share cards, the sitemap and the links in order emails no longer point at the old vercel.app address. sahn.in on its own takes you there.
 - Fingernails sit on every fingertip again (the thumb's was missing, some were a few stray spots).
 - His tee sits better at the arms: his arms hang a little more open, as his build makes them, so the sleeves no longer bunch up into folds at the armpits or pull tight across the back of the arm.

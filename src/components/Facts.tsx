@@ -1,10 +1,11 @@
 import { SHOP } from "@/content/shop";
-import { rupees } from "@/lib/shop/money";
+import { priceLine } from "@/lib/live";
 
 /** Three plain facts in a row, under a rule each: what it costs, how it gets to you, what it is. */
-export function Facts({ className = "" }: { className?: string }) {
+export async function Facts({ className = "" }: { className?: string }) {
+  const p = await priceLine();
   const facts = [
-    { k: `${rupees(SHOP.price)} a shirt`, v: "all taxes included, nothing added at checkout" },
+    { k: `${p.from} a shirt`, v: "all taxes included, nothing added at checkout" },
     { k: "free delivery", v: `anywhere in ${SHOP.where}, with tracking` },
     { k: "made to order", v: "made for you, with you in about 10 days" },
     { k: "heavy cotton", v: "240 gsm, cut loose, pre-shrunk" },
