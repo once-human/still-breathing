@@ -3,8 +3,9 @@
 // these rectangles map the garment's UVs onto them. Must match pipeline/texture.py.
 export type Rect = [u0: number, v0: number, du: number, dv: number];
 const AW = 8800, AH = 3440;     // atlas at 40 px/cm
-/** back: 38.1 x 50.8 cm, its top 9.5 cm under the high shoulder point */
-export const PRINT_BACK: Rect = [5838 / AW, 540 / AH, 1524 / AW, 2032 / AH];
+/** back: 13.5 x 18 in (34.3 x 45.7 cm), the largest the print partner prints at the art's 3:4, its top 9.5 cm
+ *  under the high shoulder point */
+export const PRINT_BACK: Rect = [5914 / AW, 540 / AH, 1372 / AW, 1829 / AH];
 /** front: a 30 x 50 cm area across the front, its top 8 cm under the high shoulder point. Each shirt's front
  *  texture holds its own front in its own place there (pipeline/fronts.py) */
 export const PRINT_FRONT: Rect = [1600 / AW, 480 / AH, 1200 / AW, 2000 / AH];

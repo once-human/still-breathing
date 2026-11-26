@@ -1,5 +1,5 @@
 # python3 printtex.py <outdir> : the prints as their own sharp textures for the viewer and the path tracer
-#   print-back-<d>-<tee>.webp   the back, 2048 x 2731 (54 px/cm over 38.1 x 50.8 cm), RGBA, alpha = ink
+#   print-back-<d>-<tee>.webp   the back, 2048 x 2731 (60 px/cm over the 34.3 x 45.7 cm print), RGBA, alpha = ink
 #   print-front-<d>-<tee>.webp  the chest: fronts.py's 30 x 30 cm area, 1800 x 1800 (60 px/cm), RGBA, each shirt's
 #                               own front in its own place (python3 printtex.py <outdir> <pairs> front: only these)
 # The fabric itself is one flat colour, so the prints are all the detail there is: they get the pixels.

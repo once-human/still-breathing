@@ -3,7 +3,7 @@ import type { Design, Size } from "@/content/tee";
 /**
  * The shop's facts. Price rule (Onkar, 2026-11-26): what the print partner charges for the shirt (the blank, plus the
  * print for that shirt's own front and back) plus ₹600, rounded up to the next ₹10 (raised from ₹400 by Onkar, 2026-11-26: every
- * shirt ₹1,270). Shipping (about ₹64), the payment fee and marketing come out of the ₹600; the buyer pays nothing on top.
+ * shirt ₹1,270 then; ₹1,210 since the back became the partner's 13.5 x 18 in, 2026-11-26). Shipping (about ₹64), the payment fee and marketing come out of the ₹600; the buyer pays nothing on top.
  *
  * Partner rates, from its 2026 price list (qikink.com/help/payments-pricing/pricing, read 2026-11-26):
  * the UC22 blank ₹260; printing on a coloured garment ₹0.9 per sq in, at least ₹100 a placement; 5% GST on the goods.
@@ -13,8 +13,9 @@ import type { Design, Size } from "@/content/tee";
 export const RATES = { blank: 260, perSqIn: 0.9, minPerPlacement: 100, gst: 0.05, margin: 600 };
 
 const CM = 1 / 2.54;
-/** the print boxes, in inches (fronts from pipeline/fronts.py; every back is 15 x 20 in) */
-const BACK: [number, number] = [15, 20];
+/** the print boxes, in inches (fronts from pipeline/fronts.py; every back is 13.5 x 18 in: the partner's
+ *  largest print, 14 x 18 in, at the art's 3:4) */
+const BACK: [number, number] = [13.5, 18];
 const LEFT_CHEST: [number, number] = [10.5 * CM, 10.5 * CM];
 const WRISTBAND: [number, number] = [(40 * 288) / 1666 * CM, 40 * CM];
 
@@ -48,7 +49,7 @@ export const PARTNER_SKUS: Record<Design, Partial<Record<Size, string>>> = {
 };
 
 export const SHOP = {
-  /** price of one shirt (all five cost the same today: ₹1,270), GST and shipping included */
+  /** price of one shirt (all five cost the same today: ₹1,210), GST and shipping included */
   price: Math.max(...(["c", "e", "a", "d", "f"] as Design[]).map(priceOf)),
   currency: "INR" as const,
   /** the name on the payment page, the emails and the bank statement */

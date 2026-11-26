@@ -89,10 +89,11 @@ if __name__ == "__main__":
         # lettering exported from Figma at 3600 x 4800; art drawn at another size is met at the art's size
         ov = Image.open(f"{OV}/ov-back-{'T' if design == 'C' else design}-{tee}-hi.png").convert("RGBA")
         back.alpha_composite(ov if ov.size == back.size else ov.resize(back.size, Image.LANCZOS))
-        back = back.resize((1524, 2032), Image.BOX)
-    # back: the whole printable area. The blank takes up to 16 x 20 in; the art is 3:4, so it fills the height:
-    # 15 x 20 in (38.1 x 50.8 cm), its top 9.5 cm under the high shoulder point (just clear of the collar rib)
-    place(back, 0, NECK_Y - 9.5, 38.1, 1)
+        back = back.resize((1372, 1829), Image.BOX)
+    # back: the largest the print partner prints, 14 x 18 in (its API turns away anything taller than 18 in or
+    # wider than 17); the art is 3:4, so it fills the height: 13.5 x 18 in (34.3 x 45.7 cm), its top 9.5 cm under
+    # the high shoulder point (just clear of the collar rib). Must match src/lib/viewer/print.ts and content/shop.ts
+    place(back, 0, NECK_Y - 9.5, 34.3, 1)
     # front: each shirt's own (fronts.py). The lineup's again.. in four scripts sits on the wearer's left chest;
     # i am a party has its seal on the centre chest
     from fronts import FRONTS
