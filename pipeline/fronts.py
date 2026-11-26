@@ -10,10 +10,8 @@ AREA_PX_CM = 60                                   # the viewer's front texture: 
 LETTERING = (None, 4 + 10.5 / 2, 15.0, 10.5)     # inner edge 4 cm off the centre front, top 15 cm under the shoulder
 FRONTS = {
     "a": LETTERING, "b": LETTERING, "c": LETTERING, "d": LETTERING,
-    # i am a party: the seal, 21.1 cm across on the centre chest. The front neck drops 9.5 cm and its rib is 2 cm, so
-    # the collar seam is 11.5 cm under the shoulder point at the centre; the seal starts 3.5 cm under it and centres
-    # about on the chest line
-    "e": ("art/fronts/e/05-the-seal/art.png", 0.0, 15.0, 21.1),
+    # i am a party: the seal, in exactly the lettering's place and size on the other shirts (left chest, 10.5 cm wide)
+    "e": ("art/fronts/e/06-the-seal-left-chest/art.png",) + LETTERING[1:],
     # actual life: the wristband (picks no. 09), turned to hang down the wearer's left front, clasp up, its tail
     # leaning 5 deg toward the centre front. 40 cm tall, from 17 to 57 cm under the shoulder point, centred 10 cm off
     # the centre front: inside the front print box (35.6 x 45.7 cm from the collar seam, 11.5 cm under the shoulder

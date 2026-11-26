@@ -98,5 +98,6 @@ if __name__ == "__main__":
     from fronts import FRONTS
     f_file, f_cx, f_top, f_w = FRONTS[design.lower()]
     f_img = Image.open(f"{OV}/ov-front-{tee}.png" if f_file is None else os.path.join(HERE, f_file)).convert("RGBA")
+    if f_file is not None: f_img = f_img.crop(f_img.getchannel("A").getbbox())   # an art file's width is its ink's
     place(f_img, f_cx, NECK_Y - f_top, f_w, 0)
     atlas.convert("RGB").save(f"atlas-{design}-{tee}.png"); mask.save(f"inkmask-{design}-{tee}.png"); print("ok", atlas.size)

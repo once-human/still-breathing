@@ -107,7 +107,7 @@ for d, tee in pairs:
     f_file, cx, top, w_cm = FRONTS[d]
     if f_file is None: art = lettering[tee]
     else:
-        im = Image.open(f_file).convert("RGBA")
+        im = Image.open(f_file).convert("RGBA"); im = im.crop(im.getchannel("A").getbbox())   # its width is the ink's
         art = resize_rgba(im, (int(round(w_cm * K)), int(round(im.height * w_cm * K / im.width))))
     h, w = art.shape[:2]
     x, y = int(round((cx - AREA["x0"]) * K - w / 2)), int(round((top - AREA["top"]) * K))
