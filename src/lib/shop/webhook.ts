@@ -4,15 +4,10 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  * Shopify signs every webhook: base64 HMAC-SHA256 of the raw body with the store's webhook signing key, in
  * X-Shopify-Hmac-Sha256. Checked over the bytes exactly as they came, compared in constant time.
  */
-export function verifyShopify(raw: string, signature: string | null, secret: string) {
+export function verifyShopify(raw: Buffer, signature: string | null, secret: string) {
   if (!signature) return false;
-  const want = createHmac("sha256", secret).update(raw, "utf8").digest();
-  let got: Buffer;
-  try {
-    got = Buffer.from(signature, "base64");
-  } catch {
-    return false;
-  }
+  const want = createHmac("sha256", secret).update(raw).digest();
+  const got = Buffer.from(signature, "base64");
   return got.length === want.length && timingSafeEqual(got, want);
 }
 

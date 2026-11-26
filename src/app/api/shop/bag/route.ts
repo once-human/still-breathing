@@ -1,11 +1,12 @@
 import { changeBag, readBag } from "@/lib/shop/bag";
-import { failed, guardWrite, json } from "@/lib/shop/guard";
+import { failed, guardWrite, ipOf, json, limited } from "@/lib/shop/guard";
 import { DESIGNS, SIZE_ORDER, type Design, type Size } from "@/content/tee";
 
 export const dynamic = "force-dynamic";
 
 /** this visitor's bag, from their cookie */
-export async function GET() {
+export async function GET(req: Request) {
+  if (limited(`bag-read:${ipOf(req)}`, 60, 60_000)) return json({ error: "too many tries, wait a minute" }, 429);
   try {
     return json(await readBag());
   } catch (e) {
