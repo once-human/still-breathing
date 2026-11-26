@@ -11,13 +11,13 @@ import { SHOP } from "@/content/shop";
  */
 export const OPERATOR = {
   /** the legal name the shop runs under: a person's full name, or a firm */
-  legalName: null as string | null,
+  legalName: "Onkar Yaglewad" as string | null,
   /** the email that answers orders */
-  email: null as string | null,
+  email: "contact@sahn.in" as string | null,
   /** a phone number, or null for none */
   phone: null as string | null,
   /** where the shop is run from, as "city, state" (also where disputes are heard) */
-  place: null as string | null,
+  place: "pune, maharashtra" as string | null,
 };
 
 export const POLICIES_READY = !!(OPERATOR.legalName && OPERATOR.email && OPERATOR.place);
