@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { accountsOpen, shopSecret } from "./config";
 import { sendEmail } from "./email";
 import { ShopError } from "./errors";
-import { getJson, kv, setJson } from "./kv";
+import { getJson, kv, query, setJson } from "./kv";
 import type { Details } from "./india";
 
 /**
@@ -70,6 +70,28 @@ export async function signOut() {
 
 export const loadAccount = (email: string) => getJson<Account>(`user:${email}`);
 export const saveAccount = (a: Account) => setJson(`user:${a.email}`, a, 3650);
+
+/** every account, newest first, for the admin, with how many orders each email has placed; `q` searches email, name and phone */
+export async function listAccounts(opts: { limit?: number; offset?: number; q?: string } = {}): Promise<(Account & { orders: number })[]> {
+  const limit = Math.min(Math.max(1, opts.limit ?? 50), 200), offset = Math.max(0, opts.offset ?? 0);
+  const q = opts.q?.trim() ? `%${opts.q.trim().slice(0, 80).replace(/[\\%_]/g, (c) => `\\${c}`)}%` : null;
+  const rows = await query(
+    `SELECT value, (SELECT count(*) FROM zset z WHERE z.key = 'uorders:' || (kv.value::jsonb->>'email'))::text FROM kv
+     WHERE key LIKE 'user:%' AND (expires_at IS NULL OR expires_at > now())
+       AND ($1::text IS NULL OR value::jsonb->>'email' ILIKE $1 OR value::jsonb->>'name' ILIKE $1 OR value::jsonb->>'phone' ILIKE $1)
+     ORDER BY value::jsonb->>'createdAt' DESC OFFSET $2::int LIMIT $3::int`,
+    [q, offset, limit],
+  );
+  return rows.flatMap(([v, n]) => {
+    const a = v ? (JSON.parse(v) as Account) : null;
+    return a ? [{ ...a, orders: Number(n ?? 0) }] : [];
+  });
+}
+
+export async function countAccounts() {
+  const r = await query("SELECT count(*)::text FROM kv WHERE key LIKE 'user:%' AND (expires_at IS NULL OR expires_at > now())");
+  return Number(r[0]?.[0] ?? 0);
+}
 
 /** the account's orders, newest first */
 export const accountOrders = (email: string) => kv<string[]>("ZREVRANGE", `uorders:${email}`, 0, 99);
