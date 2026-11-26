@@ -16,6 +16,7 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 - On the table: the tee laid flat on a worn wooden table, lit by a window on the right whose frame throws a soft shadow across the boards. Air comes in through it, never quite straight: it dies away, breezes, builds slowly or bursts. Now and then a dry leaf (rarely a thread or a hair) drifts down or skates in; it has weight, holding until a puff beats its grip, then breaking loose, skidding and stopping again. Leaves glow a little with the light behind them. The cotton breathes with the air.
 
 ### Changed
+- Worn, the person moves more like someone standing at a show: deeper breaths that lift the shoulders, the weight drifting from foot to foot, the arms swinging a little, and the hands rocking and easing in and out at the wrist.
 - Worn opens in the studio light; show and window are a click away.
 - 05 actual life: the note at the coffee stall reads filter coffee's still on.
 - Her hairline is hair now, not the edge of a cap: short fine strands come out of the skin all along her forehead and temples and are combed off to each side from a fine middle parting, and the longer hair ends under them instead of in a line across the forehead.

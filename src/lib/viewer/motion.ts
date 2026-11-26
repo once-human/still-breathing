@@ -34,6 +34,7 @@ export class Motion {
   private a = {
     breath: uniform(0), yaw: uniform(0), pitch: uniform(0), side: uniform(0), fb: uniform(0),
     armL: uniform(0), armR: uniform(0), foreL: uniform(0), foreR: uniform(0), handL: uniform(0), handR: uniform(0),
+    flexL: uniform(0), flexR: uniform(0),
   };
   private t = Math.random() * 60;
   private amp = 0;
@@ -61,7 +62,9 @@ export class Motion {
     const left = p.x.greaterThan(0);
     const pick = (l: V, r: V): V => select(left, l, r);
     const pickF = (l: F, r: F): F => select(left, l, r);
-    let q: V = turn(p, pick(this.j.wrL, this.j.wrR), X, pickF(this.a.handL, this.a.handR).mul(wn));
+    // the hand: it rocks forward and back at the wrist, and the palm eases in toward the thigh and out
+    let q: V = turn(p, pick(this.j.wrL, this.j.wrR), Z, pickF(this.a.flexL, this.a.flexR).mul(wn));
+    q = turn(q, pick(this.j.wrL, this.j.wrR), X, pickF(this.a.handL, this.a.handR).mul(wn));
     q = turn(q, pick(this.j.elL, this.j.elR), X, pickF(this.a.foreL, this.a.foreR).mul(wf));
     q = turn(q, pick(this.j.shL, this.j.shR), X, pickF(this.a.armL, this.a.armR).mul(wa));
     q = turn(q, this.j.neck, Y, this.a.yaw.mul(wh));
@@ -69,7 +72,7 @@ export class Motion {
     // breath: the chest and belly out from the middle, the shoulders (and all above) a touch up
     const out = vec3(q.x.sub(this.j.chest.x), 0, q.z.sub(this.j.chest.z));
     const r = out.length().max(0.03);
-    q = q.add(out.div(r).mul(this.a.breath.mul(wb).mul(0.0026))).add(Y.mul(this.a.breath.mul(wa.mul(0.9).add(wh.mul(0.7))).mul(0.0014)));
+    q = q.add(out.div(r).mul(this.a.breath.mul(wb).mul(0.0034))).add(Y.mul(this.a.breath.mul(wa.mul(0.9).add(wh.mul(0.7))).mul(0.0024)));
     // the whole body sways over the feet: side to side and a little front to back
     q = turn(q, this.j.feet, Z, this.a.side);
     return turn(q, this.j.feet, X, this.a.fb);
@@ -163,14 +166,17 @@ export class Motion {
     const ph = (t / 4.3) % 1, br = ph < 0.4 ? 0.5 - 0.5 * Math.cos((Math.PI * ph) / 0.4) : 0.5 + 0.5 * Math.cos((Math.PI * (ph - 0.4)) / 0.6);
     const A = this.a;
     A.breath.value = k * br;
-    A.side.value = k * (0.0045 * w(11.3, 0.3) + 0.0018 * w(6.7, 1.1));
-    A.fb.value = k * 0.0028 * w(8.3, 2.0);
+    // the weight drifts from foot to foot (about a centimetre and a half at the head) and a little back and forth
+    A.side.value = k * (0.0075 * w(11.3, 0.3) + 0.0028 * w(6.7, 1.1));
+    A.fb.value = k * 0.0042 * w(8.3, 2.0);
     A.yaw.value = k * (0.034 * w(9.7) + 0.02 * w(15.3, 1.0));
     A.pitch.value = k * (0.012 * w(7.1, 0.5) + 0.006 * w(12.9, 2.2));
     // the arms swing a little against the sway, each its own way; forearms and hands loosely after them
-    A.armL.value = k * 0.011 * w(6.1, 0.4) - 0.6 * A.side.value;
-    A.armR.value = k * 0.011 * w(5.6, 2.1) + 0.6 * A.side.value;
-    A.foreL.value = k * 0.018 * w(5.3, 1.3); A.foreR.value = k * 0.016 * w(4.9, 3.0);
-    A.handL.value = k * 0.028 * w(4.7, 0.2); A.handR.value = k * 0.025 * w(4.1, 2.6);
+    // (a hand moves about a centimetre; the fingers stay as they hang, curled)
+    A.armL.value = k * 0.017 * w(6.1, 0.4) - 0.6 * A.side.value;
+    A.armR.value = k * 0.015 * w(5.6, 2.1) + 0.6 * A.side.value;
+    A.foreL.value = k * (0.026 * w(5.3, 1.3) + 0.008 * w(2.9, 0.7)); A.foreR.value = k * (0.022 * w(4.9, 3.0) + 0.007 * w(3.1, 1.9));
+    A.handL.value = k * (0.04 * w(4.7, 0.2) + 0.012 * w(2.3, 1.4)); A.handR.value = k * (0.034 * w(4.1, 2.6) + 0.01 * w(2.6, 0.3));
+    A.flexL.value = k * (0.045 * w(7.9, 1.7) + 0.015 * w(3.3, 0.6)); A.flexR.value = k * (0.04 * w(8.6, 0.1) + 0.014 * w(3.7, 2.4));
   }
 }
