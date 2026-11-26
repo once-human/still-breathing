@@ -70,7 +70,7 @@ export async function record(req: Request, body: unknown, ip: string) {
     "INSERT INTO events (day, kind, path, ref, source, device, region, visitor, design, size) VALUES ($1::date, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
     [day, kind, path, null, source(String(b.r ?? ""), String(b.u ?? ""), self), device(ua), region, visitor, design, size],
   );
-  if (Math.random() < 0.002) exec("DELETE FROM events WHERE day < current_date - 400").catch(() => {});
+  if (Math.random() < 0.002) exec("DELETE FROM events WHERE day < (now() AT TIME ZONE 'Asia/Kolkata')::date - 400").catch(() => {});
 }
 
 export type DayRow = { day: string; visitors: number; views: number; bags: number; checkouts: number };
@@ -78,7 +78,8 @@ export type Count = { key: string | null; views: number; visitors: number };
 
 /** the last `days` days in one go */
 export async function activity(days = 30) {
-  const since = `current_date - ${Math.max(1, Math.min(400, Math.floor(days))) - 1}`;
+  // days are India's days, as they're stored
+  const since = `(now() AT TIME ZONE 'Asia/Kolkata')::date - ${Math.max(1, Math.min(400, Math.floor(days))) - 1}`;
   const [perDay, pages, sources, devices, regions, bag, totals] = await Promise.all([
     rows<DayRow>(`SELECT day::text, count(DISTINCT visitor) FILTER (WHERE kind = 'view')::int AS visitors, count(*) FILTER (WHERE kind = 'view')::int AS views,
       count(*) FILTER (WHERE kind = 'bag')::int AS bags, count(DISTINCT visitor) FILTER (WHERE kind = 'checkout')::int AS checkouts

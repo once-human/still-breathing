@@ -3,7 +3,7 @@ import { query } from "@/lib/shop/kv";
 
 /**
  * The admin's own tables, in the same Neon database as the shop's order store, spoken to through the shop's one SQL
- * client. Each read comes back as JSON objects (the row set wrapped in json_agg on the database), so the types below
+ * client. Each read comes back as JSON objects (the row set, or what an UPDATE ... RETURNING gives, wrapped in json_agg on the database), so the types below
  * are what Postgres sends, with numbers as numbers and times as ISO strings.
  */
 const SCHEMA = [
@@ -34,7 +34,8 @@ const flat = (params: P[]) => params.map((p) => (typeof p === "boolean" ? (p ? "
 /** rows as objects */
 export async function rows<T>(sql: string, params: P[] = []): Promise<T[]> {
   await schema();
-  const r = await query(`SELECT coalesce(json_agg(t), '[]'::json)::text FROM (${sql}) t`, flat(params));
+  // a WITH, not a subquery, so UPDATE / INSERT ... RETURNING can be read the same way
+  const r = await query(`WITH t AS (${sql}) SELECT coalesce(json_agg(t), '[]'::json)::text FROM t`, flat(params));
   return JSON.parse(r[0]?.[0] ?? "[]") as T[];
 }
 export const row = async <T>(sql: string, params: P[] = []) => (await rows<T>(sql, params))[0] ?? null;
