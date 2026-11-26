@@ -1,31 +1,51 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+import { priceOf } from "@/content/shop";
 import type { Design, Size } from "@/content/tee";
-import { shop, useShop } from "@/lib/shop/client";
+import { notMade, shop, useShop } from "@/lib/shop/client";
 import { rupees } from "@/lib/shop/money";
 import { BagDrawerHost } from "./BagDrawer";
 
 /**
- * The buy button for one shirt in one size: its price, and into the bag. While the shop can't take an order (its
- * payment and printing aren't set up, or this shirt isn't) nothing is drawn at all: no teaser, no pretend button.
+ * The buy controls for one shirt in the size picked: "add to bag · ₹1,270" (the main one) and "buy now" (into the
+ * bag and straight to checkout). Always there; the bag works in the browser whether or not payment is connected,
+ * and checkout says so plainly when it isn't. variant "bar": one slim row, for the fixed bar on phones.
  */
-export function AddToBag({ design, size }: { design: Design; size: Size }) {
-  const { catalog } = useShop();
-  const shirt = catalog?.open ? catalog.shirts[design] : undefined;
-  if (!shirt) return null;
-  const can = shirt.sizes.includes(size);
+export function AddToBag({ design, size, variant }: { design: Design; size: Size; variant?: "bar" }) {
+  const { pay } = useShop();
+  const router = useRouter();
+  const missing = notMade(pay, design, size);
+  const price = rupees(priceOf(design));
+  const bar = variant === "bar";
+  const h = bar ? "h-11" : "h-12";
+
+  const buyNow = () => {
+    if (missing) return;
+    shop.addQuietly(design, size);
+    router.push("/checkout");
+  };
+
   return (
-    <div data-shop="add-to-bag">
+    <div data-shop="add-to-bag" className={bar ? "flex gap-2" : "grid gap-2"}>
       <button
         type="button"
-        onClick={() => can && shop.add(design, size)}
-        disabled={!can}
-        className={`flex h-12 w-full items-center justify-between px-4 text-[15px] transition ${can ? "bg-ink font-semibold text-paper hover:bg-ink/90" : "border border-line text-quiet"}`}
+        onClick={() => !missing && shop.add(design, size)}
+        disabled={missing}
+        className={`${h} flex min-w-0 flex-1 items-center justify-between gap-3 bg-ink px-4 text-[15px] font-semibold text-paper transition hover:bg-ink/90 disabled:bg-transparent disabled:font-normal disabled:text-quiet disabled:ring-1 disabled:ring-line`}
       >
-        <span>{can ? "add to bag" : `not made in ${size}`}</span>
-        <span className="tnum">{rupees(shirt.price)}</span>
+        <span className="truncate">{missing ? `not made in ${size}` : "add to bag"}</span>
+        <span className="tnum">{price}</span>
       </button>
-      <BagDrawerHost />
+      <button
+        type="button"
+        onClick={buyNow}
+        disabled={missing}
+        className={`${h} ${bar ? "shrink-0 px-4" : "w-full px-4"} flex items-center justify-center border border-ink text-[15px] font-semibold text-ink transition hover:bg-ink hover:text-paper disabled:border-line disabled:text-quiet disabled:hover:bg-transparent`}
+      >
+        buy now
+      </button>
+      {!bar && <BagDrawerHost />}
     </div>
   );
 }

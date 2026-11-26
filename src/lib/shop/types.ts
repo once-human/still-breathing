@@ -1,15 +1,10 @@
 import type { Design, Size } from "@/content/tee";
 
-/** What the browser is told about the shop: plain facts made on the server. */
-export type CatalogView =
-  | { open: false }
-  | {
-      open: true;
-      /** per shirt: its price (rupees, GST and shipping in) and the sizes it can be bought in now */
-      shirts: Partial<Record<Design, { price: number; sizes: Size[] }>>;
-      maxPerLine: number;
-      maxPerBag: number;
-    };
+/**
+ * What the server says about paying: whether the shop can take a payment now, and per shirt the sizes it can be
+ * paid for in. Prices aren't here: they come from content/shop.ts, the same numbers the server charges.
+ */
+export type PayView = { pay: boolean; payable: Partial<Record<Design, Size[]>> };
 
 /** a bag line as the browser keeps it: only which shirt, which size, how many (never a price it could change) */
 export type BagItem = { design: Design; size: Size; quantity: number };

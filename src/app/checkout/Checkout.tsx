@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { POLICIES_READY } from "@/content/policies";
-import { SHOP } from "@/content/shop";
+import { SHOP, priceOf } from "@/content/shop";
 import { shirtName } from "@/components/shop/BagDrawer";
-import { bagCount, bagTotal, shop, useShop } from "@/lib/shop/client";
+import { bagCount, bagPayable, bagTotal, shop, useShop } from "@/lib/shop/client";
 import { STATES, checkDetails, type Details } from "@/lib/shop/india";
 import { rupees } from "@/lib/shop/money";
 import type { PayStart } from "@/lib/shop/types";
@@ -41,14 +41,16 @@ const FIELDS: { k: keyof Details; label: string; auto: string; type?: string; mo
 const input = "mt-1 h-12 w-full border border-line bg-transparent px-3 text-[16px] text-ink outline-none focus:border-ink";
 
 export function Checkout() {
-  const { bag, catalog } = useShop();
+  const { bag, pay: payView } = useShop();
   const router = useRouter();
   const [d, setD] = useState<Details>({ name: "", email: "", phone: "", address1: "", address2: "", city: "", state: "", pin: "" });
   const [bad, setBad] = useState<{ field?: keyof Details; error: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
-  if (!catalog) return <p className="text-quiet">&nbsp;</p>;
-  if (!catalog.open || bag.length === 0) {
+  const [ready, setReady] = useState(false);
+  useEffect(() => setReady(true), []);
+  if (!ready) return <p className="text-quiet">&nbsp;</p>;
+  if (bag.length === 0) {
     return <p className="max-w-[44ch] text-[clamp(18px,1.8vw,24px)] leading-[1.25] text-ink/85">your bag is empty. <Link href="/lineup-01" className="draw">the shirts →</Link></p>;
   }
 
@@ -57,6 +59,9 @@ export function Checkout() {
     const c = checkDetails(d);
     if ("error" in c) return setBad(c);
     setBad(null);
+    if (!bagPayable(bag, payView)) {
+      return setBad({ error: payView?.pay ? "one of these shirts can't be paid for in that size yet. take it out of the bag to go on." : "payment isn't connected yet, so nothing can be paid or ordered today. nothing has been charged, and your details weren't sent anywhere." });
+    }
     setBusy(true);
     try {
       const r = await fetch("/api/shop/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bag, details: c.ok }) });
@@ -92,7 +97,8 @@ export function Checkout() {
   }
 
   const set = (k: keyof Details) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setD({ ...d, [k]: e.target.value });
-  const total = bagTotal(bag, catalog);
+  const total = bagTotal(bag);
+  const live = bagPayable(bag, payView);
 
   return (
     <div className="grid grid-cols-1 gap-x-4 gap-y-12 md:grid-cols-12">
@@ -117,7 +123,7 @@ export function Checkout() {
           <span>{busy ? "one moment.." : "pay"}</span><span className="tnum">{rupees(total)}</span>
         </button>
         <p className="mt-2 text-[12px] text-quiet">
-          UPI, card or net banking, on Razorpay&apos;s secure payment window. Your payment details go only to Razorpay.
+          {live || payView === null ? <>UPI, card or net banking, on Razorpay&apos;s secure payment window. Your payment details go only to Razorpay.</> : <>Payment isn&apos;t connected yet: nothing can be paid or ordered today.</>}
           {POLICIES_READY ? <> By paying you agree to the <Link href="/policies/terms" className="draw hover:text-ink">terms</Link>.</> : null}
         </p>
       </form>
@@ -128,7 +134,7 @@ export function Checkout() {
           {bag.map((l) => (
             <li key={`${l.design}-${l.size}`} className="flex justify-between border-b border-line py-2">
               <span>{shirtName(l.design)}<span className="text-quiet"> · {l.size} × {l.quantity}</span></span>
-              <span className="tnum">{rupees((catalog.shirts[l.design]?.price ?? 0) * l.quantity)}</span>
+              <span className="tnum">{rupees(priceOf(l.design) * l.quantity)}</span>
             </li>
           ))}
         </ul>

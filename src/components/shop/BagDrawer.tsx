@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { POLICIES_READY } from "@/content/policies";
-import { SHOP } from "@/content/shop";
+import { SHOP, priceOf } from "@/content/shop";
 import { DESIGNS } from "@/content/tee";
 import { bagCount, bagTotal, claimDrawer, releaseDrawer, shop, useShop } from "@/lib/shop/client";
 import { rupees } from "@/lib/shop/money";
@@ -24,7 +24,7 @@ export const shirtName = (d: keyof typeof DESIGNS) => `${DESIGNS[d].no} ${DESIGN
 
 /** The bag: what's in it, how many of each, what it comes to, and on to checkout. */
 function BagDrawer() {
-  const { bag, catalog, drawer } = useShop();
+  const { bag, pay, drawer } = useShop();
   const panel = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -42,8 +42,8 @@ function BagDrawer() {
     };
   }, [drawer]);
 
-  if (!drawer || !catalog?.open) return null;
-  const n = bagCount(bag), full = n >= catalog.maxPerBag;
+  if (!drawer) return null;
+  const n = bagCount(bag), full = n >= SHOP.maxPerBag;
   const [m0, m1] = SHOP.make, [r0, r1] = SHOP.road;
   return (
     <div className="fixed inset-0 z-[100]" data-lenis-prevent>
@@ -60,7 +60,7 @@ function BagDrawer() {
         ) : (
           <ul className="mt-6 flex-1 overflow-y-auto">
             {bag.map((l) => {
-              const name = shirtName(l.design), price = catalog.shirts[l.design]?.price ?? 0;
+              const name = shirtName(l.design), price = priceOf(l.design);
               return (
                 <li key={`${l.design}-${l.size}`} className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 border-t border-line py-3 text-[14px]">
                   <p className="font-semibold">{name}<span className="block font-normal text-quiet">size {l.size}</span></p>
@@ -68,7 +68,7 @@ function BagDrawer() {
                   <div className="flex items-center gap-1" role="group" aria-label={`How many ${name} in ${l.size}`}>
                     <button onClick={() => shop.setQuantity(l.design, l.size, l.quantity - 1)} aria-label="One fewer" className="h-8 w-8 border border-line hover:border-quiet">−</button>
                     <span className="tnum w-8 text-center" aria-live="polite">{l.quantity}</span>
-                    <button disabled={full || l.quantity >= catalog.maxPerLine} onClick={() => shop.setQuantity(l.design, l.size, l.quantity + 1)} aria-label="One more"
+                    <button disabled={full || l.quantity >= SHOP.maxPerLine} onClick={() => shop.setQuantity(l.design, l.size, l.quantity + 1)} aria-label="One more"
                       className="h-8 w-8 border border-line hover:border-quiet disabled:opacity-40">+</button>
                   </div>
                   <button onClick={() => shop.setQuantity(l.design, l.size, 0)} className="hit text-right text-[13px] text-quiet hover:text-ink">remove</button>
@@ -80,14 +80,14 @@ function BagDrawer() {
 
         {bag.length > 0 && (
           <div className="mt-auto border-t border-line pt-3">
-            <p className="flex items-baseline justify-between text-[15px]"><span>total</span><span className="tnum font-semibold">{rupees(bagTotal(bag, catalog))}</span></p>
+            <p className="flex items-baseline justify-between text-[15px]"><span>total</span><span className="tnum font-semibold">{rupees(bagTotal(bag))}</span></p>
             <p className="mt-1 text-[12px] text-quiet">GST included. Free shipping across {SHOP.shipsTo}. Made for you: {m0}–{m1} days to make, then {r0}–{r1} on the road.</p>
             <Link href="/checkout" onClick={shop.close}
               className="mt-4 flex h-12 w-full items-center justify-between bg-ink px-4 text-[15px] font-semibold text-paper transition hover:bg-ink/90">
               <span>checkout</span><span aria-hidden>→</span>
             </Link>
             <p className="mt-2 text-[12px] text-quiet">
-              Pay by UPI, card or net banking.{POLICIES_READY ? <> <Link href="/policies/refunds" onClick={shop.close} className="draw hover:text-ink">returns</Link></> : null}
+              {pay?.pay ? "Pay by UPI, card or net banking." : "Payment isn't connected yet: you can fill in checkout, but nothing can be paid or ordered today."}{POLICIES_READY ? <> <Link href="/policies/refunds" onClick={shop.close} className="draw hover:text-ink">returns</Link></> : null}
             </p>
           </div>
         )}
