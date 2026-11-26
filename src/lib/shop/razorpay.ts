@@ -25,7 +25,12 @@ async function call<T>(path: string, init: { method?: string; body?: unknown } =
 }
 
 export type RzpOrder = { id: string; amount: number; amount_paid: number; currency: string; receipt: string; status: "created" | "attempted" | "paid" };
-export type RzpPayment = { id: string; order_id: string; status: "created" | "authorized" | "captured" | "refunded" | "failed"; amount: number; method: string };
+export type RzpPayment = {
+  id: string; order_id: string; status: "created" | "authorized" | "captured" | "refunded" | "failed"; amount: number; method: string;
+  created_at: number; vpa?: string | null; bank?: string | null; wallet?: string | null; card?: { network?: string; last4?: string } | null;
+  amount_refunded?: number; refund_status?: "partial" | "full" | null;
+};
+export type RzpRefund = { id: string; payment_id: string; amount: number; status: "pending" | "processed" | "failed"; created_at: number; speed_processed?: string };
 
 /** amount in paise; receipt is our order number (unique: Razorpay refuses a second order with the same one) */
 export const createPayment = (amountPaise: number, receipt: string, notes: Record<string, string>) =>
@@ -33,6 +38,11 @@ export const createPayment = (amountPaise: number, receipt: string, notes: Recor
 
 export const fetchPayment = (rzpOrderId: string) => call<RzpOrder>(`/orders/${encodeURIComponent(rzpOrderId)}`);
 export const fetchPayments = (rzpOrderId: string) => call<{ items: RzpPayment[] }>(`/orders/${encodeURIComponent(rzpOrderId)}/payments`);
+
+/** a full refund back the way it was paid (Razorpay settles it in 5–7 working days; "optimum" goes instant where the bank allows) */
+export const refundPayment = (paymentId: string, amountPaise: number, receipt: string) =>
+  call<RzpRefund>(`/payments/${encodeURIComponent(paymentId)}/refund`, { method: "POST", body: { amount: amountPaise, speed: "optimum", receipt } });
+export const fetchRefund = (refundId: string) => call<RzpRefund>(`/refunds/${encodeURIComponent(refundId)}`);
 
 const sameHex = (a: string, b: string) => {
   const x = Buffer.from(a, "utf8"), y = Buffer.from(b, "utf8");

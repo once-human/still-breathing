@@ -81,7 +81,7 @@ function BagDrawer() {
         {bag.length > 0 && (
           <div className="mt-auto border-t border-line pt-3">
             <p className="flex items-baseline justify-between text-[15px]"><span>total</span><span className="tnum font-semibold">{rupees(bagTotal(bag))}</span></p>
-            <p className="mt-1 text-[12px] text-quiet">GST included. Free shipping across {SHOP.shipsTo}. Made for you: {m0}–{m1} days to make, then {r0}–{r1} on the road.</p>
+            <p className="mt-1 text-[12px] text-quiet">All taxes included. Free shipping across {SHOP.shipsTo}. Made for you: {m0}–{m1} days to make, then {r0}–{r1} on the road.</p>
             <Link href="/checkout" onClick={shop.close}
               className="mt-4 flex h-12 w-full items-center justify-between bg-ink px-4 text-[15px] font-semibold text-paper transition hover:bg-ink/90">
               <span>checkout</span><span aria-hidden>→</span>

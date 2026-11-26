@@ -1,6 +1,6 @@
 import { SHOP } from "@/content/shop";
 import { DESIGNS, SIZE_ORDER, type Design, type Size } from "@/content/tee";
-import { partnerKeys, shopOpen } from "./config";
+import { accountsOpen, partnerKeys, shopOpen } from "./config";
 import { partnerSku } from "./partner";
 import type { BagItem, PayView } from "./types";
 
@@ -11,13 +11,14 @@ export function sizesOf(d: Design): Size[] {
 }
 
 export function payView(): PayView {
-  if (!shopOpen()) return { pay: false, payable: {} };
+  const accounts = accountsOpen();
+  if (!shopOpen()) return { pay: false, payable: {}, accounts };
   const payable: PayView["payable"] = {};
   for (const d of Object.keys(DESIGNS) as Design[]) {
     const sizes = sizesOf(d);
     if (sizes.length) payable[d] = sizes;
   }
-  return { pay: Object.keys(payable).length > 0, payable };
+  return { pay: Object.keys(payable).length > 0, payable, accounts };
 }
 
 /** a bag from the browser, checked line by line against what's actually for sale; merged, bounded, or null */

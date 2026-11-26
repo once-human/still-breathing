@@ -4,7 +4,7 @@ import type { Design, Size } from "@/content/tee";
  * What the server says about paying: whether the shop can take a payment now, and per shirt the sizes it can be
  * paid for in. Prices aren't here: they come from content/shop.ts, the same numbers the server charges.
  */
-export type PayView = { pay: boolean; payable: Partial<Record<Design, Size[]>> };
+export type PayView = { pay: boolean; payable: Partial<Record<Design, Size[]>>; accounts?: boolean };
 
 /** a bag line as the browser keeps it: only which shirt, which size, how many (never a price it could change) */
 export type BagItem = { design: Design; size: Size; quantity: number };

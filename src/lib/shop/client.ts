@@ -84,6 +84,16 @@ export const shop = {
   addQuietly: (design: Design, size: Size) => set({ bag: put(design, size) }),
   setQuantity: (design: Design, size: Size, quantity: number) =>
     set({ bag: fit(state.bag.map((x) => (x.design === design && x.size === size ? { ...x, quantity } : x)).filter((x) => x.quantity > 0)) }),
+  /** a past order's shirts back in the bag (reorder), on top of what's there */
+  addLines: (lines: BagItem[]) => {
+    const bag = [...state.bag];
+    for (const l of lines) {
+      const x = bag.find((y) => y.design === l.design && y.size === l.size);
+      if (x) bag.splice(bag.indexOf(x), 1, { ...x, quantity: x.quantity + l.quantity });
+      else bag.push({ design: l.design, size: l.size, quantity: l.quantity });
+    }
+    set({ bag: fit(bag) });
+  },
   empty: () => set({ bag: [] }),
   open: () => set({ drawer: true }),
   close: () => set({ drawer: false }),

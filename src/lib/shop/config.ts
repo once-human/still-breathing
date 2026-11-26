@@ -41,4 +41,7 @@ export const shopSecret = () => {
 /** where Onkar hears about anything the shop couldn't do by itself (an order the partner refused, say) */
 export const ownerEmail = () => env("SHOP_OWNER_EMAIL") ?? null;
 
+/** accounts need only the store, email and the secret (no payment): sign in, profile, addresses, order history */
+export const accountsOpen = () => !!(kvKeys() && mailKeys() && shopSecret());
+
 export const shopOpen = () => !!(razorpayKeys() && partnerKeys() && kvKeys() && mailKeys() && shopSecret());

@@ -43,7 +43,7 @@ export const POLICIES: Record<PolicySlug, Policy> = {
         heading: "where we send",
         body: [
           "anywhere in india with a pin code a courier reaches. we don't send abroad yet.",
-          "shipping is free: the price you see is what you pay, GST included.",
+          "shipping is free: the price you see is what you pay, all taxes included.",
         ],
       },
       {
@@ -96,8 +96,8 @@ export const POLICIES: Record<PolicySlug, Policy> = {
       {
         heading: "changing your mind before it's made",
         body: [
-          `you can cancel until your shirt goes to print. write to ${mail()} with your order number as soon as you can: printing can start within a day of ordering. if it hasn't started, we cancel it and refund you in full. once printing has started it can't be cancelled.`,
-          "the size or the address can be changed on the same terms.",
+          "for the first hour after you pay, your order waits before going to print. in that hour you can cancel it yourself on your order's page and be refunded in full, straight away, or fix the address there.",
+          `after that it goes to print within a few hours. if you need to cancel or change the size or address then, write to ${mail()} with your order number as soon as you can: if printing hasn't started, we cancel it and refund you in full. once printing has started it can't be cancelled.`,
         ],
       },
       {
@@ -133,7 +133,7 @@ export const POLICIES: Record<PolicySlug, Policy> = {
       {
         heading: "prices and payment",
         body: [
-          `prices are in indian rupees and include GST and shipping within india; one shirt is ${price} unless the site says otherwise. the price charged is the one at checkout.`,
+          `prices are in indian rupees and include all taxes and shipping within india; one shirt is ${price} unless the site says otherwise. the price charged is the one at checkout.`,
           "payment is taken by Razorpay, a payment gateway, in its own secure payment window. your UPI, card and bank details go only to it; we never see or store them.",
           "an order is ours to make once the payment is confirmed. if a price is ever shown wrongly or we can't make an order, we tell you and refund it in full.",
           `you can buy at most ${SHOP.maxPerBag} shirts in one order.`,
@@ -172,6 +172,7 @@ export const POLICIES: Record<PolicySlug, Policy> = {
           "when you order: your name, email, phone number, delivery address, what you bought and what you paid. you give these at checkout, and we need them to make and send your shirt.",
           "when you just look: nothing that names you. no ad trackers, no analytics cookies, no third-party pixels.",
           "the bag is kept in your own browser (which shirts, which sizes, how many) until you pay or empty it. no cookies are set for it.",
+          "if you sign in (with a code we email you, no password), we keep your name, phone and up to five delivery addresses so checkout fills itself in, and one cookie that keeps you signed in for 30 days. your account shows every order placed with your email. you can sign out any time, and ask us to delete the account.",
           "to show the nearest show, the site uses the rough city your connection comes from (the hosting service adds it to every request). it's rounded to about 10 km, used once for the distance and never stored.",
         ],
       },
@@ -186,7 +187,7 @@ export const POLICIES: Record<PolicySlug, Policy> = {
       {
         heading: "what we use it for",
         body: [
-          "making and sending your order, emailing you about it (confirmation, dispatch, tracking, delivery), answering you, and keeping the records indian tax law requires.",
+          "making and sending your order, emailing you about it (confirmation, dispatch, tracking, delivery) and the sign-in codes you ask for, answering you, and keeping the records indian tax law requires.",
           "we only email you about your orders. if we ever start a newsletter, it will be one you choose to join.",
         ],
       },
@@ -220,7 +221,7 @@ export const POLICIES: Record<PolicySlug, Policy> = {
       },
       {
         heading: "your order",
-        body: ["every order email has a link to your order's page. or open /order and put in the order number and your email."],
+        body: ["every order email has a link to your order's page. or open /order and put in the order number and your email, or sign in at /account to see all your orders."],
       },
       {
         heading: "who runs sahn",

@@ -7,7 +7,9 @@ import { POLICIES_READY } from "@/content/policies";
 import { SHOP, priceOf } from "@/content/shop";
 import { shirtName } from "@/components/shop/BagDrawer";
 import { bagCount, bagPayable, bagTotal, shop, useShop } from "@/lib/shop/client";
-import { STATES, checkDetails, type Details } from "@/lib/shop/india";
+import { AddressFields, EMPTY, addressLine } from "@/components/shop/AddressFields";
+import type { Account } from "@/lib/shop/account";
+import { checkDetails, type Details } from "@/lib/shop/india";
 import { rupees } from "@/lib/shop/money";
 import type { PayStart } from "@/lib/shop/types";
 
@@ -28,22 +30,13 @@ const loadRazorpay = () =>
     document.head.appendChild(s);
   });
 
-const FIELDS: { k: keyof Details; label: string; auto: string; type?: string; mode?: "numeric" | "tel" | "email"; wide?: boolean; optional?: boolean }[] = [
-  { k: "name", label: "full name", auto: "name", wide: true },
-  { k: "email", label: "email, for the confirmation and tracking", auto: "email", type: "email", mode: "email", wide: true },
-  { k: "phone", label: "mobile, for the courier", auto: "tel-national", type: "tel", mode: "tel", wide: true },
-  { k: "address1", label: "house, flat or building, street", auto: "address-line1", wide: true },
-  { k: "address2", label: "area, landmark (optional)", auto: "address-line2", wide: true, optional: true },
-  { k: "city", label: "city or town", auto: "address-level2" },
-  { k: "pin", label: "pin code", auto: "postal-code", mode: "numeric" },
-];
-
-const input = "mt-1 h-12 w-full border border-line bg-transparent px-3 text-[16px] text-ink outline-none focus:border-ink";
-
-export function Checkout() {
+/** `saved`: the signed-in buyer's account, to fill in from (their name, phone and the addresses they've sent to) */
+export function Checkout({ saved = null }: { saved?: Account | null }) {
   const { bag, pay: payView } = useShop();
   const router = useRouter();
-  const [d, setD] = useState<Details>({ name: "", email: "", phone: "", address1: "", address2: "", city: "", state: "", pin: "" });
+  const first = saved?.addresses[0];
+  const [d, setD] = useState<Details>(saved ? { ...EMPTY, ...(first ?? {}), name: first?.name || saved.name, phone: first?.phone || saved.phone, email: saved.email } : EMPTY);
+  const [picked, setPicked] = useState<string | null>(first?.id ?? null);
   const [bad, setBad] = useState<{ field?: keyof Details; error: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -96,28 +89,26 @@ export function Checkout() {
     }
   }
 
-  const set = (k: keyof Details) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setD({ ...d, [k]: e.target.value });
   const total = bagTotal(bag);
   const live = bagPayable(bag, payView);
 
   return (
     <div className="grid grid-cols-1 gap-x-4 gap-y-12 md:grid-cols-12">
       <form onSubmit={pay} noValidate className="md:col-span-6 lg:col-span-5">
-        <p className="border-t border-line pt-1.5 text-[13px] text-quiet">where it goes</p>
-        <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-4">
-          {FIELDS.map((f) => (
-            <label key={f.k} className={`block text-[13px] text-quiet ${f.wide ? "col-span-2" : ""}`}>{f.label}
-              <input value={d[f.k]} onChange={set(f.k)} autoComplete={f.auto} type={f.type ?? "text"} inputMode={f.mode} required={!f.optional}
-                aria-invalid={bad?.field === f.k} className={`${input} ${bad?.field === f.k ? "border-ink" : ""}`} maxLength={f.k === "pin" ? 6 : 120} />
-            </label>
-          ))}
-          <label className="col-span-2 block text-[13px] text-quiet">state
-            <select value={d.state} onChange={set("state")} autoComplete="address-level1" required aria-invalid={bad?.field === "state"} className={`${input} appearance-none`}>
-              <option value="" disabled>pick your state</option>
-              {STATES.map((s) => <option key={s} value={s} className="bg-paper">{s}</option>)}
-            </select>
-          </label>
-        </div>
+        <p className="flex justify-between border-t border-line pt-1.5 text-[13px] text-quiet"><span>where it goes</span>{saved ? <span>signed in as {saved.email}</span> : payView?.accounts ? <Link href="/account?next=/checkout" className="draw hover:text-ink">sign in to fill this in</Link> : null}</p>
+        {saved && saved.addresses.length > 0 && (
+          <div className="mt-3 text-[14px]" role="radiogroup" aria-label="Your saved addresses">
+            {saved.addresses.map((a) => (
+              <button key={a.id} type="button" role="radio" aria-checked={picked === a.id} onClick={() => { setPicked(a.id); setD({ ...d, ...a, email: d.email }); }}
+                className={`mb-1.5 block w-full border px-3 py-2 text-left ${picked === a.id ? "border-ink" : "border-line text-quiet hover:text-ink"}`}>
+                <span className="text-ink">{a.name}</span> · {addressLine(a)}
+              </button>
+            ))}
+            <button type="button" role="radio" aria-checked={picked === null} onClick={() => { setPicked(null); setD({ ...EMPTY, name: saved.name, phone: saved.phone, email: d.email }); }}
+              className={`block w-full border px-3 py-2 text-left ${picked === null ? "border-ink" : "border-line text-quiet hover:text-ink"}`}>somewhere new</button>
+          </div>
+        )}
+        <div className="mt-4"><AddressFields d={d} onChange={(x) => { setD(x); if (picked) setPicked(null); }} bad={bad?.field} /></div>
         {bad && <p role="alert" className="mt-4 text-[14px]">{bad.error}</p>}
         <button disabled={busy} className="mt-6 flex h-12 w-full items-center justify-between bg-ink px-4 text-[15px] font-semibold text-paper hover:bg-ink/90 disabled:opacity-60">
           <span>{busy ? "one moment.." : "pay"}</span><span className="tnum">{rupees(total)}</span>
@@ -139,7 +130,7 @@ export function Checkout() {
           ))}
         </ul>
         <p className="mt-3 flex justify-between text-[15px]"><span>total</span><span className="tnum font-semibold">{rupees(total)}</span></p>
-        <p className="mt-1 text-[12px] text-quiet">GST and shipping included. Made for you in {SHOP.make[0]}–{SHOP.make[1]} days, then {SHOP.road[0]}–{SHOP.road[1]} on the road.</p>
+        <p className="mt-1 text-[12px] text-quiet">All taxes and shipping included. Made for you in {SHOP.make[0]}–{SHOP.make[1]} days, then {SHOP.road[0]}–{SHOP.road[1]} on the road.</p>
         <button type="button" onClick={shop.open} className="hit mt-3 text-[13px] text-quiet hover:text-ink">change the bag</button>
       </div>
     </div>
