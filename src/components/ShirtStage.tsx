@@ -159,11 +159,8 @@ export function ShirtStage() {
 
       {/* phones: once the buy button has scrolled away, the shirt, its size and the button stay at the bottom */}
       <div className={`fixed inset-x-0 bottom-0 z-40 border-t border-line bg-paper/95 px-4 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-md transition-transform duration-500 ease-[cubic-bezier(.2,.7,.2,1)] md:hidden ${barOn ? "" : "translate-y-full"}`} inert={!barOn}>
-        <p className="mb-2 flex items-baseline justify-between gap-3 text-[13px]">
-          <span className="truncate"><span className="font-semibold">{t.name}</span><span className="text-quiet"> · {t.top} · {size}</span></span>
-          <span className="shrink-0 font-semibold tnum">{rupees(priceOf(design))}</span>
-        </p>
-        <AddToBagSlot design={design} size={size} />
+        <p className="mb-2 truncate text-[13px]"><span className="font-semibold">{t.name}</span><span className="text-quiet"> · {t.top} · size {size}</span></p>
+        <AddToBagSlot design={design} size={size} bar />
       </div>
     </section>
   );

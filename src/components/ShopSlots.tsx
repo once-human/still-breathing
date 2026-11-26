@@ -10,8 +10,9 @@ import type { Design, Size } from "@/content/tee";
  * Never build a second buy button outside these two slots.
  */
 
-export function AddToBagSlot({ design, size }: { design: Design; size: Size }) {
-  return <AddToBag design={design} size={size} />;
+/** `bar`: the slim one-row pair for the phone's bottom bar (it doesn't host the bag drawer; the header's bag does) */
+export function AddToBagSlot({ design, size, bar = false }: { design: Design; size: Size; bar?: boolean }) {
+  return <AddToBag design={design} size={size} variant={bar ? "bar" : undefined} />;
 }
 
 export function BagSlot() {
