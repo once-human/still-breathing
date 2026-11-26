@@ -23,7 +23,7 @@ def put(im, file, cx, top, w, rot=0.0):
 def label(im, txt):
     ImageDraw.Draw(im).text((M, H - M + 6), txt, fill=(60, 60, 60))
 from fronts import FRONTS
-BOX = (-14 * 2.54 / 2, 11.5, 14 * 2.54, 16 * 2.54)   # the front print box: 35.6 x 40.6 cm from the collar seam
+BOX = (-14 * 2.54 / 2, 11.5, 14 * 2.54, 18 * 2.54)   # the front print box: 35.6 x 45.7 cm from the collar seam
 def box(im):
     d = ImageDraw.Draw(im); x0, y0 = to(BOX[0], BOX[1]); x1, y1 = to(BOX[0] + BOX[2], BOX[1] + BOX[3])
     for x in range(int(x0), int(x1), 24): d.line([(x, y0), (x + 12, y0)], fill=(90, 90, 90), width=2); d.line([(x, y1), (x + 12, y1)], fill=(90, 90, 90), width=2)
