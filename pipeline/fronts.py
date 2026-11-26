@@ -18,4 +18,9 @@ FRONTS = {
     # thin band needs far more width than a squarish block, so 18 cm across, from 3 cm past the centre front out to
     # the chest area's edge, top 16 cm under the shoulder point (art-tight.png is art.png cropped to its ink)
     "f": ("art/fronts/c/05-wristband/art-tight.png", -3 + 18.0 / 2, 16.0, 18.0),
+    # trials for 05 actual life's front, rendered only (not on the page): the wristband turned to run down from the
+    # left chest, 30 cm long, clasp up. g: the artist's, 20 deg off vertical drifting out toward the side seam;
+    # h: straight down
+    "g": ("art/fronts/c/05-wristband/trial/down-20.png", 10 + 13.3 / 2, 14.0, 13.3),
+    "h": ("art/fronts/c/05-wristband/trial/down-0.png", 12.0, 14.0, 4.2),
 }

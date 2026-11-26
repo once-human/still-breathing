@@ -67,7 +67,7 @@ if __name__ == "__main__":
     # D, the Bengaluru map: art from art-d-map/gen.py plus its lettering exported from Figma at print size.
     # E, breath for the tour: art from art/breath (crowd.py on a runner, then post.py) plus its lettering (art/breath/letter.py).
     # F, 22° for Bengaluru: art from art-f-22/gen.py, notes from art-f-22/notes.py, title from art/wordmark.py.
-    art = {"A": "art-a-map", "B": "art-b-lines", "C": "art-crowd-tour", "D": "art-d-map", "E": "art-e-breath", "F": "art-f-22"}[design]
+    art = {"A": "art-a-map", "B": "art-b-lines", "C": "art-crowd-tour", "D": "art-d-map", "E": "art-e-breath", "F": "art-f-22", "G": "art-f-22", "H": "art-f-22"}[design]
     TEE = {"black": (21, 21, 21), "cream": (255, 250, 231)}[tee]
     atlas = Image.new("RGBA", (W * 2, H), TEE + (255,)); mask = Image.new("L", (W * 2, H), 0)
     def place(img, cx_cm, top_cm, w_cm, panel):
@@ -87,7 +87,7 @@ if __name__ == "__main__":
     else:
         back = Image.open(f"{ROOT}/{art}/art-{tee}.png").convert("RGBA")
         # lettering exported from Figma at 3600 x 4800; art drawn at another size is met at the art's size
-        ov = Image.open(f"{OV}/ov-back-{'T' if design == 'C' else design}-{tee}-hi.png").convert("RGBA")
+        ov = Image.open(f"{OV}/ov-back-{'T' if design == 'C' else 'F' if design in 'GH' else design}-{tee}-hi.png").convert("RGBA")
         back.alpha_composite(ov if ov.size == back.size else ov.resize(back.size, Image.LANCZOS))
         back = back.resize((1524, 2032), Image.BOX)
     # back: the whole printable area. The blank takes up to 16 x 20 in; the art is 3:4, so it fills the height:
