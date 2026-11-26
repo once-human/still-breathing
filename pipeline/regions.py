@@ -7,7 +7,8 @@
 #     both lips and the line between them; the lips are a lens round that line, as tall as the profile says each
 #     lip is, as wide as a mouth is for those eyes (0.37 of the distance between them each side; 0.35 on her),
 #     with the dip of the cupid's bow, kept to the front of the face
-#   - fingernails: the five fingertips are the points of the hand farthest from the wrist over its surface; the
+#   - fingernails: the five fingertips are the points of the hand farthest from the wrist over its surface (each
+#     the farthest within 3 cm of itself); the
 #     nail is on the back of each, 1 to 13 mm behind the tip (scaled to the finger), as wide as the finger allows
 #   - scalp: above a hairline that runs round the head, high at the forehead, dipping at the temples, over the
 #     ears and down behind them to the nape (lower on her; his set back a touch at the temple corners)
@@ -132,11 +133,23 @@ def mark(body, eyes, she, rig):
                 nd = d + L
                 if nd < D[j]: D[j] = nd; heapq.heappush(pq, (nd, j))
         hv = np.where(hand & np.isfinite(D))[0]
-        # tips: local maxima of that distance (none farther within 1.5 cm on the surface)
+        # tips: the farthest points that nothing within 3 cm over the surface is farther than (a point partway down
+        # a long finger is not a tip, however far it is; neighbouring tips can be under 2 cm apart in space)
+        def near(i0, R=0.03):
+            seen = {i0: 0.0}; pq_ = [(0.0, i0)]
+            while pq_:
+                d, i = heapq.heappop(pq_)
+                if d > seen[i]: continue
+                for j, L in adj[i]:
+                    if hand[j] and d + L <= R and d + L < seen.get(j, np.inf): seen[j] = d + L; heapq.heappush(pq_, (d + L, j))
+            return np.fromiter(seen.keys(), int)
         order = hv[np.argsort(-D[hv])]
-        tips = []
+        tips = []; gone = np.zeros(len(P), bool)
         for i in order:
-            if all(np.linalg.norm(P[i] - P[k]) > 0.016 for k in tips): tips.append(i)
+            if gone[i]: continue
+            nb_ = near(int(i)); gone[nb_] = True
+            if (D[nb_] > D[i] + 1e-9).any(): continue
+            tips.append(int(i))
             if len(tips) == 5: break
         tipsP = P[tips]
         thumb = int(np.argmax([min(np.linalg.norm(tipsP[a] - tipsP[b]) for b in range(5) if b != a) for a in range(5)]))
