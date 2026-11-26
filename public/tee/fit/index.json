@@ -265,20 +265,20 @@
   "chest_ease_cm": 1,
   "poses": {
    "stand": {
-    "hem_below_crotch_cm": -8,
-    "sleeve_above_elbow_cm": 4,
-    "hem_vs_waistband_cm": -16,
+    "hem_below_crotch_cm": -7,
+    "sleeve_above_elbow_cm": 3,
+    "hem_vs_waistband_cm": -17,
     "frame": 200,
     "lift_m": 0.0
    },
    "up": {
-    "hem_rise_cm": 8,
-    "hem_vs_waistband_cm": -8,
+    "hem_rise_cm": 10,
+    "hem_vs_waistband_cm": -7,
     "frame": 300,
     "lift_m": 0.0
    },
    "sit": {
-    "back_hem_vs_waistband_cm": 30,
+    "back_hem_vs_waistband_cm": 29,
     "front_hem_vs_waistband_cm": 26,
     "seat_cm": 41,
     "frame": 430,
