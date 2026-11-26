@@ -6,21 +6,22 @@ import { SHOP } from "@/content/shop";
  * reported within 7 days with an unboxing video) and the payment gateway's activation checks (it reads these pages).
  * The site-pages session draws them at /policies/<slug>; this file only holds the words.
  *
- * Who runs the shop and how to reach it are Onkar's to give. Until all of OPERATOR is filled in, POLICIES_READY is
- * false and no page links to them: a policy page without a real name and email to write to isn't one.
+ * How to reach the shop is Onkar's to give. The pages go up once there's a real email to write to. The person behind
+ * sahn and their city stay off the site for now (Onkar, 2026-11-26: sahn is to be a brand, not his name): with no
+ * legalName or place the pages speak as sahn, an independent label from india. Never put a place he doesn't run it from.
  */
 export const OPERATOR = {
   /** the legal name the shop runs under: a person's full name, or a firm */
-  legalName: "Onkar Yaglewad" as string | null,
+  legalName: null as string | null,
   /** the email that answers orders */
   email: "contact@sahn.in" as string | null,
   /** a phone number, or null for none */
   phone: null as string | null,
   /** where the shop is run from, as "city, state" (also where disputes are heard) */
-  place: "pune, maharashtra" as string | null,
+  place: null as string | null,
 };
 
-export const POLICIES_READY = !!(OPERATOR.legalName && OPERATOR.email && OPERATOR.place);
+export const POLICIES_READY = !!OPERATOR.email;
 
 /** the day these words last changed, yyyy-mm-dd */
 export const POLICIES_UPDATED = "2026-11-26";
@@ -28,7 +29,6 @@ export const POLICIES_UPDATED = "2026-11-26";
 export type PolicySlug = "shipping" | "refunds" | "terms" | "privacy" | "contact";
 export type Policy = { slug: PolicySlug; title: string; summary: string; sections: { heading: string; body: string[] }[] };
 
-const who = () => OPERATOR.legalName ?? "the owner of sahn";
 const mail = () => OPERATOR.email ?? "our order email";
 const [m0, m1] = SHOP.make, [r0, r1] = SHOP.road;
 const price = `₹${SHOP.price.toLocaleString("en-IN")}`;
@@ -117,7 +117,9 @@ export const POLICIES: Record<PolicySlug, Policy> = {
       {
         heading: "who we are",
         body: [
-          `sahn (this site and its shirts) is run by ${who()}${OPERATOR.place ? `, from ${OPERATOR.place}` : ""}, india. "we" and "us" here mean them; "you" means whoever buys or uses the site.`,
+          OPERATOR.legalName
+            ? `sahn (this site and its shirts) is run by ${OPERATOR.legalName}${OPERATOR.place ? `, from ${OPERATOR.place}` : ""}, india. "we" and "us" here mean them; "you" means whoever buys or uses the site.`
+            : `sahn (this site and its shirts) is an independent label from india. "we" and "us" here mean sahn; "you" means whoever buys or uses the site.`,
         ],
       },
       {
@@ -152,7 +154,7 @@ export const POLICIES: Record<PolicySlug, Policy> = {
       {
         heading: "the law",
         body: [
-          `these terms are governed by the laws of india. any dispute is for the courts at ${OPERATOR.place ?? "the place we run from"}, though we'd always rather hear from you first and sort it out.`,
+          `these terms are governed by the laws of india. any dispute is for the courts ${OPERATOR.place ? `at ${OPERATOR.place}` : "of india"}, though we'd always rather hear from you first and sort it out.`,
           `we may update these terms; the version on this page when you order is the one that applies to that order. last updated ${POLICIES_UPDATED}.`,
         ],
       },
@@ -197,7 +199,7 @@ export const POLICIES: Record<PolicySlug, Policy> = {
       {
         heading: "your rights",
         body: [
-          `under the Digital Personal Data Protection Act, 2023 you can ask what we hold about you, have it corrected, or have it erased (apart from what tax law makes us keep). write to ${mail()}; we answer within 7 days. ${who()} handles these requests and any complaint about how your data is used.`,
+          `under the Digital Personal Data Protection Act, 2023 you can ask what we hold about you, have it corrected, or have it erased (apart from what tax law makes us keep). write to ${mail()}; we answer within 7 days. ${OPERATOR.legalName ? `${OPERATOR.legalName} handles` : "we handle"} these requests and any complaint about how your data is used.`,
           `last updated ${POLICIES_UPDATED}.`,
         ],
       },
@@ -222,7 +224,7 @@ export const POLICIES: Record<PolicySlug, Policy> = {
       },
       {
         heading: "who runs sahn",
-        body: [`${who()}${OPERATOR.place ? `, ${OPERATOR.place}` : ""}, india.`],
+        body: [OPERATOR.legalName ? `${OPERATOR.legalName}${OPERATOR.place ? `, ${OPERATOR.place}` : ""}, india.` : "sahn, an independent label from india. write to us at the address above."],
       },
     ],
   },
