@@ -2,7 +2,7 @@ import { OPERATOR, POLICIES_UPDATED } from "@/content/policies";
 import { SHOP } from "@/content/shop";
 import { adminEmail, requireAdmin } from "@/lib/admin/auth";
 import { getSettings } from "@/lib/admin/settings";
-import { SignOutAll, Toggle } from "../../ui/client";
+import { SignOutAll } from "../../ui/client";
 import { Field, Fixed, Group, Page, Row, Section } from "../../ui/ui";
 
 export const metadata = { title: "settings" };
@@ -33,10 +33,7 @@ export default async function SettingsPage() {
 
       <Section title="the shop">
         <Group>
-          <Toggle icon="shop" label="taking orders" field="open" url="/api/admin/settings" value={s.open}
-            hint="off: the shirts stay on the site, checkout shows your closed message. the same switch as the top right"
-            confirmOff="checkout closes on the whole site at once. people can still look and fill their bag; anyone mid-payment can finish."
-            confirmOn="checkout opens again for everyone, at the prices shown now." />
+          <Row icon="shop" tone={s.open ? "ok" : "warn"} title={s.open ? "taking orders" : "not taking orders"} sub="switch it with shop live at the top right; closed, checkout shows your closed message" />
           <Row icon="card" title="prices" sub={`margin ₹${s.margin} a shirt, and each shirt's own price`} href="/admin/prices" />
           <Row icon="note" title="site words" sub="the top line and the closed message" href="/admin/words" />
           <Row icon="shield" title="health" sub="every service an order passes through, asked now" href="/admin/status" />

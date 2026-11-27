@@ -68,12 +68,12 @@ export function Section({ title, aside, children, className = "", id }: { title:
 
 /** one solid surface */
 export function Card({ children, className = "", pad = true }: { children: React.ReactNode; className?: string; pad?: boolean }) {
-  return <div className={`rounded-[22px] bg-s1 ${pad ? "p-5 md:p-6" : ""} ${className}`}>{children}</div>;
+  return <div className={`rounded-[14px] bg-s1 ${pad ? "p-5 md:p-6" : ""} ${className}`}>{children}</div>;
 }
 
 /** rows that belong together, on one card, a hairline between each */
 export function Group({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <div className={`divide-y divide-line/50 overflow-hidden rounded-[22px] bg-s1 ${className}`}>{children}</div>;
+  return <div className={`divide-y divide-line/50 overflow-hidden rounded-[14px] bg-s1 ${className}`}>{children}</div>;
 }
 
 export type Tone = "ok" | "warn" | "bad" | "blue" | "quiet";
@@ -127,7 +127,7 @@ export function Tile({ label, value, sub, delta, href, tone, icon }: {
       </div>
     </>
   );
-  const cls = "block rounded-[22px] bg-s1 p-5 md:p-6";
+  const cls = "block rounded-[14px] bg-s1 p-5 md:p-6";
   return href ? <Link href={href} className={`${cls} transition hover:bg-s2`}>{inner}</Link> : <div className={cls}>{inner}</div>;
 }
 
@@ -146,7 +146,7 @@ export function Delta({ now, was, word = "yesterday", money }: { now: number; wa
 /** a small word in a tinted pill */
 export function Badge({ children, tone = "quiet", dot }: { children: React.ReactNode; tone?: Tone; dot?: boolean }) {
   return (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-s2 px-2.5 py-1 text-[12.5px] font-medium leading-none text-ink/80">
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-[6px] bg-s2 px-2.5 py-1 text-[12.5px] font-medium leading-none text-ink/80">
       {dot ? <span className={`h-1.5 w-1.5 rounded-full ${DOT[tone]}`} /> : null}{children}
     </span>
   );
@@ -166,10 +166,10 @@ export function Light({ tone, children }: { tone: "ok" | "warn" | "bad" | "quiet
 export function Tabs({ items, active }: { items: { href: string; label: string; count?: number; key: string }[]; active: string }) {
   return (
     <nav className="-mx-4 mb-8 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:px-0">
-      <div className="inline-flex gap-1 rounded-full bg-s1 p-1">
+      <div className="inline-flex gap-1 rounded-[12px] bg-s1 p-1">
         {items.map((t) => (
           <Link key={t.key} href={t.href} aria-current={t.key === active ? "page" : undefined}
-            className={`whitespace-nowrap rounded-full px-4 py-2 text-[14px] transition ${t.key === active ? "bg-ink font-semibold text-paper" : "text-quiet hover:text-ink"}`}>
+            className={`a-press whitespace-nowrap rounded-[9px] px-4 py-2 text-[14px] transition ${t.key === active ? "bg-ink font-semibold text-paper" : "text-quiet hover:text-ink"}`}>
             {t.label}{t.count != null ? <span className={`tnum ml-1.5 ${t.key === active ? "text-paper/60" : "text-quiet/70"}`}>{t.count}</span> : null}
           </Link>
         ))}
@@ -181,7 +181,7 @@ export function Tabs({ items, active }: { items: { href: string; label: string; 
 /** nothing to show, said kindly */
 export function Empty({ icon = "check", title, sub }: { icon?: IconName; title: string; sub?: React.ReactNode }) {
   return (
-    <div className="grid place-items-center rounded-[22px] bg-s1 px-6 py-12 text-center">
+    <div className="grid place-items-center rounded-[14px] bg-s1 px-6 py-12 text-center">
       <Mark icon={icon} />
       <p className="mt-4 text-[15px]">{title}</p>
       {sub ? <p className="mt-1 max-w-sm text-[13px] text-quiet">{sub}</p> : null}
@@ -190,13 +190,13 @@ export function Empty({ icon = "check", title, sub }: { icon?: IconName; title: 
 }
 /** the old name: an honest blank */
 export function Missing({ children }: { children: React.ReactNode }) {
-  return <p className="rounded-[22px] bg-s1 px-5 py-4 text-[14px] text-quiet">{children}</p>;
+  return <p className="rounded-[14px] bg-s1 px-5 py-4 text-[14px] text-quiet">{children}</p>;
 }
 
 /** label and value lines on a card */
 export function KV({ items }: { items: [string, React.ReactNode][] }) {
   return (
-    <dl className="divide-y divide-line/50 overflow-hidden rounded-[22px] bg-s1">
+    <dl className="divide-y divide-line/50 overflow-hidden rounded-[14px] bg-s1">
       {items.map(([k, v]) => (
         <div key={k} className="flex min-h-[52px] flex-wrap items-baseline justify-between gap-x-6 gap-y-1 px-5 py-3.5 text-[15px]">
           <dt className="text-quiet">{k}</dt>
@@ -210,7 +210,7 @@ export function KV({ items }: { items: [string, React.ReactNode][] }) {
 /** a big number, plainly: what it is above, a quiet line below */
 export function Stat({ label, value, sub, tone }: { label: string; value: React.ReactNode; sub?: React.ReactNode; tone?: "blue" | "warn" }) {
   return (
-    <div className="rounded-[22px] bg-s1 p-5">
+    <div className="rounded-[14px] bg-s1 p-5">
       <div className="text-[14px] text-quiet">{label}</div>
       <div className={`tnum mt-3 text-[34px] font-extrabold leading-none tracking-[-0.04em] ${tone === "warn" ? "text-warn" : ""}`}>{value}</div>
       {sub ? <div className="tnum mt-2 text-[13px] text-quiet">{sub}</div> : null}
@@ -221,9 +221,9 @@ export function Stat({ label, value, sub, tone }: { label: string; value: React.
 /** ranked bars: what, a bar for how many, the number */
 export function Bars({ rows, empty = "nothing yet" }: { rows: { key: string; label: React.ReactNode; n: number; sub?: React.ReactNode }[]; empty?: string }) {
   const max = Math.max(1, ...rows.map((r) => r.n));
-  if (!rows.length) return <p className="rounded-[22px] bg-s1 px-5 py-6 text-[14px] text-quiet">{empty}</p>;
+  if (!rows.length) return <p className="rounded-[14px] bg-s1 px-5 py-6 text-[14px] text-quiet">{empty}</p>;
   return (
-    <ul className="grid gap-3 rounded-[22px] bg-s1 p-5">
+    <ul className="grid gap-3 rounded-[14px] bg-s1 p-5">
       {rows.map((r) => (
         <li key={r.key}>
           <div className="flex items-baseline justify-between gap-4 text-[15px]"><span className="min-w-0 truncate">{r.label}</span><span className="tnum shrink-0 text-quiet">{r.n}{r.sub ? <span className="ml-1.5 text-[13px]">{r.sub}</span> : null}</span></div>
@@ -238,7 +238,7 @@ export function Bars({ rows, empty = "nothing yet" }: { rows: { key: string; lab
 export function Table({ head, children, empty }: { head: React.ReactNode[]; children: React.ReactNode; empty?: string }) {
   const none = Array.isArray(children) && children.length === 0;
   return (
-    <div className="overflow-hidden rounded-[22px] bg-s1">
+    <div className="overflow-hidden rounded-[14px] bg-s1">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] border-collapse text-left text-[14px]">
           <thead>

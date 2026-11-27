@@ -76,7 +76,7 @@ export default async function Money({ searchParams }: { searchParams: Promise<{ 
         <Tile label="you keep" icon="chart" value={inr(t.margin)} delta={before ? { now: t.margin, was: before.margin, word, money: true } : undefined} sub={t.estimated ? "some fees estimated" : undefined} />
         <Tile label="sales" icon="money" value={inr(t.revenue)} delta={before ? { now: t.revenue, was: before.revenue, word, money: true } : undefined} />
         <Tile label="shirts sold" icon="shirt" value={t.shirts} delta={before ? { now: t.shirts, was: before.shirts, word } : undefined} sub={`in ${t.orders} order${t.orders === 1 ? "" : "s"}`} />
-        <Tile label="an order" icon="bag" value={inr(Math.round(avg))} sub={t.orders ? "on average" : "no orders yet"} />
+        <Tile label="average order" icon="bag" value={inr(Math.round(avg))} sub={t.orders ? "after refunds" : "no orders yet"} />
       </div>
 
       <div className="grid gap-x-6 lg:grid-cols-2">

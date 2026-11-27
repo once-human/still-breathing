@@ -27,15 +27,19 @@ export default async function Insights({ searchParams }: { searchParams: Promise
   const sp = await searchParams;
   const p = await pickPeriod(sp.p);
   const view = VIEWS.find(([k]) => k === sp.v)?.[0] ?? "";
-  const days = Math.max(1, Math.min(90, Math.ceil((p.to - p.from) / 86400_000)));
-  const [a, orders] = await Promise.all([summary(days), allOrders()]);
-  const from = Date.now() - (days - 1) * 86400_000;
+  // the log keeps 90 days, so all time and the oldest of 3 months read from there
+  const from = Math.max(p.from, Date.now() - 89 * 86400_000);
+  const days = Math.max(1, Math.ceil((p.to - from) / 86400_000));
+  const [a, orders] = await Promise.all([summary({ from, to: p.to }), allOrders()]);
   const paidByDay = new Map<string, number>();
-  for (const o of orders) if (isPaid(o) && o.stage !== "cancelled" && Date.parse(o.paidAt!) >= from - 86400_000) paidByDay.set(istDay(o.paidAt!), (paidByDay.get(istDay(o.paidAt!)) ?? 0) + 1);
+  for (const o of orders) {
+    const at = isPaid(o) && o.stage !== "cancelled" ? Date.parse(o.paidAt!) : NaN;
+    if (at >= from && at < p.to) paidByDay.set(istDay(o.paidAt!), (paidByDay.get(istDay(o.paidAt!)) ?? 0) + 1);
+  }
   const perDay = new Map(a.perDay.map((d) => [d.day, d]));
   const folded = new Map(a.folded.map((d) => [d.day, d.people]));
   const series = Array.from({ length: days }, (_, i) => {
-    const day = new Date(from + i * 86400_000 + 5.5 * 3600_000).toISOString().slice(0, 10);
+    const day = new Date(from + i * 86400_000 + 5.5 * 3600_000).toISOString().slice(0, 10); // from is midnight, or 89 days ago today
     const r = perDay.get(day);
     return { day, people: r?.people ?? folded.get(day) ?? 0, visits: r?.visits ?? 0, pages: r?.pages ?? 0, bag: r?.bag ?? 0, checkout: r?.checkout ?? 0, orders: paidByDay.get(day) ?? 0 };
   });
@@ -45,7 +49,7 @@ export default async function Insights({ searchParams }: { searchParams: Promise
 
   return (
     <>
-      <Page title="insights" sub={`${days === 90 && p.key === "all" ? "the kept 90 days" : p.label}: counted on this site only, no cookies, no outside trackers, each person once`} />
+      <Page title="insights" sub={`${from > p.from ? "the kept 90 days" : p.label}: counted on this site only, no cookies, no outside trackers, each person once`} />
       <div className="mb-5 flex flex-wrap gap-x-3 [&>nav]:mb-3">
         <Tabs active={view} items={VIEWS.map(([k, l]) => ({ key: k, label: l, href: href(k) }))} />
         <PeriodTabs p={p} keep={{ v: view || undefined }} />
@@ -59,17 +63,9 @@ export default async function Insights({ searchParams }: { searchParams: Promise
             <Tile label="on screen" icon="clock" value={span(t.active)} sub="a visit, on average" />
             <Tile label="pages" icon="list" value={t.visits ? Math.round((t.pages / t.visits) * 10) / 10 : 0} sub="a visit, on average" />
           </div>
-          <div className="grid gap-x-6 lg:grid-cols-[1fr_1.25fr]">
-            <Section title="the way to a sale" aside={<A href={href("shirts")}>each shirt →</A>}>
-              <Card>
-                <Funnel steps={[["came to the site", t.people], ["looked at a shirt", t.shirt], ["put one in the bag", t.bag], ["opened checkout", t.checkout], ["opened payment", t.pay], ["paid", t.paid]]} />
-                <p className="mt-5 border-t border-line/40 pt-4 text-[13px] text-quiet">{orderCount} paid order{orderCount === 1 ? "" : "s"} in this time; a person who paid in two visits counts once.</p>
-              </Card>
-            </Section>
-            <Section title="day by day" aside={<A href={href("days")}>as numbers →</A>}>
-              <Card><DayChart days={series} /></Card>
-            </Section>
-          </div>
+          <Section title="day by day" aside={<A href={href("days")}>as numbers →</A>}>
+            <Card><DayChart days={series} /></Card>
+          </Section>
           <div className="grid gap-x-6 lg:grid-cols-2">
             <Section title="where they came from" aside={<A href={href("sources")}>all →</A>}><Bars rows={top(a.referrers.slice(0, 6))} /></Section>
             <Section title="most read pages" aside={<A href={href("pages")}>all →</A>}>
@@ -81,6 +77,12 @@ export default async function Insights({ searchParams }: { searchParams: Promise
 
       {view === "shirts" ? (
         <>
+          <Section title="the way to a sale" aside="everyone, then each shirt below">
+            <Card>
+              <Funnel steps={[["came to the site", t.people], ["looked at a shirt", t.shirt], ["put one in the bag", t.bag], ["opened checkout", t.checkout], ["opened payment", t.pay], ["paid", t.paid]]} />
+              <p className="mt-5 border-t border-line/40 pt-4 text-[13px] text-quiet">{orderCount} paid order{orderCount === 1 ? "" : "s"} in this time; a person who paid in two visits counts once.</p>
+            </Card>
+          </Section>
           <Section title="each shirt, step by step" aside="people who did each step, and the share of those who saw it">
             <Table head={["shirt", ...STEPS.map(([, l]) => l)]} empty="no shirt looked at yet">
               {a.funnel.map((f) => (
@@ -151,7 +153,7 @@ export default async function Insights({ searchParams }: { searchParams: Promise
               {a.bots.map((b) => <Row key={b.name} icon="bot" title={b.name} sub={`${b.pages} page${b.pages === 1 ? "" : "s"} over ${b.days} day${b.days === 1 ? "" : "s"}`}
                 right={<span className="text-[13px] text-quiet">{new Date(b.last).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).toLowerCase()}</span>} />)}
             </Group>
-          ) : <p className="rounded-[22px] bg-s1 px-5 py-10 text-center text-[15px] text-quiet">no programs or link previews</p>}
+          ) : <p className="rounded-[14px] bg-s1 px-5 py-10 text-center text-[15px] text-quiet">no programs or link previews</p>}
         </Section>
       ) : null}
     </>

@@ -84,7 +84,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         actions={<a href={orderPath(o.id)} target="_blank" rel="noreferrer" className={BTN.plain}>buyer&apos;s page<Icon name="out" className="h-4 w-4" /></a>} />
 
       {o.problem ? (
-        <div className="a-pop mb-8 flex items-start gap-4 rounded-[22px] bg-warn/10 p-5">
+        <div className="a-pop mb-8 flex items-start gap-4 rounded-[14px] bg-warn/10 p-5">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-warn/15 text-warn"><Icon name="alert" /></span>
           <div><div className="text-[15px] font-semibold text-warn">needs you</div><p className="mt-0.5 text-[14px] text-ink/85">{o.problem}</p></div>
         </div>

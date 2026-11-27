@@ -12,13 +12,13 @@ import { CsrfProvider, Nav, ShopSwitch } from "../ui/client";
 export default async function InLayout({ children }: { children: React.ReactNode }) {
   const a = await requireAdmin();
   // GitHub skips scheduled runs when it's busy: a late sync runs after this page is sent
-  await syncIfLate().catch(() => {});
+  syncIfLate();
   const s = await getSettings().catch(() => null);
   return (
     <CsrfProvider token={a.csrf}>
       <Nav email={a.email} />
       <div className="md:pl-60">
-        <div className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 bg-paper px-4 md:h-20 md:justify-end md:px-10">
+        <div className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 bg-paper px-4 md:justify-end md:px-10">
           <Link href="/admin" className="text-[24px] font-extrabold tracking-[-0.05em] md:hidden">sahn</Link>
           <ShopSwitch open={!!s?.open} connected={shopOpen()} />
         </div>

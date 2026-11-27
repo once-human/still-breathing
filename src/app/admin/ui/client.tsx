@@ -28,7 +28,7 @@ export function CsrfProvider({ token, children }: { token: string; children: Rea
         {children}
         <div className="pointer-events-none fixed inset-x-4 bottom-24 z-[60] mx-auto grid w-auto max-w-[400px] gap-2 md:inset-x-auto md:bottom-6 md:right-6" role="status" aria-live="polite">
           {toasts.map((t) => (
-            <div key={t.id} className="a-pop pointer-events-auto flex items-start gap-3 rounded-2xl bg-s3 px-4 py-3.5 text-[14px] shadow-[0_12px_40px_rgba(0,0,0,0.5)]">
+            <div key={t.id} className="a-pop pointer-events-auto flex items-start gap-3 rounded-[12px] bg-s3 px-4 py-3.5 text-[14px] shadow-[0_12px_40px_rgba(0,0,0,0.5)]">
               <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-s2 ${t.ok ? "text-ok" : "text-bad"}`}><Icon name={t.ok ? "check" : "x"} className="h-3.5 w-3.5" /></span>
               <span className="min-w-0">{t.text}</span>
             </div>
@@ -79,18 +79,18 @@ export function usePoll<T>(url: string, ms: number, initial: T) {
 
 /* ---------- navigation ---------- */
 
-/** the admin's map: six sections, each with the few pages that belong to it */
+/** the admin's map: the overview, then five sections that open to show their pages */
 type Item = [href: string, label: string, icon: IconName];
-const SECTIONS: { name: string; items: Item[] }[] = [
-  { name: "overview", items: [["/admin", "overview", "home"]] },
-  { name: "sales", items: [["/admin/orders", "orders", "orders"], ["/admin/money", "money", "money"]] },
-  { name: "customers", items: [["/admin/people", "people", "people"], ["/admin/accounts", "accounts", "user"]] },
-  { name: "shop", items: [["/admin/products", "shirts", "shirt"], ["/admin/prices", "prices", "card"], ["/admin/words", "site words", "note"]] },
-  { name: "visitors", items: [["/admin/live", "live now", "live"], ["/admin/visitors", "visits", "visitors"], ["/admin/insights", "insights", "chart"]] },
-  { name: "system", items: [["/admin/status", "health", "shield"], ["/admin/settings", "settings", "settings"], ["/admin/audit", "audit log", "list"]] },
+const HOME: Item = ["/admin", "overview", "home"];
+const SECTIONS: { name: string; icon: IconName; items: Item[] }[] = [
+  { name: "sales", icon: "orders", items: [["/admin/orders", "orders", "orders"], ["/admin/money", "money", "money"]] },
+  { name: "customers", icon: "people", items: [["/admin/people", "people", "people"], ["/admin/accounts", "accounts", "user"]] },
+  { name: "shop", icon: "shirt", items: [["/admin/products", "shirts", "shirt"], ["/admin/prices", "prices", "card"], ["/admin/words", "site words", "note"]] },
+  { name: "visitors", icon: "visitors", items: [["/admin/live", "live now", "live"], ["/admin/visitors", "visits", "visitors"], ["/admin/insights", "insights", "chart"]] },
+  { name: "system", icon: "settings", items: [["/admin/status", "health", "shield"], ["/admin/settings", "settings", "settings"], ["/admin/audit", "audit log", "list"]] },
 ];
 /** on a phone, the four used most along the bottom, and everything else under "more" */
-const BAR: Item[] = [["/admin", "overview", "home"], ["/admin/orders", "orders", "orders"], ["/admin/people", "people", "people"], ["/admin/live", "live", "live"]];
+const BAR: Item[] = [HOME, ["/admin/orders", "orders", "orders"], ["/admin/people", "people", "people"], ["/admin/live", "live", "live"]];
 
 const isOn = (path: string, href: string) => (href === "/admin" ? path === "/admin" : path === href || path.startsWith(href + "/"));
 
@@ -102,25 +102,59 @@ function LiveCount({ tiny }: { tiny?: boolean }) {
     : <span className="tnum ml-auto inline-flex items-center gap-1.5 text-[13px] text-ink/80"><span className="h-1.5 w-1.5 rounded-full bg-ok" />{data.now}</span>;
 }
 
+const OPEN_KEY = "admin-nav-open";
+
+/** the sections, each opening to its pages; the one you're in is always open, the rest stay as you left them */
 function Links({ path, onGo }: { path: string; onGo?: () => void }) {
+  const here = SECTIONS.find((sec) => sec.items.some(([href]) => isOn(path, href)))?.name;
+  const [open, setOpen] = useState<string[]>(here ? [here] : []);
+  useEffect(() => {
+    try {
+      const kept = JSON.parse(localStorage.getItem(OPEN_KEY) ?? "[]") as string[];
+      if (Array.isArray(kept)) setOpen((o) => [...new Set([...o, ...kept])]);
+    } catch {}
+  }, []);
+  useEffect(() => {
+    if (here) setOpen((o) => (o.includes(here) ? o : [...o, here]));
+  }, [here]);
+  const flip = (name: string) => setOpen((o) => {
+    const next = o.includes(name) ? o.filter((x) => x !== name) : [...o, name];
+    try { localStorage.setItem(OPEN_KEY, JSON.stringify(next)); } catch {}
+    return next;
+  });
+  const link = ([href, label, icon]: Item, sub?: boolean) => {
+    const on = isOn(path, href);
+    return (
+      <Link key={href} href={href} onClick={onGo} aria-current={on ? "page" : undefined}
+        className={`a-press flex h-10 items-center gap-3 rounded-[10px] px-3 text-[15px] ${sub ? "pl-[46px]" : ""} ${on ? "bg-s2 font-medium text-ink" : "text-ink/65 hover:bg-s1 hover:text-ink"}`}>
+        {sub ? null : <Icon name={icon} className="h-[19px] w-[19px]" />}{label}{href === "/admin/live" ? <LiveCount /> : null}
+      </Link>
+    );
+  };
   return (
-    <div className="grid gap-6">
-      {SECTIONS.map((sec) => (
-        <div key={sec.name}>
-          {sec.items.length > 1 || sec.name !== sec.items[0][1] ? <div className="mb-1 px-3 text-[12px] font-medium text-quiet/80">{sec.name}</div> : null}
-          <div className="grid gap-0.5">
-            {sec.items.map(([href, label, icon]) => {
-              const on = isOn(path, href);
-              return (
-                <Link key={href} href={href} onClick={onGo} aria-current={on ? "page" : undefined}
-                  className={`a-press flex h-10 items-center gap-3 rounded-xl px-3 text-[15px] ${on ? "bg-s2 font-medium text-ink" : "text-ink/65 hover:bg-s1 hover:text-ink"}`}>
-                  <Icon name={icon} className="h-[19px] w-[19px]" />{label}{href === "/admin/live" ? <LiveCount /> : null}
-                </Link>
-              );
-            })}
+    <div className="grid gap-1">
+      {link(HOME)}
+      {SECTIONS.map((sec) => {
+        const isOpen = open.includes(sec.name);
+        const has = sec.name === here;
+        return (
+          <div key={sec.name}>
+            <button type="button" onClick={() => flip(sec.name)} aria-expanded={isOpen}
+              className={`a-press flex h-10 w-full items-center gap-3 rounded-[10px] px-3 text-left text-[15px] hover:bg-s1 hover:text-ink ${has ? "text-ink" : "text-ink/65"}`}>
+              <Icon name={sec.icon} className="h-[19px] w-[19px]" />{sec.name}
+              {!isOpen && sec.name === "visitors" ? <LiveCount /> : null}
+              <Icon name="down" className={`h-4 w-4 text-quiet transition-transform duration-150 ${!isOpen && sec.name === "visitors" ? "ml-2" : "ml-auto"} ${isOpen ? "rotate-180" : ""}`} />
+            </button>
+            <div className={`grid transition-[grid-template-rows] duration-150 ease-out ${isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+              <div className="grid min-h-0 gap-0.5 overflow-hidden" inert={!isOpen}>
+                <div className="h-0.5" />
+                {sec.items.map((it) => link(it, true))}
+                <div className="h-1" />
+              </div>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -137,7 +171,7 @@ export function Nav({ email }: { email: string }) {
         <Links path={path} />
         <div className="mt-auto grid gap-0.5 pt-8 text-[14px] text-ink/65">
           <span className="truncate px-3 pb-2 text-[13px] text-quiet" title={email}>{email}</span>
-          <a href="/" target="_blank" rel="noreferrer" className="a-press flex h-10 items-center gap-3 rounded-xl px-3 hover:bg-s1 hover:text-ink"><Icon name="out" className="h-[18px] w-[18px]" />open the shop</a>
+          <a href="/" target="_blank" rel="noreferrer" className="a-press flex h-10 items-center gap-3 rounded-[10px] px-3 hover:bg-s1 hover:text-ink"><Icon name="out" className="h-[18px] w-[18px]" />open the shop</a>
           <SignOut />
         </div>
       </aside>
@@ -161,7 +195,7 @@ export function Nav({ email }: { email: string }) {
         <Modal title="everything" onClose={() => setMore(false)}>
           <div className="-mx-3 mt-2"><Links path={path} onGo={() => setMore(false)} /></div>
           <div className="-mx-3 mt-6 grid gap-0.5 border-t border-line/40 pt-4 text-[15px] text-ink/65">
-            <a href="/" target="_blank" rel="noreferrer" className="flex h-10 items-center gap-3 rounded-xl px-3"><Icon name="out" className="h-[18px] w-[18px]" />open the shop</a>
+            <a href="/" target="_blank" rel="noreferrer" className="flex h-10 items-center gap-3 rounded-[10px] px-3"><Icon name="out" className="h-[18px] w-[18px]" />open the shop</a>
             <SignOut />
           </div>
         </Modal>
@@ -197,7 +231,7 @@ export function ShopSwitch({ open, connected }: { open: boolean; connected: bool
   return (
     <>
       <button type="button" onClick={() => (!connected ? undefined : on ? setAsk(true) : void save(true))} disabled={!connected} title={connected ? undefined : "payments aren't connected"}
-        className="a-press inline-flex h-10 items-center gap-2.5 rounded-full bg-s1 pl-4 pr-1.5 text-[14px] font-medium hover:bg-s2">
+        className="a-press inline-flex h-10 items-center gap-2.5 rounded-[12px] bg-s1 pl-4 pr-1.5 text-[14px] font-medium hover:bg-s2">
         <span className={`h-2 w-2 rounded-full ${live ? "bg-ok" : "bg-warn"}`} />
         {!connected ? "not connected" : live ? "shop live" : "shop closed"}
         <span className={`relative h-7 w-12 rounded-full transition-colors duration-100 ${live ? "bg-ink" : "bg-s3"}`}><span className={`a-spring absolute top-1 h-5 w-5 rounded-full shadow transition-[left,background-color] ${live ? "left-6 bg-paper" : "left-1 bg-quiet"}`} /></span>
@@ -218,7 +252,7 @@ export function ShopSwitch({ open, connected }: { open: boolean; connected: bool
 function SignOut() {
   const post = useAdminPost();
   return (
-    <button type="button" className="a-press flex h-10 items-center gap-3 rounded-xl px-3 text-left hover:bg-s1 hover:text-ink" onClick={async () => {
+    <button type="button" className="a-press flex h-10 items-center gap-3 rounded-[10px] px-3 text-left hover:bg-s1 hover:text-ink" onClick={async () => {
       await post("/api/admin/session", { signOut: true });
       window.location.href = "/admin/login";
     }}><Icon name="signout" className="h-[18px] w-[18px]" />sign out</button>
@@ -231,14 +265,14 @@ export function SignOutAll() {
 
 /* ---------- buttons, pop-ups ---------- */
 
-const btn = "a-press inline-flex h-11 items-center justify-center gap-2 rounded-full px-5 text-[15px] font-medium disabled:cursor-not-allowed disabled:opacity-40";
+const btn = "a-press inline-flex h-11 items-center justify-center gap-2 rounded-[10px] px-5 text-[15px] font-medium disabled:cursor-not-allowed disabled:opacity-40";
 export const BTN = {
   plain: `${btn} bg-s2 text-ink hover:bg-s3`,
   main: `${btn} bg-ink font-semibold text-paper hover:bg-ink/90`,
   danger: `${btn} bg-bad/12 text-bad hover:bg-bad/20`,
   dangerMain: `${btn} bg-bad font-semibold text-black hover:bg-bad/90`,
 };
-export const FIELD = "h-12 w-full rounded-2xl bg-s2 px-4 text-[15px] text-ink ring-1 ring-transparent transition placeholder:text-quiet/70 focus:bg-s3 focus:ring-ink/30 focus:outline-none disabled:opacity-60";
+export const FIELD = "h-12 w-full rounded-[10px] bg-s2 px-4 text-[15px] text-ink ring-1 ring-transparent transition placeholder:text-quiet/70 focus:bg-s3 focus:ring-ink/30 focus:outline-none disabled:opacity-60";
 
 /** a pop-up: a sheet from the bottom on a phone, a card in the middle on a computer; Escape or outside closes it */
 export function Modal({ title, children, onClose, danger }: { title: string; children: React.ReactNode; onClose: () => void; danger?: boolean }) {
@@ -259,7 +293,7 @@ export function Modal({ title, children, onClose, danger }: { title: string; chi
   return (
     <div className="a-fade fixed inset-0 z-[70] flex items-end justify-center bg-black/70 md:items-center md:p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div ref={box} role="dialog" aria-modal="true" aria-label={title}
-        className="a-sheet max-h-[92dvh] w-full overflow-y-auto rounded-t-[28px] bg-s1 px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-20px_60px_rgba(0,0,0,0.5)] md:max-w-[460px] md:rounded-[28px] md:pb-6 md:pt-6">
+        className="a-sheet max-h-[92dvh] w-full overflow-y-auto rounded-t-[18px] bg-s1 px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-20px_60px_rgba(0,0,0,0.5)] md:max-w-[460px] md:rounded-[18px] md:pb-6 md:pt-6">
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-s3 md:hidden" />
         <h3 className={`text-[22px] font-bold leading-tight tracking-[-0.02em] ${danger ? "text-bad" : ""}`}>{title}</h3>
         <div className="mt-3">{children}</div>
@@ -338,7 +372,7 @@ export function Act({ label, confirm, url, body, danger, typeToConfirm, done, go
                 <input value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} className={`${FIELD} font-mono`} />
               </label>
             ) : null}
-            {err ? <p className="a-pop rounded-2xl bg-bad/10 px-4 py-3 text-[14px] text-bad">{err}</p> : null}
+            {err ? <p className="a-pop rounded-[12px] bg-bad/10 px-4 py-3 text-[14px] text-bad">{err}</p> : null}
             <div className="mt-2 grid grid-cols-2 gap-2">
               <button type="button" disabled={busy} onClick={() => setOpen(false)} className={BTN.plain}>cancel</button>
               <button type="submit" disabled={!!blocked || busy} className={danger ? BTN.dangerMain : BTN.main}>{busy ? "working…" : label}</button>
@@ -438,10 +472,10 @@ export function Segmented<T extends string>({ value, options, url, body, field, 
   };
   const tone = { ok: "bg-ink text-paper", warn: "bg-ink text-paper", off: "bg-ink text-paper" };
   return (
-    <div role="radiogroup" aria-label={label} aria-busy={busy} className="inline-flex rounded-full bg-s2 p-1">
+    <div role="radiogroup" aria-label={label} aria-busy={busy} className="inline-flex rounded-[12px] bg-s2 p-1">
       {options.map((o) => (
         <button key={o.value} type="button" role="radio" aria-checked={v === o.value} onClick={() => void pick(o.value)}
-          className={`a-press whitespace-nowrap rounded-full ${compact ? "px-3 py-1.5 text-[13px]" : "px-4 py-2 text-[14px]"} ${v === o.value ? `${tone[o.tone ?? "off"]} font-semibold shadow-sm` : "text-quiet hover:text-ink"}`}>
+          className={`a-press whitespace-nowrap rounded-[9px] ${compact ? "px-3 py-1.5 text-[13px]" : "px-4 py-2 text-[14px]"} ${v === o.value ? `${tone[o.tone ?? "off"]} font-semibold shadow-sm` : "text-quiet hover:text-ink"}`}>
           {o.label}
         </button>
       ))}
@@ -466,7 +500,7 @@ export function SaveBar({ dirty, busy, onSave, onDiscard, summary, warn }: {
   return (
     <>
       <div aria-hidden={!dirty} className={`a-spring fixed inset-x-3 bottom-[88px] z-40 mx-auto max-w-[640px] transition-all md:bottom-6 md:left-[16rem] ${dirty ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-[140%] opacity-0"}`}>
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[28px] bg-s3 py-2.5 pl-5 pr-2.5 shadow-[0_16px_50px_rgba(0,0,0,0.55)]">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] bg-s3 py-2.5 pl-5 pr-2.5 shadow-[0_16px_50px_rgba(0,0,0,0.55)]">
           <span className="min-w-0 text-[14px]"><span className="mr-2 inline-block h-2 w-2 rounded-full bg-warn" />{summary} changed</span>
           <div className="flex gap-2">
             <button type="button" disabled={busy} onClick={onDiscard} className={`${BTN.plain} !h-10 !bg-s2`}>discard</button>

@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -94,7 +95,8 @@ export async function useLink(token: string, ip: string, ua: string, from = "") 
 }
 
 /** the signed-in admin, or null. Checks the session in the database on every call, and that it's still the allowed address. */
-export async function currentAdmin(): Promise<Admin | null> {
+/** once per request, however many parts of the page ask */
+export const currentAdmin = cache(async function currentAdmin(): Promise<Admin | null> {
   if (!adminReady()) return null;
   const t = (await cookies()).get(COOKIE)?.value;
   if (!t || t.length > 100) return null;
@@ -103,7 +105,7 @@ export async function currentAdmin(): Promise<Admin | null> {
     [sha(t)],
   ).catch(() => null);
   return s && s.email === adminEmail() ? s : null;
-}
+});
 
 /** for every /admin page: the admin, or off to the sign-in page */
 export async function requireAdmin(): Promise<Admin> {

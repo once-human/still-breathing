@@ -14,7 +14,7 @@ export default async function Person({ params }: { params: Promise<{ id: string 
   await requireAdmin();
   const id = (await params).id;
   if (!/^[a-f0-9]{12}$/.test(id)) notFound();
-  const visits = await listVisits(24 * 90, { kind: "person", person: id }, 200).catch(() => []);
+  const visits = await listVisits({ from: 0, to: Date.now() }, { kind: "person", person: id }, 200).catch(() => []);
   if (!visits.length) notFound();
   const first = visits[visits.length - 1], last = visits[0];
   const ms = visits.reduce((t, v) => t + v.activeMs, 0), pages = visits.reduce((t, v) => t + v.pages, 0);

@@ -42,7 +42,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
               {SIZE_ORDER.map((z) => {
                 const on = sellable.has(z);
                 return <span key={z} title={on ? "can be bought" : !p.skus[z] ? "qikink has no product for this size" : p.status !== "live" ? "the shirt isn't on sale" : "checkout is closed"}
-                  className={`tnum grid h-8 min-w-8 place-items-center rounded-full px-2 text-[13px] ${on ? "bg-s3 text-ink" : "text-quiet/60 line-through decoration-quiet/40"}`}>{z}</span>;
+                  className={`tnum grid h-8 min-w-8 place-items-center rounded-[6px] px-2 text-[13px] ${on ? "bg-s3 text-ink" : "text-quiet/60 line-through decoration-quiet/40"}`}>{z}</span>;
               })}
             </span>
           </div>

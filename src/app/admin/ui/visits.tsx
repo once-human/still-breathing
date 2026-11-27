@@ -38,7 +38,7 @@ export function Reached({ steps }: { steps: Step[] }) {
   if (!got.length) return null;
   return (
     <span className="inline-flex flex-wrap gap-1">
-      {got.map(([s, w]) => <span key={s} className="inline-flex items-center gap-1 rounded-full bg-s2 px-2 py-0.5 text-[12px] text-ink/80">{s === "paid" ? <span className="h-1.5 w-1.5 rounded-full bg-ok" /> : null}{w}</span>)}
+      {got.map(([s, w]) => <span key={s} className="inline-flex items-center gap-1 rounded-[6px] bg-s2 px-2 py-0.5 text-[12px] text-ink/80">{s === "paid" ? <span className="h-1.5 w-1.5 rounded-full bg-ok" /> : null}{w}</span>)}
     </span>
   );
 }
@@ -54,9 +54,9 @@ export const deviceIcon = (v: Pick<VisitRow, "kind" | "device">): IconName =>
 
 /** visits as rows on one card: where and on what, the pages they went through, when, and how far they got */
 export function VisitTable({ visits, empty }: { visits: VisitRow[]; empty?: string }) {
-  if (!visits.length) return <p className="rounded-[22px] bg-s1 px-5 py-10 text-center text-[15px] text-quiet">{empty ?? "nobody yet"}</p>;
+  if (!visits.length) return <p className="rounded-[14px] bg-s1 px-5 py-10 text-center text-[15px] text-quiet">{empty ?? "nobody yet"}</p>;
   return (
-    <div className="divide-y divide-line/50 overflow-hidden rounded-[22px] bg-s1">
+    <div className="divide-y divide-line/50 overflow-hidden rounded-[14px] bg-s1">
       {visits.map((v) => (
         <Link key={v.id} href={`/admin/visitors/${encodeURIComponent(v.id)}`} className="group flex items-center gap-4 px-5 py-3.5 transition hover:bg-s2">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-s2 text-ink/75"><Icon name={deviceIcon(v)} className="h-[19px] w-[19px]" /></span>

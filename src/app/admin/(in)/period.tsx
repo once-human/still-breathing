@@ -4,7 +4,7 @@ import { Tabs } from "../ui/ui";
 import { Remember } from "./Remember";
 
 /** the stretches of time every count in the admin can be read over; the one picked last is kept for next time */
-export const PERIODS = [["month", "this month"], ["30", "30 days"], ["7", "7 days"], ["all", "all time"]] as const;
+export const PERIODS = [["month", "this month"], ["last", "last month"], ["quarter", "3 months"], ["all", "all time"]] as const;
 
 export async function pickPeriod(asked?: string): Promise<Period> {
   const want = asked ?? (await cookies()).get("admin-period")?.value;

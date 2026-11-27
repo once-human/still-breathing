@@ -131,12 +131,17 @@ const EXTRA = `
   LEFT JOIN LATERAL (SELECT array_agg(DISTINCT step) FILTER (WHERE step IS NOT NULL) AS reached, array_agg(DISTINCT design) FILTER (WHERE design IS NOT NULL) AS shirts
     FROM visit_events e WHERE e.visit = v.id) s ON true`;
 
+/** a stretch of time as epoch ms, kept inside the 90 days the log holds; SQL bounds made from numbers only */
+export type Window = { from: number; to: number };
+const clampW = (w: Window): Window => ({ from: Math.max(w.from, Date.now() - KEEP_DAYS * 86400_000), to: Math.min(w.to, Date.now() + 60_000) });
+const ts = (ms: number) => `to_timestamp(${Math.floor(ms) / 1000})`;
+
 export type VisitFilter = { kind?: "person" | "bot" | "all"; referrer?: string; device?: string; place?: string; shirt?: string; reached?: string; person?: string };
 
-/** Visits in the last `hours`, newest first, with filters. */
-export async function listVisits(hours: number, f: VisitFilter = {}, limit = 400): Promise<VisitRow[]> {
-  const h = Math.min(KEEP_DAYS * 24, Math.max(1, Math.floor(hours)));
-  const params: (string | number)[] = [h, f.kind ?? "person"];
+/** Visits active in a window, newest first, with filters. */
+export async function listVisits(win: Window, f: VisitFilter = {}, limit = 400): Promise<VisitRow[]> {
+  const w = clampW(win);
+  const params: (string | number)[] = [f.kind ?? "person"];
   const where: string[] = [];
   const add = (sql: string, v: string) => {
     params.push(v);
@@ -152,7 +157,7 @@ export async function listVisits(hours: number, f: VisitFilter = {}, limit = 400
     `SELECT v.*, ${PERSON}, t.trail, s.reached, s.shirts,
        CASE WHEN v.visitor IS NULL THEN NULL ELSE (SELECT count(*)::int FROM visits o WHERE o.visitor = v.visitor AND o.started_at <= v.started_at) END AS nth
      FROM visits v ${EXTRA}
-     WHERE v.last_at > now() - make_interval(hours => $1::int) AND ($2 = 'all' OR v.kind = $2) ${where.length ? `AND ${where.join(" AND ")}` : ""}
+     WHERE v.last_at >= ${ts(w.from)} AND v.last_at < ${ts(w.to)} AND ($1 = 'all' OR v.kind = $1) ${where.length ? `AND ${where.join(" AND ")}` : ""}
      ORDER BY v.last_at DESC LIMIT ${Math.max(1, Math.min(1000, limit))}`,
     params,
   );
@@ -190,9 +195,9 @@ export async function liveCount() {
   );
 }
 
-/** People (one per browser code) seen in the last `hours`, most recent first, with their totals over the kept log. */
-export async function listPeople(hours: number, limit = 300): Promise<PersonRow[]> {
-  const h = Math.min(KEEP_DAYS * 24, Math.max(1, Math.floor(hours)));
+/** People (one per browser code) seen in a window, most recent first, with their totals over the kept log. */
+export async function listPeople(win: Window, limit = 300): Promise<PersonRow[]> {
+  const w = clampW(win);
   const rs = await rows<{
     id: string; first_at: string; last_at: string; visits: number; pages: number; active_ms: number; places: string[] | null; devices: string[] | null;
     lang: string | null; referrer: string | null; reached: Step[] | null;
@@ -208,9 +213,8 @@ export async function listPeople(hours: number, limit = 300): Promise<PersonRow[
      FROM visits v
      WHERE v.kind = 'person' AND v.visitor IS NOT NULL
      GROUP BY v.visitor
-     HAVING max(v.last_at) > now() - make_interval(hours => $1::int)
+     HAVING bool_or(v.last_at >= ${ts(w.from)} AND v.last_at < ${ts(w.to)})
      ORDER BY max(v.last_at) DESC LIMIT ${Math.max(1, Math.min(1000, limit))}`,
-    [h],
   );
   return rs.map((r) => ({
     id: r.id, firstAt: new Date(r.first_at).toISOString(), lastAt: new Date(r.last_at).toISOString(), visits: r.visits, pages: r.pages,
@@ -238,10 +242,10 @@ export async function visitEvents(id: string): Promise<EventRow[]> {
 export type Count = { key: string; visits: number; people: number };
 export type ShirtFunnel = { design: string; saw: number; size: number; look: number; tryon: number; bag: number; buy: number; checkout: number; pay: number; paid: number };
 
-/** The numbers for the activity page, over the last `days` (people only). */
-export async function summary(days: number) {
-  const d = Math.max(1, Math.min(KEEP_DAYS, Math.floor(days)));
-  const W = `v.kind = 'person' AND v.started_at > now() - make_interval(days => ${d})`;
+/** The numbers for the insights page, over a window (people only). */
+export async function summary(win: Window) {
+  const w = clampW(win);
+  const W = `v.kind = 'person' AND v.started_at >= ${ts(w.from)} AND v.started_at < ${ts(w.to)}`;
   const top = (expr: string, n = 15) =>
     rows<Count>(`SELECT coalesce(${expr}, '?') AS key, count(*)::int AS visits, count(DISTINCT v.visitor)::int AS people FROM visits v WHERE ${W} GROUP BY 1 ORDER BY people DESC, visits DESC LIMIT ${n}`);
   const [perDay, totals, pages, referrers, devices, places, screens, langs, funnel, bag, bots, folded] = await Promise.all([
@@ -289,10 +293,10 @@ export async function summary(days: number) {
     ),
     rows<{ name: string; pages: number; days: number; last: string }>(
       `SELECT coalesce(device, 'Unknown') AS name, sum(pages)::int AS pages, count(DISTINCT (started_at AT TIME ZONE '${TZ}')::date)::int AS days, max(last_at) AS last
-       FROM visits v WHERE v.kind = 'bot' AND v.started_at > now() - make_interval(days => ${d}) GROUP BY 1 ORDER BY pages DESC LIMIT 25`,
+       FROM visits v WHERE v.kind = 'bot' AND v.started_at >= ${ts(w.from)} AND v.started_at < ${ts(w.to)} GROUP BY 1 ORDER BY pages DESC LIMIT 25`,
     ),
     rows<{ day: string; people: number }>(
-      `SELECT day::text, sum(visitors)::int AS people FROM visit_days WHERE kind = 'person' AND day > (now() AT TIME ZONE '${TZ}')::date - ${d} GROUP BY 1 ORDER BY 1`,
+      `SELECT day::text, sum(visitors)::int AS people FROM visit_days WHERE kind = 'person' AND day >= (${ts(win.from)} AT TIME ZONE '${TZ}')::date AND day < (${ts(win.to)} AT TIME ZONE '${TZ}')::date GROUP BY 1 ORDER BY 1`,
     ),
   ]);
   return {

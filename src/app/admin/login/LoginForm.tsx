@@ -7,7 +7,7 @@ export function LoginForm() {
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"idle" | "busy" | "sent" | "error">("idle");
   if (state === "sent")
-    return <p className="a-pop rounded-[22px] bg-s1 p-5 text-[15px] leading-snug">if that&apos;s the admin&apos;s address, a link is on its way. it works once, for 10 minutes. open it in this browser or any other.</p>;
+    return <p className="a-pop rounded-[14px] bg-s1 p-5 text-[15px] leading-snug">if that&apos;s the admin&apos;s address, a link is on its way. it works once, for 10 minutes. open it in this browser or any other.</p>;
   return (
     <form className="grid gap-4" onSubmit={async (e) => {
       e.preventDefault();

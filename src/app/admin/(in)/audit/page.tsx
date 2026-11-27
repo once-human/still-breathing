@@ -52,10 +52,10 @@ export default async function Audit({ searchParams }: { searchParams: Promise<{ 
       <Page title="audit log" sub="every sign-in and every change made here, with who and when. nothing in it can be changed or removed" />
       <form method="get" className="relative mb-8">
         <Icon name="search" className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-quiet" />
-        <input name="q" defaultValue={q} placeholder="search an action, an order, an email" className={`${FIELD} !rounded-full !pl-12`} />
+        <input name="q" defaultValue={q} placeholder="search an action, an order, an email" className={`${FIELD} !pl-12`} />
       </form>
       {list.length ? (
-        <div className="divide-y divide-line/50 overflow-hidden rounded-[22px] bg-s1">
+        <div className="divide-y divide-line/50 overflow-hidden rounded-[14px] bg-s1">
           {list.map((r) => {
             const [words, icon, bad] = say(r.action);
             const t = target(r.target);

@@ -47,7 +47,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
   const issues = problems(checks).filter((c) => c.key !== "open");
   const n = Math.max(1, Math.ceil((p.to - chartFrom) / 86400_000));
   const days = Array.from({ length: n }, (_, i) => {
-    const k = day(p.to - (n - 1 - i) * 86400_000);
+    const k = day(p.to - 1 - (n - 1 - i) * 86400_000);
     return { day: k, people: perDay.get(k) ?? 0, orders: d.byDay.get(k) ?? 0 };
   });
   const word = p.prev?.word ?? "";
@@ -59,8 +59,6 @@ export default async function Overview({ searchParams }: { searchParams: Promise
         ? <>since you last looked, {when(seen!)}: <span className="text-ink">{since.people} {since.people === 1 ? "person" : "people"}, {since.bags} put in the bag, {sinceOrders} order{sinceOrders === 1 ? "" : "s"}</span>{count.now ? <>. <span className="text-ink">{count.now} on the site now</span></> : null}</>
         : count.now ? `${count.now} on the site now` : "how the shop is doing"} />
 
-      <PeriodTabs p={p} />
-
       {issues.length || d.needs.length ? (
         <Section title="needs you">
           <Group>
@@ -69,6 +67,9 @@ export default async function Overview({ searchParams }: { searchParams: Promise
           </Group>
         </Section>
       ) : null}
+
+      <PeriodTabs p={p} />
+
 
       <div className="mb-10 grid grid-cols-2 gap-3 md:mb-12 lg:grid-cols-4">
         <Tile label="people" icon="visitors" value={f.people} delta={fBefore ? { now: f.people, was: fBefore.people, word } : undefined} sub={`${f.returning} came back`} href="/admin/insights" />

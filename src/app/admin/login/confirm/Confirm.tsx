@@ -13,10 +13,10 @@ export function Confirm() {
     history.replaceState(null, "", window.location.pathname); // the token leaves the address bar and history
   }, []);
   if (token === null) return null;
-  if (!token) return <p className="rounded-[22px] bg-s1 p-5 text-[15px]">this link is incomplete. <a className="underline decoration-ink/25 underline-offset-4" href="/admin/login">ask for a new one</a>.</p>;
+  if (!token) return <p className="rounded-[14px] bg-s1 p-5 text-[15px]">this link is incomplete. <a className="underline decoration-ink/25 underline-offset-4" href="/admin/login">ask for a new one</a>.</p>;
   return (
     <div className="grid gap-4">
-      <p className="rounded-[22px] bg-s1 p-5 text-[15px] leading-snug">sign this browser in to the sahn admin? the session lasts 12 hours, or 2 hours without use.</p>
+      <p className="rounded-[14px] bg-s1 p-5 text-[15px] leading-snug">sign this browser in to the sahn admin? the session lasts 12 hours, or 2 hours without use.</p>
       <button disabled={state === "busy"} className={`${BTN.main} h-12 w-full`} onClick={async () => {
         setState("busy");
         const r = await fetch("/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) }).catch(() => null);

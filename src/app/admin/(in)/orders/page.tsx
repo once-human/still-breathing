@@ -22,7 +22,7 @@ const hay = (o: Order) =>
 const VIEWS: { key: string; label: string; stages: Stage[] | null }[] = [
   { key: "", label: "all", stages: ["paid", "printing", "shipped", "out", "delivered", "attention", "cancelled"] },
   { key: "attention", label: "needs you", stages: ["attention"] },
-  { key: "paid", label: "in the hour", stages: ["paid"] },
+  { key: "paid", label: "just paid", stages: ["paid"] },
   { key: "printing", label: "being made", stages: ["printing"] },
   { key: "way", label: "on the way", stages: ["shipped", "out"] },
   { key: "delivered", label: "delivered", stages: ["delivered"] },
@@ -65,13 +65,13 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
         {f.stage ? <input type="hidden" name="stage" value={f.stage} /> : null}
         <div className="relative">
           <Icon name="search" className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-quiet" />
-          <input name="q" defaultValue={f.q} placeholder="search a number, name, email, phone, pin or tracking" className={`${FIELD} !rounded-full !pl-12`} />
+          <input name="q" defaultValue={f.q} placeholder="search a number, name, email, phone, pin or tracking" className={`${FIELD} !pl-12`} />
         </div>
         <details open={more} className="group">
           <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 px-1 text-[14px] text-quiet hover:text-ink">
             <Icon name="filter" className="h-4 w-4" />more filters<Icon name="down" className="h-4 w-4 transition group-open:rotate-180" />
           </summary>
-          <div className="a-pop mt-3 grid gap-3 rounded-[22px] bg-s1 p-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="a-pop mt-3 grid gap-3 rounded-[14px] bg-s1 p-4 sm:grid-cols-2 lg:grid-cols-4">
             <label className="grid gap-1.5 text-[13px] text-quiet">shirt
               <select name="shirt" defaultValue={f.shirt} className={FIELD}><option value="">any shirt</option>{(Object.keys(DESIGNS) as Design[]).map((d) => <option key={d} value={d}>{shirtName(d)}</option>)}</select>
             </label>

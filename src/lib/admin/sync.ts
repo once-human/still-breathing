@@ -21,9 +21,12 @@ export async function syncNow() {
 export const lastSync = () => kv<string | null>("GET", "cron:last").catch(() => null);
 
 /** after the admin page is sent, if the last sync is old: at most once every 10 minutes */
-export async function syncIfLate() {
-  const last = await lastSync();
-  if (last && Date.now() - Date.parse(last) < 3 * 3600_000) return;
-  if (!(await once("sync:admin", 600).catch(() => false))) return;
-  after(() => syncNow().then(() => undefined, (e) => console.error("admin sync:", e)));
+export function syncIfLate() {
+  // all of it after the page is sent, so opening a page never waits on the check
+  after(async () => {
+    const last = await lastSync();
+    if (last && Date.now() - Date.parse(last) < 3 * 3600_000) return;
+    if (!(await once("sync:admin", 600).catch(() => false))) return;
+    await syncNow().catch((e) => console.error("admin sync:", e));
+  });
 }

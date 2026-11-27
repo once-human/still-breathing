@@ -129,19 +129,27 @@ html.menu-open, html.menu-open body { overflow: hidden; }
   .group:hover .art-front, .group:hover .art-back, .group:focus-visible .art-front, .group:focus-visible .art-back { animation: none; }
 }
 
-/* ---- the admin's motion: quick, with a light snap; nothing waits on an animation ---- */
-@keyframes a-pop { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: none; } }
-@keyframes a-sheet { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+/* ---- the admin's motion: the store's rise, only quicker; nothing bounces and nothing waits on an animation ---- */
+@keyframes a-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes a-fade { from { opacity: 0; } to { opacity: 1; } }
-.a-in, .a-in-2 { }
-.a-pop { animation: a-pop 140ms cubic-bezier(.2,1.2,.4,1) both; }
-.a-sheet { animation: a-sheet 180ms cubic-bezier(.2,1.15,.4,1) both; }
-.a-fade { animation: a-fade 120ms ease-out both; }
-.a-spring { transition-timing-function: cubic-bezier(.3,1.35,.5,1); transition-duration: 160ms; }
-.a-press { transition: transform 90ms ease-out, background-color 120ms, color 120ms, opacity 120ms; }
-.a-press:active { transform: scale(0.97); }
+/* a page's parts rise in one after another as it opens: its name, then what's under it */
+.a-page > * { animation: a-rise 360ms cubic-bezier(.2,.7,.2,1) both; }
+.a-page > :nth-child(2) { animation-delay: 30ms; }
+.a-page > :nth-child(3) { animation-delay: 60ms; }
+.a-page > :nth-child(n+4) { animation-delay: 90ms; }
+.a-pop { animation: a-rise 160ms cubic-bezier(.2,.7,.2,1) both; }
+.a-sheet { animation: a-rise 200ms cubic-bezier(.2,.7,.2,1) both; }
+.a-fade { animation: a-fade 140ms ease-out both; }
+.a-spring { transition-timing-function: cubic-bezier(.2,.7,.2,1); transition-duration: 140ms; }
+.a-press { transition: transform 80ms ease-out, background-color 120ms, color 120ms, opacity 120ms; }
+.a-press:active { transform: scale(0.98); }
+/* while a page loads: a thin line along the top, shown only if it takes more than a moment */
+@keyframes a-load { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+.a-loading { animation: a-fade 200ms ease-out 250ms both; }
+.a-loading > span { animation: a-load 900ms cubic-bezier(.4,0,.2,1) infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .a-pop, .a-sheet, .a-fade { animation: none !important; }
+  .a-page > *, .a-pop, .a-sheet, .a-fade, .a-loading, .a-loading > span { animation: none !important; }
   .a-spring, .a-press { transition-duration: 0ms !important; }
   .a-press:active { transform: none; }
+}
 }

@@ -7,37 +7,37 @@ import { BTN, FIELD } from "../../ui/client";
 import { Icon } from "../../ui/icons";
 import { Group, Page, Row, Section, Tabs } from "../../ui/ui";
 import { Reached, VisitTable, shirtLabel, time } from "../../ui/visits";
+import { PeriodTabs, pickPeriod } from "../period";
 
 export const metadata = { title: "visits" };
 export const dynamic = "force-dynamic";
 
 const TABS = [["visits", "every visit"], ["people", "people"], ["bots", "programs"]] as const;
-const RANGES = [[24, "24 h"], [24 * 7, "7 days"], [24 * 30, "30 days"], [24 * 90, "90 days"]] as const;
 const REACH = [["", "anyone"], ["bag", "put in the bag"], ["checkout", "opened checkout"], ["pay", "opened payment"], ["paid", "paid"]] as const;
 
-type SP = { tab?: string; h?: string; referrer?: string; device?: string; place?: string; shirt?: string; reached?: string; person?: string };
+type SP = { tab?: string; p?: string; referrer?: string; device?: string; place?: string; shirt?: string; reached?: string; person?: string };
 
 /** visits: every visit page by page, the people behind them, and the programs kept apart */
 export default async function Visitors({ searchParams }: { searchParams: Promise<SP> }) {
   await requireAdmin();
   const sp = await searchParams;
   const tab = TABS.find(([t]) => t === sp.tab)?.[0] ?? "visits";
-  const hours = RANGES.find(([h]) => String(h) === sp.h)?.[0] ?? 24 * 7;
+  const p = await pickPeriod(sp.p);
   const f: VisitFilter = { kind: tab === "bots" ? "bot" : "person", referrer: sp.referrer, device: sp.device, place: sp.place, shirt: sp.shirt, reached: sp.reached, person: sp.person };
   const link = (patch: Partial<SP>) => `?${new URLSearchParams(Object.entries({ ...sp, ...patch }).filter(([, v]) => v) as [string, string][])}`;
   const [visits, people] = await Promise.all([
-    tab === "people" ? Promise.resolve([]) : listVisits(hours, f, 500).catch(() => []),
-    tab === "people" ? listPeople(hours).catch(() => []) : Promise.resolve([]),
+    tab === "people" ? Promise.resolve([]) : listVisits(p, f, 500).catch(() => []),
+    tab === "people" ? listPeople(p).catch(() => []) : Promise.resolve([]),
   ]);
   const filters = (["referrer", "device", "place", "shirt", "reached", "person"] as const).filter((k) => sp[k]);
-  const range = RANGES.find(([h]) => h === hours)![1];
+  const range = p.label;
 
   return (
     <>
       <Page title="visits" sub="every visit page by page, kept 90 days. a person is a random code their browser made: no names, no IP addresses" />
       <div className="mb-5 flex flex-wrap gap-x-3 [&>nav]:mb-3">
         <Tabs active={tab} items={TABS.map(([t, l]) => ({ key: t, label: l, href: link({ tab: t }) }))} />
-        <Tabs active={String(hours)} items={RANGES.map(([h, l]) => ({ key: String(h), label: l, href: link({ h: String(h) }) }))} />
+        <PeriodTabs p={p} keep={{ tab: sp.tab }} />
       </div>
 
       {tab === "visits" ? (
@@ -45,8 +45,8 @@ export default async function Visitors({ searchParams }: { searchParams: Promise
           <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 px-1 text-[14px] text-quiet hover:text-ink">
             <Icon name="filter" className="h-4 w-4" />filters{filters.length ? ` (${filters.length})` : ""}<Icon name="down" className="h-4 w-4 transition group-open:rotate-180" />
           </summary>
-          <form className="a-pop mt-3 grid gap-3 rounded-[22px] bg-s1 p-4 sm:grid-cols-2 lg:grid-cols-4">
-            <input type="hidden" name="tab" value={tab} /><input type="hidden" name="h" value={hours} />
+          <form className="a-pop mt-3 grid gap-3 rounded-[14px] bg-s1 p-4 sm:grid-cols-2 lg:grid-cols-4">
+            <input type="hidden" name="tab" value={tab} /><input type="hidden" name="p" value={p.key} />
             <label className="grid gap-1.5 text-[13px] text-quiet">came from<input name="referrer" defaultValue={sp.referrer} placeholder="instagram.com, direct" className={FIELD} /></label>
             <label className="grid gap-1.5 text-[13px] text-quiet">city or country<input name="place" defaultValue={sp.place} placeholder="Pune, IN" className={FIELD} /></label>
             <label className="grid gap-1.5 text-[13px] text-quiet">shirt
@@ -57,14 +57,14 @@ export default async function Visitors({ searchParams }: { searchParams: Promise
             </label>
             <div className="flex gap-2 sm:col-span-2 lg:col-span-4">
               <button className={BTN.main}>apply</button>
-              {filters.length ? <Link href={`?tab=${tab}&h=${hours}`} className={BTN.plain}>clear</Link> : null}
+              {filters.length ? <Link href={`?tab=${tab}&p=${p.key}`} className={BTN.plain}>clear</Link> : null}
             </div>
           </form>
         </details>
       ) : null}
 
       {tab === "people" ? (
-        <Section title={`${people.length} ${people.length === 1 ? "person" : "people"}`} aside={`seen in the last ${range}, latest first`}>
+        <Section title={`${people.length} ${people.length === 1 ? "person" : "people"}`} aside={`seen ${range === "all time" ? "in the kept 90 days" : range}, latest first`}>
           {people.length ? (
             <Group>
               {people.map((p) => (
@@ -74,10 +74,10 @@ export default async function Visitors({ searchParams }: { searchParams: Promise
                   right={<span className="text-[13px] text-quiet">{time(p.lastAt)}</span>} />
               ))}
             </Group>
-          ) : <p className="rounded-[22px] bg-s1 px-5 py-10 text-center text-[15px] text-quiet">nobody in this time</p>}
+          ) : <p className="rounded-[14px] bg-s1 px-5 py-10 text-center text-[15px] text-quiet">nobody in this time</p>}
         </Section>
       ) : (
-        <Section title={`${visits.length} ${tab === "bots" ? "program visits" : `visit${visits.length === 1 ? "" : "s"}`}`} aside={filters.length ? `filtered by ${filters.join(", ")}` : `the last ${range}`}>
+        <Section title={`${visits.length} ${tab === "bots" ? "program visits" : `visit${visits.length === 1 ? "" : "s"}`}`} aside={filters.length ? `filtered by ${filters.join(", ")}` : range === "all time" ? "the kept 90 days" : range}>
           <VisitTable visits={visits} empty={tab === "bots" ? "no programs in this time" : "no visits in this time"} />
         </Section>
       )}

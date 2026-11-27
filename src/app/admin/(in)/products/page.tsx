@@ -27,8 +27,8 @@ export default async function Products() {
         {list.map((p) => {
           const sellable = new Set(pay?.payable[p.id] ?? []);
           return (
-            <div key={p.id} className={`rounded-[22px] bg-s1 ${p.status === "draft" ? "opacity-70" : ""}`}>
-              <Link href={`/admin/products/${p.id}`} className="group flex items-start gap-4 rounded-t-[22px] px-5 pb-4 pt-5 transition hover:bg-s2">
+            <div key={p.id} className={`rounded-[14px] bg-s1 ${p.status === "draft" ? "opacity-70" : ""}`}>
+              <Link href={`/admin/products/${p.id}`} className="group flex items-start gap-4 rounded-t-[14px] px-5 pb-4 pt-5 transition hover:bg-s2">
                 <div className="min-w-0 flex-1">
                   <div className="text-[13px] text-quiet">{p.no} · {p.colour === "cream" ? "off white" : p.colour}{p.city ? ` · ${p.city}` : ""}</div>
                   <div className="mt-1 truncate text-[20px] font-semibold tracking-[-0.02em]">{p.name}</div>
@@ -45,7 +45,7 @@ export default async function Products() {
                   {SIZE_ORDER.map((z) => {
                     const on = sellable.has(z);
                     return <span key={z} title={on ? "can be bought" : p.skus[z] ? "not on sale" : "qikink has no product for this size"}
-                      className={`tnum grid h-7 min-w-7 place-items-center rounded-full px-1.5 text-[12px] ${on ? "bg-s3 text-ink" : "text-quiet/60 line-through decoration-quiet/40"}`}>{z}</span>;
+                      className={`tnum grid h-7 min-w-7 place-items-center rounded-[6px] px-1.5 text-[12px] ${on ? "bg-s3 text-ink" : "text-quiet/60 line-through decoration-quiet/40"}`}>{z}</span>;
                   })}
                 </div>
               </div>

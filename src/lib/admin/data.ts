@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { DESIGNS, SIZE_ORDER, type Design, type Size } from "@/content/tee";
 import { listAccounts, type Account } from "@/lib/shop/account";
 import { listOrders, refunded, type Order } from "@/lib/shop/orders";
@@ -11,7 +12,8 @@ import { getSettings, type Settings } from "./settings";
  * (read only: every change goes through the shop's own functions). A one-person shop has hundreds of orders, not millions, so they're
  * read whole and worked out here.
  */
-export async function allOrders(): Promise<Order[]> {
+/** once per request, however many parts of the page ask */
+export const allOrders = cache(async function allOrders(): Promise<Order[]> {
   // through the shop's listOrders (newest first, 200 a page), so the admin never depends on how orders are stored
   const out: Order[] = [];
   for (let offset = 0; offset < 20000; offset += 200) {
@@ -20,7 +22,7 @@ export async function allOrders(): Promise<Order[]> {
     if (page.length < 200) break;
   }
   return out;
-}
+});
 
 export async function allAccounts(): Promise<(Account & { orders: number })[]> {
   // through the shop's listAccounts (newest first, 200 a page), each with how many orders it has
@@ -176,19 +178,22 @@ export const shirtName = (d: Design | string) => {
 
 /* ---------- any stretch of time ---------- */
 
-export type Period = { key: "month" | "30" | "7" | "all"; label: string; from: number; to: number; prev: { from: number; to: number; word: string } | null };
+export type Period = { key: "month" | "last" | "quarter" | "all"; label: string; from: number; to: number; prev: { from: number; to: number; word: string } | null };
 
-/** a period ending now, and the one just before it of the same length (for "this month", the same days of last month) */
+/**
+ * A stretch of time and the one just before it to compare with. Each is its own stretch, none inside another:
+ * this month so far (against the same days of last month), last month (against the month before), the last three
+ * months with this one (against the three before, to the same day), and all time.
+ */
 export function periodOf(key: string | undefined, now = Date.now()): Period {
   const d = new Date(now + IST);
-  if (key === "7" || key === "30") {
-    const n = Number(key) * 86400_000;
-    return { key, label: `last ${key} days`, from: now - n, to: now, prev: { from: now - 2 * n, to: now - n, word: key === "7" ? "the week before" : "the 30 days before" } };
-  }
+  const y = d.getUTCFullYear(), m = d.getUTCMonth();
+  const start = (mm: number) => Date.UTC(y, mm, 1) - IST;
+  const so = now - start(m); // how far into this month we are
+  if (key === "last") return { key, label: "last month", from: start(m - 1), to: start(m), prev: { from: start(m - 2), to: start(m - 1), word: "the month before" } };
+  if (key === "quarter") return { key, label: "the last 3 months", from: start(m - 2), to: now, prev: { from: start(m - 5), to: Math.min(start(m - 2), start(m - 3) + so), word: "the 3 months before" } };
   if (key === "all") return { key: "all", label: "all time", from: 0, to: now, prev: null };
-  const month = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) - IST;
-  const last = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1) - IST;
-  return { key: "month", label: "this month", from: month, to: now, prev: { from: last, to: Math.min(month, last + (now - month)), word: "the same days last month" } };
+  return { key: "month", label: "this month", from: start(m), to: now, prev: { from: start(m - 1), to: Math.min(start(m), start(m - 1) + so), word: "the same days last month" } };
 }
 
 /** orders, money and costs for paid orders in [from, to) */
@@ -226,6 +231,6 @@ export async function periodData(p: Period) {
   const now = totalsBetween(orders, s, c, fees, p.from, p.to);
   const before = p.prev ? totalsBetween(orders, s, c, fees, p.prev.from, p.prev.to) : null;
   const byDay = new Map<string, number>();
-  for (const o of orders) if (isPaid(o) && o.stage !== "cancelled" && Date.parse(o.paidAt!) >= p.from) byDay.set(istDay(o.paidAt!), (byDay.get(istDay(o.paidAt!)) ?? 0) + 1);
+  for (const o of orders) if (isPaid(o) && o.stage !== "cancelled" && Date.parse(o.paidAt!) >= p.from && Date.parse(o.paidAt!) < p.to) byDay.set(istDay(o.paidAt!), (byDay.get(istDay(o.paidAt!)) ?? 0) + 1);
   return { orders, settings: s, now, before, byDay, needs: needsYou(orders, s) };
 }

@@ -17,7 +17,7 @@ export function Live({ initial }: { initial: Data }) {
     <>
       <div className="mb-10 grid grid-cols-3 gap-3 md:mb-12">
         {([["on the site now", c.now, true], ["in the last hour", c.hour, false], ["today", c.today, false]] as const).map(([l, n, live]) => (
-          <div key={l} className="rounded-[22px] bg-s1 p-5 md:p-6">
+          <div key={l} className="rounded-[14px] bg-s1 p-5 md:p-6">
             <div className="flex items-center gap-2 text-[14px] text-quiet">{live && n ? <span className="h-2 w-2 rounded-full bg-ok" /> : null}{l}</div>
             <div className="tnum mt-6 text-[clamp(34px,4.2vw,52px)] font-extrabold leading-none tracking-[-0.045em]">{n}</div>
           </div>
@@ -28,7 +28,7 @@ export function Live({ initial }: { initial: Data }) {
         <span className="text-right text-[13px] text-quiet">every 5 seconds{at ? `, last ${new Date(at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", second: "2-digit", timeZone: "Asia/Kolkata" }).toLowerCase()}` : ""}</span>
       </div>
       {data.people.length ? (
-        <div className="divide-y divide-line/50 overflow-hidden rounded-[22px] bg-s1">
+        <div className="divide-y divide-line/50 overflow-hidden rounded-[14px] bg-s1">
           {data.people.map((v) => (
             <Link key={v.id} href={`/admin/visitors/${v.id}`} className="a-fade group flex gap-4 px-5 py-4 transition hover:bg-s2">
               <span className="relative grid h-10 w-10 shrink-0 place-items-center rounded-full bg-s2 text-ink/75">
@@ -55,7 +55,7 @@ export function Live({ initial }: { initial: Data }) {
           ))}
         </div>
       ) : (
-        <div className="grid place-items-center rounded-[22px] bg-s1 px-6 py-12 text-center">
+        <div className="grid place-items-center rounded-[14px] bg-s1 px-6 py-12 text-center">
           <span className="grid h-10 w-10 place-items-center rounded-full bg-s2 text-ink/75"><Icon name="live" className="h-[19px] w-[19px]" /></span>
           <p className="mt-4 text-[15px]">nobody on the site right now</p>
           <p className="mt-1 text-[13px] text-quiet">someone shows here the moment they open a page, and for a minute after their last move</p>

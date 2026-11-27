@@ -38,7 +38,7 @@ export default async function People({ searchParams }: { searchParams: Promise<R
       <form method="get" className="relative mb-8">
         {view.key ? <input type="hidden" name="who" value={view.key} /> : null}
         <Icon name="search" className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-quiet" />
-        <input name="q" defaultValue={q} placeholder="search a name, email or phone" className={`${FIELD} !rounded-full !pl-12`} />
+        <input name="q" defaultValue={q} placeholder="search a name, email or phone" className={`${FIELD} !pl-12`} />
       </form>
 
       {list.length ? (

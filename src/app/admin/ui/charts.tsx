@@ -18,7 +18,7 @@ export function DayChart({ days, mark = "a day an order came" }: { days: { day: 
       <div className="mt-3 flex justify-between text-[13px] text-quiet">
         <span>{fmt(days[0].day)}</span>
         <span className="hidden items-center gap-1.5 sm:flex"><span className="h-1.5 w-1.5 rounded-full bg-ink" />{mark}</span>
-        <span>today</span>
+        <span>{days[days.length - 1].day === new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10) ? "today" : fmt(days[days.length - 1].day)}</span>
       </div>
     </div>
   );
