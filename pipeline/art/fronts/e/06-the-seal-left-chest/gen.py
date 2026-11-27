@@ -13,8 +13,8 @@ sys.path.insert(0, os.path.join(HERE, '..', 'lib'))
 import efront as E
 
 S = 0.39811                             # print size / 05's size: the seal's ink 754 px wide, art.png 846 px with margin
-E.PXMM = E.PXMM * S                      # px per drawing mm (the drawing keeps 05's millimetres)
-PRINT_MM = 1 / S                       # drawing mm per mm of print
+E.PXMM = 9.4 * S                        # px per drawing mm (the drawing keeps 05's millimetres)
+PRINT_MM = 9.4 / E.PXMM                 # drawing mm per mm of print
 
 CW, CH = 232, 216                       # canvas, mm (the strip rows need the width; the seal is 200 across)
 h, art = E.boot(CW, CH, seed=404, layers=('violet', 'orange', 'yellow', 'cream', 'ring', 'sL', 'sD'))
@@ -177,7 +177,7 @@ def circle(rad, n=30, jit=0.45):
 RW_D = 1.2 * PRINT_MM                    # the ring line: 1.2 mm of print, 05's 2.5 mm drawn
 art.line(circle(R_OUT), RW_D, layer='ring', closed=True, wob=0.3, trem=0.5, pv=0.16, a0=0.6, a1=1.6, close_frac=1.035)
 art.line(circle(R_IN, 24), RW_D * 0.96, layer='ring', closed=True, wob=0.3, trem=0.5, pv=0.16, a0=0.6, a1=1.6, close_frac=1.03)
-clear = h.dilate(art.L['ring'], 2 * int(round(1.05 * E.PXMM / S)) + 1)       # 1 mm of print round the ring lines
+clear = h.dilate(art.L['ring'], 2 * int(round(1.05 * 9.4)) + 1)       # 1 mm of print round the ring lines
 art.L['cream'].paste(0, (0, 0), clear)
 art.add('cream', art.L['ring'])
 art.L['ring'] = Image.new('L', (1, 1))

@@ -4,10 +4,11 @@
 #   report.json          sizes, how each front was made, and where each front sits (cm from the centre line and shoulder)
 # Transparent where there is no ink (halos drawn in the shirt colour are holes too), straight alpha, sRGB, 300 dpi.
 # The backs are the very masters the site's viewer is made from, resampled to 300 dpi: nothing on the shirt can differ
-# from the page. The fronts are drawn again by their own generators at twice print size (PRINT_PXMM) and brought down
-# to it; each new drawing is checked against its master, and if it doesn't match, the master is used instead.
+# from the page. So are the fronts, scaled to print size with their hard edges cut again there. (Drawing the fronts again
+# at print size was tried: the hand's jitter follows the drawing size, so up to a quarter of the ink moved. Not used.)
 # Heavy (several 4050 x 5400 float arrays): run it on the farm (printfiles.yml), not on an 8 GB laptop.
-import io, json, os, shutil, subprocess, sys
+# python3 printfiles.py <outdir> fronts : the fronts only (small, fine on the laptop).
+import json, os, sys
 import numpy as np
 from PIL import Image, ImageCms
 # from printtex.py (which runs on import), kept the same: the knockout, the resampling, the backs and the lettering
@@ -61,7 +62,6 @@ os.makedirs(OUT, exist_ok=True)
 DPI, CM = 300, 300 / 2.54                 # px per inch, px per cm
 BW, BH = 13.5 * DPI, 18 * DPI             # the back box
 BW, BH = int(BW), int(BH)
-SS = 2                                    # fronts drawn at twice print size, then brought down
 SRGB = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
 SHOP = ("c", "e", "a", "d", "f")          # the five on sale, and their shirt colour
 SHIRT = {"c": "black", "e": "black", "a": "cream", "d": "cream", "f": "black"}
@@ -96,15 +96,8 @@ def turn(img, deg):
     return Image.fromarray((out * 255 + 0.5).astype(np.uint8), "RGBA")
 
 
-def same(new, master):
-    """the new drawing brought to the master's size: how much of the ink agrees (IoU of the ink at half cover)"""
-    n = resize_rgba(new, master.size)[..., 3] >= 0.5
-    m = np.array(master.getchannel("A")) >= 128
-    return float((n & m).sum() / max((n | m).sum(), 1))
-
-
 # ---- backs: the masters, at 300 dpi
-for d in SHOP:
+for d in ([] if sys.argv[2:] == ["fronts"] else SHOP):
     art, ov = BACK[(d, SHIRT[d])]
     src = Image.open(art)
     b = resize_rgba(src, (BW, BH), Image.BOX if src.width >= BW else Image.LANCZOS)
@@ -114,8 +107,6 @@ for d in SHOP:
     del b
 
 # ---- fronts
-GEN = {"a": "art/fronts/a/01-the-key", "d": "art/fronts/d/03-the-key-dates", "e": "art/fronts/e/06-the-seal-left-chest",
-       "f": "art/fronts/c/05-wristband"}
 place = {}
 for d in SHOP:
     f_file, cx, top, w_cm = FRONTS[d]
@@ -127,6 +118,15 @@ for d in SHOP:
         dist = np.stack([np.linalg.norm(hi - c, axis=-1) for c in src_inks])
         which = dist.argmin(0)
         alpha = np.clip(np.linalg.norm(hi - bg, axis=-1) / np.linalg.norm(src_inks - bg, axis=-1)[which], 0, 1)
+        # an edge pixel (part ink, part ground) can sit nearer the blue than the cream by colour alone, which
+        # outlines the cream letters in blue dots: edge pixels take the ink of the nearest solid pixel instead
+        lab = np.where(alpha > 0.85, which, -1)
+        for _ in range(8):
+            if not (lab[alpha > 0] < 0).any(): break
+            for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
+                nb = np.roll(lab, (dy, dx), (0, 1))
+                lab = np.where((lab < 0) & (nb >= 0), nb, lab)
+        which = np.where(lab >= 0, lab, which)
         inks = np.array(INK[SHIRT[d]], np.float32) / 255
         canvas = np.zeros((976, 632, 4), np.float32)
         for (y0, y1, x0, x1), (ox, oy) in LINES:
@@ -144,40 +144,32 @@ for d in SHOP:
         write(out, f"front-{d}-{SHIRT[d]}")
         report[f"front-{d}-{SHIRT[d]}"]["match"] = "drawn from the 60 px/cm lettering, recut"
     else:
-        master = ink(Image.open(f_file))                      # exactly what the site shows (art-down: art turned -95)
+        # the master itself, exactly what the site shows. Its ink is flat with a hard (binary) edge, so it's scaled up
+        # and the edge cut again at print size: one pixel of antialiasing at 300 dpi, the shapes exactly the master's
         tw = round(w_cm * CM)
-        th = round(master.height * tw / master.width)
-        gdir = GEN[d]
-        keep = os.path.join(gdir, "art.png")
-        backup = keep + ".master"
-        shutil.copy(keep, backup)
-        # the drawing's own ink at its default 9.4 px/mm, before any turn: the scale to draw at
-        base = ink(Image.open(keep))
         if d == "f":
-            px = 9.4 * SS * th / master.height                 # the turned band's length is the master's height
+            # the wristband: art-down.png is art-tight.png turned -95 deg with no smoothing. Turn the unturned art
+            # here instead, already at print size, so its edges are cut once, cleanly
+            tight = Image.open(os.path.join(os.path.dirname(f_file), "art-tight.png"))
+            down = Image.open(f_file)
+            k = tw / down.width                                  # print px per art px
+            big = recut(tight, (round(tight.width * k), round(tight.height * k)))
+            big = ink(turn(Image.fromarray((big * 255 + 0.5).astype(np.uint8), "RGBA"), -95))
+            th = round(down.height * k)
+            out = resize_rgba(big, (tw, th), Image.BOX)
+            out[..., 3] = np.clip((out[..., 3] - 0.5) * 1.5 + 0.5, 0, 1)   # the turn softens the edge: cut it again
         else:
-            px = 9.4 * SS * tw / base.width
-        env = dict(os.environ, PRINT_PXMM=repr(px))
-        env.pop("R", None)
-        r = subprocess.run([sys.executable, "gen.py"], cwd=gdir, env=env, capture_output=True, text=True)
-        new = ink(Image.open(keep)) if r.returncode == 0 else None
-        shutil.move(backup, keep)
-        if new is not None and d == "f":
-            new = ink(turn(new, -95))
-        iou = same(new, master) if new is not None else 0.0
-        if iou >= 0.97:
-            out = resize_rgba(new, (tw, th), Image.BOX)
-            how = f"drawn again at {px:.1f} px/mm, brought down to print size; ink agrees with the master {iou:.3f}"
-        else:
-            out = resize_rgba(master, (tw, th), Image.LANCZOS)
-            how = f"MASTER used, resampled (new drawing agreed {iou:.3f}; gen rc {r.returncode}: {r.stderr[-300:]})"
-        left = cx - w_cm / 2
-        top_ink = top
+            master = ink(Image.open(f_file))
+            th = round(master.height * tw / master.width)
+            out = recut(master, (tw, th))
+        left, top_ink = cx - w_cm / 2, top
         write(out, f"front-{d}-{SHIRT[d]}")
-        report[f"front-{d}-{SHIRT[d]}"]["match"] = how
+        report[f"front-{d}-{SHIRT[d]}"]["match"] = "the master, scaled to print size and its edge cut again"
     n = f"front-{d}-{SHIRT[d]}"
     place[n] = dict(left_edge_from_centre_cm=round(left, 2), top_from_shoulder_cm=round(top_ink, 2))
 
-json.dump(dict(report=report, place=place), open(os.path.join(OUT, "report.json"), "w"), indent=1)
+rp = os.path.join(OUT, "report.json")
+old = json.load(open(rp)) if os.path.exists(rp) else {}
+json.dump(dict(report={**old.get("report", {}), **report}, place=place), open(rp, "w"), indent=1)
 print(json.dumps(place, indent=1))
 print("print files ok")

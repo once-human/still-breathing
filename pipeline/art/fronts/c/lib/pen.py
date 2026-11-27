@@ -17,7 +17,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 FONTS = os.path.abspath(os.path.join(HERE, '..', '..', '..', '..', 'fonts'))
 DRAFT = os.environ.get('R', '9.4') == '1'
-PXMM = 4.7 if DRAFT else float(os.environ.get('PRINT_PXMM', 9.4))   # PRINT_PXMM: draw at another size
+PXMM = 4.7 if DRAFT else 9.4
 TEE = '#151515'
 PAL = {'line': '#F1E7D0', 'Y': '#F6B330', 'G': '#56B27C', 'B': '#4C66F5'}
 SHIFT = {'line': (0, 0), 'Y': (0.34, 0.28), 'G': (-0.30, 0.33), 'B': (0.16, -0.14)}   # mm off register per screen
