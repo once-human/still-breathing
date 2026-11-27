@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Icon, type IconName } from "./icons";
 import { DESIGNS, type Design } from "@/content/tee";
 import { STEP_WORD, span, type EventRow, type Step, type VisitRow } from "@/lib/visits/shared";
 
@@ -31,56 +32,48 @@ const country = (cc: string | null) => {
 export const where = (v: Pick<VisitRow, "city" | "country">) => [v.city?.toLowerCase(), country(v.country)].filter(Boolean).join(", ") || "somewhere";
 
 /** how far a visit got, as small marks */
-const REACH: [Step, string, string][] = [
-  ["bag", "bag", "text-ink/80 ring-line"],
-  ["checkout", "checkout", "text-ink/80 ring-line"],
-  ["pay", "paying", "text-ink/80 ring-line"],
-  ["paid", "paid", "text-ok ring-ok/40"],
-];
+const REACH: [Step, string][] = [["bag", "bag"], ["checkout", "checkout"], ["pay", "paying"], ["paid", "paid"]];
 export function Reached({ steps }: { steps: Step[] }) {
   const got = REACH.filter(([s]) => steps.includes(s));
   if (!got.length) return null;
   return (
     <span className="inline-flex flex-wrap gap-1">
-      {got.map(([s, w, c]) => <span key={s} className={`rounded-full px-1.5 py-px text-[10px] ring-1 ${c}`}>{w}</span>)}
+      {got.map(([s, w]) => <span key={s} className="inline-flex items-center gap-1 rounded-full bg-s2 px-2 py-0.5 text-[12px] text-ink/80">{s === "paid" ? <span className="h-1.5 w-1.5 rounded-full bg-ok" /> : null}{w}</span>)}
     </span>
   );
 }
 
 export function Trail({ trail, max = 6 }: { trail: string[]; max?: number }) {
   const t = trail.length > max ? [...trail.slice(0, max - 1), `… ${trail.length - max + 1} more`] : trail;
-  return <span className="text-quiet">{t.map((p, i) => <span key={i}>{i ? <span className="px-1 text-line">→</span> : null}<span className={i === t.length - 1 ? "text-ink/80" : ""}>{p.startsWith("…") ? p : pageName(p)}</span></span>)}</span>;
+  return <span className="text-quiet">{t.map((p, i) => <span key={i}>{i ? <span className="px-1 text-quiet/50">→</span> : null}<span className={i === t.length - 1 ? "text-ink/80" : ""}>{p.startsWith("…") ? p : pageName(p)}</span></span>)}</span>;
 }
 
+/** a device's mark: a phone, a computer or a program */
+export const deviceIcon = (v: Pick<VisitRow, "kind" | "device">): IconName =>
+  v.kind === "bot" ? "bot" : /iphone|android|phone|mobile|ipad|tablet/i.test(v.device ?? "") ? "phone" : "desktop";
+
+/** visits as rows on one card: where and on what, the pages they went through, when, and how far they got */
 export function VisitTable({ visits, empty }: { visits: VisitRow[]; empty?: string }) {
-  if (!visits.length) return <p className="py-6 text-[13px] text-quiet">{empty ?? "nobody yet"}</p>;
+  if (!visits.length) return <p className="rounded-[22px] bg-s1 px-5 py-10 text-center text-[15px] text-quiet">{empty ?? "nobody yet"}</p>;
   return (
-    <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
-      <table className="w-full min-w-[760px] border-collapse text-left text-[13px]">
-        <thead>
-          <tr className="border-b border-line text-[11px] uppercase tracking-[0.1em] text-quiet">
-            {["when", "who", "from", "pages", "time", "got to", "path"].map((h) => <th key={h} className="whitespace-nowrap py-2 pr-4 font-medium">{h}</th>)}
-          </tr>
-        </thead>
-        <tbody className="[&_td]:py-2.5 [&_td]:pr-4 [&_td]:align-top [&_tr]:border-b [&_tr]:border-line/60">
-          {visits.map((v) => (
-            <tr key={v.id} className="transition hover:bg-ink/[0.03]">
-              <td className="whitespace-nowrap"><Link href={`/admin/visitors/${encodeURIComponent(v.id)}`} className="underline decoration-line underline-offset-4 hover:decoration-ink">{time(v.lastAt)}</Link></td>
-              <td className="whitespace-nowrap">
-                {v.kind === "bot" ? <span>{v.device}<span className="block text-[11px] text-quiet">{v.reason}</span></span> : <>
-                  {where(v)}
-                  <span className="block text-[11px] text-quiet">{v.device}{v.person ? <> · <Link href={`/admin/visitors/person/${v.person}`} className="hover:text-ink">{v.nth && v.nth > 1 ? `visit ${v.nth}` : "first visit"}</Link></> : null}</span>
-                </>}
-              </td>
-              <td className="whitespace-nowrap text-quiet">{v.referrer ?? "direct"}</td>
-              <td className="tnum">{v.pages}</td>
-              <td className="tnum whitespace-nowrap text-quiet">{v.activeMs ? span(v.activeMs) : "–"}</td>
-              <td><Reached steps={v.reached} /></td>
-              <td className="max-w-[28rem]"><Trail trail={v.trail} /></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="divide-y divide-line/50 overflow-hidden rounded-[22px] bg-s1">
+      {visits.map((v) => (
+        <Link key={v.id} href={`/admin/visitors/${encodeURIComponent(v.id)}`} className="group flex items-center gap-4 px-5 py-3.5 transition hover:bg-s2">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-s2 text-ink/75"><Icon name={deviceIcon(v)} className="h-[19px] w-[19px]" /></span>
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[15px] leading-snug">
+              {v.kind === "bot" ? <span>{v.device}<span className="text-quiet"> · {v.reason}</span></span> : <span>{where(v)}<span className="text-quiet"> · {v.nth && v.nth > 1 ? `visit ${v.nth}` : "first visit"}{v.referrer ? ` · from ${v.referrer}` : ""}</span></span>}
+              <Reached steps={v.reached} />
+            </span>
+            <span className="mt-0.5 block truncate text-[13px]"><Trail trail={v.trail} /></span>
+          </span>
+          <span className="shrink-0 text-right text-[13px] text-quiet">
+            <span className="block">{time(v.lastAt)}</span>
+            <span className="tnum block">{v.pages} page{v.pages === 1 ? "" : "s"}{v.activeMs ? ` · ${span(v.activeMs)}` : ""}</span>
+          </span>
+          <Icon name="chevron" className="hidden h-[18px] w-[18px] text-quiet transition group-hover:translate-x-0.5 group-hover:text-ink sm:block" />
+        </Link>
+      ))}
     </div>
   );
 }

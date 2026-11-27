@@ -1,95 +1,83 @@
 import Link from "next/link";
+import { DESIGNS } from "@/content/tee";
 import { requireAdmin } from "@/lib/admin/auth";
 import { listPeople, listVisits, type VisitFilter } from "@/lib/visits/server";
 import { span } from "@/lib/visits/shared";
-import { PageHead, Section } from "../../ui/ui";
+import { BTN, FIELD } from "../../ui/client";
+import { Icon } from "../../ui/icons";
+import { Group, Page, Row, Section, Tabs } from "../../ui/ui";
 import { Reached, VisitTable, shirtLabel, time } from "../../ui/visits";
-import { DESIGNS } from "@/content/tee";
 
-export const metadata = { title: "visitors" };
+export const metadata = { title: "visits" };
 export const dynamic = "force-dynamic";
 
-const TABS = [["visits", "every visit"], ["people", "people"], ["bots", "bots and previews"]] as const;
+const TABS = [["visits", "every visit"], ["people", "people"], ["bots", "programs"]] as const;
 const RANGES = [[24, "24 h"], [24 * 7, "7 days"], [24 * 30, "30 days"], [24 * 90, "90 days"]] as const;
 const REACH = [["", "anyone"], ["bag", "put in the bag"], ["checkout", "opened checkout"], ["pay", "opened payment"], ["paid", "paid"]] as const;
 
 type SP = { tab?: string; h?: string; referrer?: string; device?: string; place?: string; shirt?: string; reached?: string; person?: string };
 
+/** visits: every visit page by page, the people behind them, and the programs kept apart */
 export default async function Visitors({ searchParams }: { searchParams: Promise<SP> }) {
   await requireAdmin();
   const sp = await searchParams;
   const tab = TABS.find(([t]) => t === sp.tab)?.[0] ?? "visits";
   const hours = RANGES.find(([h]) => String(h) === sp.h)?.[0] ?? 24 * 7;
   const f: VisitFilter = { kind: tab === "bots" ? "bot" : "person", referrer: sp.referrer, device: sp.device, place: sp.place, shirt: sp.shirt, reached: sp.reached, person: sp.person };
-  const link = (patch: Partial<SP>) => {
-    const q = new URLSearchParams(Object.entries({ ...sp, ...patch }).filter(([, v]) => v) as [string, string][]);
-    return `?${q}`;
-  };
+  const link = (patch: Partial<SP>) => `?${new URLSearchParams(Object.entries({ ...sp, ...patch }).filter(([, v]) => v) as [string, string][])}`;
   const [visits, people] = await Promise.all([
     tab === "people" ? Promise.resolve([]) : listVisits(hours, f, 500).catch(() => []),
     tab === "people" ? listPeople(hours).catch(() => []) : Promise.resolve([]),
   ]);
   const filters = (["referrer", "device", "place", "shirt", "reached", "person"] as const).filter((k) => sp[k]);
-  const pill = (on: boolean) => `rounded-full px-3 py-1 text-[12px] ring-1 transition ${on ? "bg-ink text-paper ring-ink" : "text-quiet ring-line hover:text-ink hover:ring-ink"}`;
+  const range = RANGES.find(([h]) => h === hours)![1];
 
   return (
     <>
-      <PageHead title="visitors" sub="every visit, page by page, kept 90 days. a person is a random code their browser made: no names, no IP addresses" />
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1.5">{TABS.map(([t, l]) => <Link key={t} href={link({ tab: t })} className={pill(t === tab)}>{l}</Link>)}</div>
-        <div className="flex flex-wrap gap-1.5">{RANGES.map(([h, l]) => <Link key={h} href={link({ h: String(h) })} className={pill(h === hours)}>{l}</Link>)}</div>
+      <Page title="visits" sub="every visit page by page, kept 90 days. a person is a random code their browser made: no names, no IP addresses" />
+      <div className="mb-5 flex flex-wrap gap-x-3 [&>nav]:mb-3">
+        <Tabs active={tab} items={TABS.map(([t, l]) => ({ key: t, label: l, href: link({ tab: t }) }))} />
+        <Tabs active={String(hours)} items={RANGES.map(([h, l]) => ({ key: String(h), label: l, href: link({ h: String(h) }) }))} />
       </div>
 
-      {tab !== "people" ? (
-        <form className="mb-6 flex flex-wrap items-end gap-2 text-[12px]">
-          <input type="hidden" name="tab" value={tab} /><input type="hidden" name="h" value={hours} />
-          {tab === "visits" ? (
-            <>
-              <label className="grid gap-1 text-quiet">came from<input name="referrer" defaultValue={sp.referrer} placeholder="instagram.com, direct" className="h-8 w-40 rounded-md bg-ink/[0.03] px-2 text-ink ring-1 ring-line focus:outline-none focus:ring-ink" /></label>
-              <label className="grid gap-1 text-quiet">city or country<input name="place" defaultValue={sp.place} placeholder="Pune, IN" className="h-8 w-32 rounded-md bg-ink/[0.03] px-2 text-ink ring-1 ring-line focus:outline-none focus:ring-ink" /></label>
-              <label className="grid gap-1 text-quiet">shirt
-                <select name="shirt" defaultValue={sp.shirt ?? ""} className="h-8 rounded-md bg-paper px-2 text-ink ring-1 ring-line focus:outline-none focus:ring-ink">
-                  <option value="">any</option>{Object.keys(DESIGNS).map((d) => <option key={d} value={d}>{shirtLabel(d)}</option>)}
-                </select>
-              </label>
-              <label className="grid gap-1 text-quiet">got to
-                <select name="reached" defaultValue={sp.reached ?? ""} className="h-8 rounded-md bg-paper px-2 text-ink ring-1 ring-line focus:outline-none focus:ring-ink">
-                  {REACH.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-              </label>
-            </>
-          ) : null}
-          <button className="h-8 rounded-md bg-ink px-3 font-semibold text-paper">filter</button>
-          {filters.length ? <Link href={`?tab=${tab}&h=${hours}`} className="h-8 px-2 leading-8 text-quiet hover:text-ink">clear</Link> : null}
-        </form>
+      {tab === "visits" ? (
+        <details open={filters.length > 0} className="group mb-8">
+          <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 px-1 text-[14px] text-quiet hover:text-ink">
+            <Icon name="filter" className="h-4 w-4" />filters{filters.length ? ` (${filters.length})` : ""}<Icon name="down" className="h-4 w-4 transition group-open:rotate-180" />
+          </summary>
+          <form className="a-pop mt-3 grid gap-3 rounded-[22px] bg-s1 p-4 sm:grid-cols-2 lg:grid-cols-4">
+            <input type="hidden" name="tab" value={tab} /><input type="hidden" name="h" value={hours} />
+            <label className="grid gap-1.5 text-[13px] text-quiet">came from<input name="referrer" defaultValue={sp.referrer} placeholder="instagram.com, direct" className={FIELD} /></label>
+            <label className="grid gap-1.5 text-[13px] text-quiet">city or country<input name="place" defaultValue={sp.place} placeholder="Pune, IN" className={FIELD} /></label>
+            <label className="grid gap-1.5 text-[13px] text-quiet">shirt
+              <select name="shirt" defaultValue={sp.shirt ?? ""} className={FIELD}><option value="">any</option>{Object.keys(DESIGNS).map((d) => <option key={d} value={d}>{shirtLabel(d)}</option>)}</select>
+            </label>
+            <label className="grid gap-1.5 text-[13px] text-quiet">got to
+              <select name="reached" defaultValue={sp.reached ?? ""} className={FIELD}>{REACH.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+            </label>
+            <div className="flex gap-2 sm:col-span-2 lg:col-span-4">
+              <button className={BTN.main}>apply</button>
+              {filters.length ? <Link href={`?tab=${tab}&h=${hours}`} className={BTN.plain}>clear</Link> : null}
+            </div>
+          </form>
+        </details>
       ) : null}
 
       {tab === "people" ? (
-        <Section title={`${people.length} people`} aside="most recent first, with everything they did in the kept 90 days">
+        <Section title={`${people.length} ${people.length === 1 ? "person" : "people"}`} aside={`seen in the last ${range}, latest first`}>
           {people.length ? (
-            <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
-              <table className="w-full min-w-[720px] text-left text-[13px]">
-                <thead><tr className="border-b border-line text-[11px] uppercase tracking-[0.1em] text-quiet">{["person", "last seen", "visits", "pages", "time", "where", "device", "got to"].map((h) => <th key={h} className="py-2 pr-4 font-medium">{h}</th>)}</tr></thead>
-                <tbody className="[&_td]:py-2.5 [&_td]:pr-4 [&_td]:align-top [&_tr]:border-b [&_tr]:border-line/60">
-                  {people.map((p) => (
-                    <tr key={p.id} className="hover:bg-ink/[0.03]">
-                      <td><Link href={`/admin/visitors/person/${p.id}`} className="font-mono underline decoration-line underline-offset-4">{p.id.slice(0, 6)}</Link></td>
-                      <td className="whitespace-nowrap text-quiet">{time(p.lastAt)}</td>
-                      <td className="tnum">{p.visits}{p.visits > 1 ? <span className="ml-1 text-[11px] text-[#8fd19e]">returning</span> : null}</td>
-                      <td className="tnum">{p.pages}</td>
-                      <td className="tnum text-quiet">{span(p.activeMs)}</td>
-                      <td className="text-quiet">{p.places.join(" · ") || "–"}</td>
-                      <td className="text-quiet">{p.devices.join(", ")}</td>
-                      <td><Reached steps={p.reached} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : <p className="text-[13px] text-quiet">nobody in this time.</p>}
+            <Group>
+              {people.map((p) => (
+                <Row key={p.id} icon={p.visits > 1 ? "return" : "user"} href={`/admin/visitors/person/${p.id}`}
+                  title={<span className="flex flex-wrap items-center gap-2">{p.places.join(" · ") || "somewhere"}<Reached steps={p.reached} /></span>}
+                  sub={`${p.devices.join(", ")} · ${p.visits} visit${p.visits === 1 ? "" : "s"}, ${p.pages} page${p.pages === 1 ? "" : "s"}, ${span(p.activeMs)} on screen`}
+                  right={<span className="text-[13px] text-quiet">{time(p.lastAt)}</span>} />
+              ))}
+            </Group>
+          ) : <p className="rounded-[22px] bg-s1 px-5 py-10 text-center text-[15px] text-quiet">nobody in this time</p>}
         </Section>
       ) : (
-        <Section title={`${visits.length} ${tab === "bots" ? "programs" : "visits"}`} aside={filters.length ? `filtered by ${filters.join(", ")}` : undefined}>
+        <Section title={`${visits.length} ${tab === "bots" ? "program visits" : `visit${visits.length === 1 ? "" : "s"}`}`} aside={filters.length ? `filtered by ${filters.join(", ")}` : `the last ${range}`}>
           <VisitTable visits={visits} empty={tab === "bots" ? "no programs in this time" : "no visits in this time"} />
         </Section>
       )}

@@ -4,6 +4,7 @@ import { health, problems } from "@/lib/admin/health";
 import { kv } from "@/lib/shop/kv";
 import { funnelBetween, liveCount, peoplePerDay, sinceThen } from "@/lib/visits/server";
 import type { IconName } from "../ui/icons";
+import { DayChart, Funnel } from "../ui/charts";
 import { A, Card, Group, Page, Row, Section, Tile, inr } from "../ui/ui";
 import { PeriodTabs, pickPeriod } from "./period";
 
@@ -30,52 +31,6 @@ async function lastLook() {
     return last ? Number(last) : null;
   }
   return prev ? Number(prev) : null;
-}
-
-/** people a day as grey bars; a day an order came is drawn in cream with a dot over it */
-function Chart({ days }: { days: { day: string; people: number; orders: number }[] }) {
-  const max = Math.max(1, ...days.map((d) => d.people));
-  const fmt = (d: string) => new Date(`${d}T12:00:00+05:30`).toLocaleDateString("en-IN", { day: "numeric", month: "short" }).toLowerCase();
-  return (
-    <div>
-      <div className="flex h-44 items-end gap-[3px] md:h-52" role="img" aria-label="people a day, with the days an order came">
-        {days.map((d) => (
-          <div key={d.day} className="group relative flex h-full flex-1 flex-col justify-end" title={`${fmt(d.day)}: ${d.people} people${d.orders ? `, ${d.orders} order${d.orders > 1 ? "s" : ""}` : ""}`}>
-            {d.orders ? <span className="absolute inset-x-0 top-0 mx-auto h-1.5 w-1.5 rounded-full bg-ink" /> : null}
-            <div className={`w-full rounded-[4px] transition-colors ${d.orders ? "bg-ink/70" : "bg-s3 group-hover:bg-ink/35"}`} style={{ height: `${(d.people / max) * 88}%`, minHeight: 3 }} />
-          </div>
-        ))}
-      </div>
-      <div className="mt-3 flex justify-between text-[13px] text-quiet">
-        <span>{fmt(days[0].day)}</span>
-        <span className="hidden items-center gap-1.5 sm:flex"><span className="h-1.5 w-1.5 rounded-full bg-ink" />a day an order came</span>
-        <span>today</span>
-      </div>
-    </div>
-  );
-}
-
-/** the way to a sale: each step as a bar against everyone who came, and how many went no further */
-function Way({ f }: { f: Awaited<ReturnType<typeof funnelBetween>> }) {
-  const steps: [string, number][] = [["came to the site", f.people], ["looked at a shirt", f.shirt], ["put one in the bag", f.bag], ["opened checkout", f.checkout], ["paid", f.paid]];
-  const top = Math.max(1, f.people);
-  return (
-    <div className="grid gap-4">
-      {steps.map(([label, n], i) => {
-        const lost = i ? steps[i - 1][1] - n : 0;
-        return (
-          <div key={label}>
-            <div className="flex items-baseline justify-between gap-4 text-[15px]">
-              <span>{label}</span>
-              <span className="tnum"><span className="font-semibold">{n}</span>{i && f.people ? <span className="ml-2 text-[13px] text-quiet">{Math.round((n / top) * 100)}%</span> : null}</span>
-            </div>
-            <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-s3"><div className="h-full rounded-full bg-ink/75" style={{ width: `${Math.max(n ? 2 : 0, (n / top) * 100)}%` }} /></div>
-            {lost > 0 ? <div className="mt-1 text-[13px] text-quiet">{lost} stopped here</div> : null}
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 /** the overview: what needs you, how the period went against the one before, the way to a sale, the days */
@@ -123,14 +78,14 @@ export default async function Overview({ searchParams }: { searchParams: Promise
       </div>
 
       <div className="grid gap-x-6 lg:grid-cols-[1fr_1.25fr]">
-        <Section title="the way to a sale" aside={<A href="/admin/insights">each shirt →</A>}>
+        <Section title="the way to a sale" aside={<A href="/admin/insights?v=shirts">each shirt →</A>}>
           <Card>
-            <Way f={f} />
+            <Funnel steps={[["came to the site", f.people], ["looked at a shirt", f.shirt], ["put one in the bag", f.bag], ["opened checkout", f.checkout], ["paid", f.paid]]} />
             <p className="mt-5 border-t border-line/40 pt-4 text-[13px] text-quiet">{f.people ? `${rate}% of the people who came bought.` : "nobody came in this time."} visits are kept 90 days.</p>
           </Card>
         </Section>
         <Section title={p.key === "all" && p.from < chartFrom ? "the last 90 days" : `${p.label}, day by day`} aside={<A href="/admin/visitors">every visit →</A>}>
-          <Card><Chart days={days} /></Card>
+          <Card><DayChart days={days} /></Card>
         </Section>
       </div>
     </>
