@@ -33,7 +33,7 @@ export async function health(fresh = false, quick = false): Promise<Check[]> {
       : timed(partnerCheck()).catch((e: Error) => ({ mode: null, ok: false, why: e.message })),
     lastSync(),
     kv<string | null>("GET", "hook:razorpay:last").then((v) => (v ? (JSON.parse(v) as { at: string; event: string }) : null)).catch(() => null),
-    getSettings({ fresh: true }),
+    getSettings({ fresh: !quick }),
   ]);
   const hours = sync ? (Date.now() - Date.parse(sync)) / 3600_000 : null;
   const ago = (iso: string) => {

@@ -3,7 +3,7 @@ import { requireAdmin } from "@/lib/admin/auth";
 import { getSettings } from "@/lib/admin/settings";
 import { syncIfLate } from "@/lib/admin/sync";
 import { shopOpen } from "@/lib/shop/config";
-import { CsrfProvider, Nav, ShopSwitch } from "../ui/client";
+import { CsrfProvider, Nav, Pending, ShopSwitch } from "../ui/client";
 
 /**
  * Signed in only (each page checks the session again itself). The frame: the sections on the left (the main four
@@ -22,7 +22,7 @@ export default async function InLayout({ children }: { children: React.ReactNode
           <Link href="/admin" className="text-[24px] font-extrabold tracking-[-0.05em] md:hidden">sahn</Link>
           <ShopSwitch open={!!s?.open} connected={shopOpen()} />
         </div>
-        <main className="mx-auto max-w-6xl px-4 pb-32 pt-2 md:px-10 md:pb-24 md:pt-4">{children}</main>
+        <main className="mx-auto max-w-6xl px-4 pb-32 pt-2 md:px-10 md:pb-24 md:pt-4"><Pending>{children}</Pending></main>
       </div>
     </CsrfProvider>
   );

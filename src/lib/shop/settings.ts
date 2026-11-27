@@ -1,7 +1,7 @@
 import { RATES } from "@/content/shop";
 import { kvKeys, shopOpen } from "./config";
 import { ShopError } from "./errors";
-import { query } from "./kv";
+import { ensure, query } from "./kv";
 
 /**
  * The shop's switches, kept in the database so the admin can change them without a deploy:
@@ -19,7 +19,7 @@ export const cleanLine = (v: unknown, max: number) => (typeof v === "string" ? v
 
 let made: Promise<unknown> | null = null;
 const table = () =>
-  (made ??= query("CREATE TABLE IF NOT EXISTS settings (key text PRIMARY KEY, value jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now(), updated_by text)").catch((e) => {
+  (made ??= ensure(["CREATE TABLE IF NOT EXISTS settings (key text PRIMARY KEY, value jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now(), updated_by text)"]).catch((e) => {
     made = null;
     throw e;
   }));

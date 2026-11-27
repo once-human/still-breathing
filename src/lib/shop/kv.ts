@@ -36,14 +36,36 @@ async function sql(query: string, params: (string | number | null)[] = []): Prom
 }
 
 /**
+ * What the database already has (tables and indexes by name), looked up once per server instance in one query, so a
+ * fresh instance doesn't send a CREATE ... IF NOT EXISTS for every table one after another before its first read.
+ */
+let known: Promise<Set<string>> | null = null;
+const existing = () =>
+  (known ??= sql("SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = current_schema()")
+    .then((r) => new Set(r.map((x) => x[0] ?? "")))
+    .catch((e) => {
+      known = null;
+      throw e;
+    }));
+
+/** runs those of these CREATE ... IF NOT EXISTS statements whose table or index isn't there yet, in order */
+export async function ensure(statements: string[]) {
+  const have = await existing();
+  for (const s of statements) {
+    const name = /IF NOT EXISTS\s+(\w+)/i.exec(s)?.[1];
+    if (name && have.has(name)) continue;
+    await sql(s);
+    if (name) have.add(name);
+  }
+}
+
+/**
  * The one SQL client: every table the site keeps (the shop's kv and zset, settings, products, the admin's own) goes
  * through this. Parameters only, never string-built values. Rows come back as arrays of text (or null), in column
  * order. The shop's tables are made first, once per server instance (CREATE ... IF NOT EXISTS, so any may go first).
  */
 export const query = (text: string, params: (string | number | null)[] = []) => {
-  ready ??= (async () => {
-    for (const s of SCHEMA) await sql(s);
-  })().catch((e) => {
+  ready ??= ensure(SCHEMA).catch((e) => {
     ready = null;
     throw e;
   });

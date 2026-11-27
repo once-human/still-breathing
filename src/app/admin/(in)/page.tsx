@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { requireAdmin } from "@/lib/admin/auth";
 import { periodData } from "@/lib/admin/data";
 import { health, problems } from "@/lib/admin/health";
@@ -26,8 +27,11 @@ async function lastLook() {
   const [last, prev] = await Promise.all([kv<string | null>("GET", "admin:seen:last").catch(() => null), kv<string | null>("GET", "admin:seen:prev").catch(() => null)]);
   const now = Date.now();
   if (!last || now - Number(last) > 30 * 60_000) {
-    if (last) await kv("SET", "admin:seen:prev", last).catch(() => {});
-    await kv("SET", "admin:seen:last", String(now)).catch(() => {});
+    // noted after the page is sent, so it never waits on the writes
+    after(async () => {
+      if (last) await kv("SET", "admin:seen:prev", last).catch(() => {});
+      await kv("SET", "admin:seen:last", String(now)).catch(() => {});
+    });
     return last ? Number(last) : null;
   }
   return prev ? Number(prev) : null;
@@ -38,11 +42,12 @@ export default async function Overview({ searchParams }: { searchParams: Promise
   await requireAdmin();
   const p = await pickPeriod((await searchParams).p);
   const chartFrom = Math.max(p.from, Date.now() - 89 * 86400_000);
-  const [d, checks, count, f, fBefore, perDay, seen] = await Promise.all([
+  const [d, checks, count, f, fBefore, perDay, look] = await Promise.all([
     periodData(p), health(false, true), liveCount(), funnelBetween(p.from, p.to),
-    p.prev ? funnelBetween(p.prev.from, p.prev.to) : Promise.resolve(null), peoplePerDay(chartFrom, p.to), lastLook(),
+    p.prev ? funnelBetween(p.prev.from, p.prev.to) : Promise.resolve(null), peoplePerDay(chartFrom, p.to),
+    lastLook().then(async (at) => ({ at, n: at ? await sinceThen(at) : null })),
   ]);
-  const since = seen ? await sinceThen(seen) : null;
+  const seen = look.at, since = look.n;
   const sinceOrders = seen ? d.orders.filter((o) => o.paidAt && Date.parse(o.paidAt) >= seen && o.stage !== "cancelled").length : 0;
   const issues = problems(checks).filter((c) => c.key !== "open");
   const n = Math.max(1, Math.ceil((p.to - chartFrom) / 86400_000));

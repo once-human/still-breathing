@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { createContext, startTransition, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, startTransition, useCallback, useContext, useEffect, useRef, useState, useTransition } from "react";
 import { Icon, type IconName } from "./icons";
 
 /**
@@ -142,8 +142,10 @@ function Links({ path, onGo }: { path: string; onGo?: () => void }) {
             <button type="button" onClick={() => flip(sec.name)} aria-expanded={isOpen}
               className={`a-press flex h-10 w-full items-center gap-3 rounded-[10px] px-3 text-left text-[15px] hover:bg-s1 hover:text-ink ${has ? "text-ink" : "text-ink/65"}`}>
               <Icon name={sec.icon} className="h-[19px] w-[19px]" />{sec.name}
-              {!isOpen && sec.name === "visitors" ? <LiveCount /> : null}
-              <Icon name="down" className={`h-4 w-4 text-quiet transition-transform duration-150 ${!isOpen && sec.name === "visitors" ? "ml-2" : "ml-auto"} ${isOpen ? "rotate-180" : ""}`} />
+              <span className="ml-auto flex items-center gap-2">
+                {!isOpen && sec.name === "visitors" ? <LiveCount /> : null}
+                <Icon name="down" className={`h-4 w-4 text-quiet transition-transform duration-150 ${isOpen ? "rotate-180" : ""}`} />
+              </span>
             </button>
             <div className={`grid transition-[grid-template-rows] duration-150 ease-out ${isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
               <div className="grid min-h-0 gap-0.5 overflow-hidden" inert={!isOpen}>
@@ -553,4 +555,52 @@ export function Ago({ iso }: { iso: string }) {
   }, []);
   const s = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
   return <span title={new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}>{s < 45 ? "just now" : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`}</span>;
+}
+
+/* ---------- going somewhere on the same page ---------- */
+
+/**
+ * A tab or a period changes only the page's search params, so Next shows no loading page for it. This keeps the
+ * page's own frame and, the moment one is tapped, dims what's showing and runs a line along the top until the new
+ * numbers are in; the tab itself turns on at once.
+ */
+const Going = createContext<{ pending: boolean; go: (href: string) => void }>({ pending: false, go: () => {} });
+
+export function Pending({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const go = useCallback((href: string) => start(() => router.push(href, { scroll: false })), [router]);
+  return (
+    <Going.Provider value={{ pending, go }}>
+      {pending ? <div aria-hidden className="a-loading-now fixed inset-x-0 top-0 z-50 h-[2px] overflow-hidden md:left-60"><span className="block h-full w-2/5 bg-ink/70" /></div> : null}
+      <div aria-busy={pending || undefined} className={`transition-opacity duration-100 ${pending ? "pointer-events-none opacity-45" : ""}`}>{children}</div>
+    </Going.Provider>
+  );
+}
+
+/** pick one of a few views, as links (search params): it turns on at once, and the page follows */
+export function Tabs({ items, active }: { items: { href: string; label: string; count?: number; key: string }[]; active: string }) {
+  const { go } = useContext(Going);
+  const [want, setWant] = useState<string | null>(null);
+  useEffect(() => setWant(null), [active]);
+  const on = want ?? active;
+  return (
+    <nav className="-mx-4 mb-8 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:px-0">
+      <div className="inline-flex gap-1 rounded-[12px] bg-s1 p-1">
+        {items.map((t) => (
+          <Link key={t.key} href={t.href} aria-current={t.key === on ? "page" : undefined}
+            onClick={(e) => {
+              if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+              e.preventDefault();
+              if (t.key === on) return;
+              setWant(t.key);
+              go(t.href);
+            }}
+            className={`a-press whitespace-nowrap rounded-[9px] px-4 py-2 text-[14px] ${t.key === on ? "bg-ink font-semibold text-paper" : "text-quiet hover:text-ink"}`}>
+            {t.label}{t.count != null ? <span className={`tnum ml-1.5 ${t.key === on ? "text-paper/60" : "text-quiet/70"}`}>{t.count}</span> : null}
+          </Link>
+        ))}
+      </div>
+    </nav>
+  );
 }

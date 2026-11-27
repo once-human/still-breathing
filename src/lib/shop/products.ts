@@ -2,7 +2,7 @@ import { FIXED_PRICE, PARTNER_SKUS, costOf } from "@/content/shop";
 import { DESIGNS, SIZE_ORDER, type Colour, type Design, type Size } from "@/content/tee";
 import { kvKeys } from "./config";
 import { ShopError } from "./errors";
-import { query } from "./kv";
+import { ensure, query } from "./kv";
 import { getSettings } from "./settings";
 
 /**
@@ -44,13 +44,13 @@ export type Product = {
 const COLS = "id, lineup, slug, no, name, city, colour, about, front_text, back_text, status, cost::text, margin::text, price::text, skus::text, images::text, sort::text, updated_at::text";
 let made: Promise<unknown> | null = null;
 const table = () =>
-  (made ??= query(
+  (made ??= ensure([
     `CREATE TABLE IF NOT EXISTS products (
        id text PRIMARY KEY, lineup text, slug text UNIQUE, no text, name text, city text, colour text,
        about text, front_text text, back_text text, status text NOT NULL DEFAULT 'live',
        cost numeric, margin int, price int, skus jsonb NOT NULL DEFAULT '{}', sizes text[],
        images jsonb NOT NULL DEFAULT '[]', sort int, updated_at timestamptz NOT NULL DEFAULT now(), updated_by text)`,
-  ).catch((e) => {
+  ]).catch((e) => {
     made = null;
     throw e;
   }));

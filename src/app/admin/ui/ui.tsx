@@ -162,21 +162,8 @@ export function Light({ tone, children }: { tone: "ok" | "warn" | "bad" | "quiet
   return <span className="inline-flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${c}`} />{children}</span>;
 }
 
-/** pick one of a few views, as links (search params) */
-export function Tabs({ items, active }: { items: { href: string; label: string; count?: number; key: string }[]; active: string }) {
-  return (
-    <nav className="-mx-4 mb-8 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:px-0">
-      <div className="inline-flex gap-1 rounded-[12px] bg-s1 p-1">
-        {items.map((t) => (
-          <Link key={t.key} href={t.href} aria-current={t.key === active ? "page" : undefined}
-            className={`a-press whitespace-nowrap rounded-[9px] px-4 py-2 text-[14px] transition ${t.key === active ? "bg-ink font-semibold text-paper" : "text-quiet hover:text-ink"}`}>
-            {t.label}{t.count != null ? <span className={`tnum ml-1.5 ${t.key === active ? "text-paper/60" : "text-quiet/70"}`}>{t.count}</span> : null}
-          </Link>
-        ))}
-      </div>
-    </nav>
-  );
-}
+/** pick one of a few views: the client's Tabs, which turn on at once (client.tsx) */
+export { Tabs } from "./client";
 
 /** nothing to show, said kindly */
 export function Empty({ icon = "check", title, sub }: { icon?: IconName; title: string; sub?: React.ReactNode }) {

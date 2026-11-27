@@ -146,9 +146,11 @@ html.menu-open, html.menu-open body { overflow: hidden; }
 /* while a page loads: a thin line along the top, shown only if it takes more than a moment */
 @keyframes a-load { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
 .a-loading { animation: a-fade 200ms ease-out 250ms both; }
-.a-loading > span { animation: a-load 900ms cubic-bezier(.4,0,.2,1) infinite; }
+.a-loading > span, .a-loading-now > span { animation: a-load 900ms cubic-bezier(.4,0,.2,1) infinite; }
+/* a skeleton shows at once, without rising */
+.a-page > [aria-busy] { animation: none; }
 @media (prefers-reduced-motion: reduce) {
-  .a-page > *, .a-pop, .a-sheet, .a-fade, .a-loading, .a-loading > span { animation: none !important; }
+  .a-page > *, .a-pop, .a-sheet, .a-fade, .a-loading, .a-loading > span, .a-loading-now > span { animation: none !important; }
   .a-spring, .a-press { transition-duration: 0ms !important; }
   .a-press:active { transform: none; }
 }

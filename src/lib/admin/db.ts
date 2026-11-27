@@ -1,5 +1,5 @@
 import "server-only";
-import { query } from "@/lib/shop/kv";
+import { ensure, query } from "@/lib/shop/kv";
 
 /**
  * The admin's own tables, in the same Neon database as the shop's order store, spoken to through the shop's one SQL
@@ -31,9 +31,7 @@ const SCHEMA = [
 
 let ready: Promise<void> | null = null;
 const schema = () =>
-  (ready ??= (async () => {
-    for (const s of SCHEMA) await query(s);
-  })().catch((e) => {
+  (ready ??= ensure(SCHEMA).catch((e) => {
     ready = null;
     throw e;
   }));

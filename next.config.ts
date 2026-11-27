@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // a page opened in the last 20 seconds shows again at once from the browser's copy (the admin refreshes it after any change)
+  experimental: { staleTimes: { dynamic: 20 } },
   // the old addresses (lineup 01, the lineups index) go to where those pages are now
   async redirects() {
     return [
