@@ -79,57 +79,93 @@ export function usePoll<T>(url: string, ms: number, initial: T) {
 
 /* ---------- navigation ---------- */
 
-/** six places, one for each kind of job */
-const NAV: [string, string, IconName][] = [
-  ["/admin", "home", "home"],
-  ["/admin/orders", "orders", "orders"],
-  ["/admin/customers", "people", "people"],
-  ["/admin/products", "shirts", "shirt"],
-  ["/admin/visitors", "visitors", "visitors"],
-  ["/admin/settings", "settings", "settings"],
+/** the admin's map: six sections, each with the few pages that belong to it */
+type Item = [href: string, label: string, icon: IconName];
+const SECTIONS: { name: string; items: Item[] }[] = [
+  { name: "overview", items: [["/admin", "overview", "home"]] },
+  { name: "sales", items: [["/admin/orders", "orders", "orders"], ["/admin/money", "money", "money"]] },
+  { name: "customers", items: [["/admin/people", "people", "people"], ["/admin/accounts", "accounts", "user"]] },
+  { name: "shop", items: [["/admin/products", "shirts", "shirt"], ["/admin/prices", "prices", "card"], ["/admin/words", "site words", "note"]] },
+  { name: "visitors", items: [["/admin/live", "live now", "live"], ["/admin/visitors", "visits", "visitors"], ["/admin/insights", "insights", "chart"]] },
+  { name: "system", items: [["/admin/status", "health", "shield"], ["/admin/settings", "settings", "settings"], ["/admin/audit", "audit log", "list"]] },
 ];
+/** on a phone, the four used most along the bottom, and everything else under "more" */
+const BAR: Item[] = [["/admin", "overview", "home"], ["/admin/orders", "orders", "orders"], ["/admin/people", "people", "people"], ["/admin/live", "live", "live"]];
+
+const isOn = (path: string, href: string) => (href === "/admin" ? path === "/admin" : path === href || path.startsWith(href + "/"));
 
 function LiveCount({ tiny }: { tiny?: boolean }) {
   const { data } = usePoll<{ now: number }>("/api/admin/live?count=1", 15_000, { now: -1 });
   if (data.now <= 0) return null;
   return tiny
-    ? <span className="tnum absolute -right-1.5 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-ok px-1 text-[10px] font-bold text-black">{data.now}</span>
-    : <span className="tnum ml-auto inline-flex items-center gap-1.5 rounded-full bg-ok/15 px-2 py-0.5 text-[12px] font-semibold text-ok"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ok" />{data.now}</span>;
+    ? <span className="tnum absolute -right-1 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-ink px-1 text-[10px] font-bold text-paper">{data.now}</span>
+    : <span className="tnum ml-auto inline-flex items-center gap-1.5 text-[13px] text-ink/80"><span className="h-1.5 w-1.5 rounded-full bg-ok" />{data.now}</span>;
+}
+
+function Links({ path, onGo }: { path: string; onGo?: () => void }) {
+  return (
+    <div className="grid gap-6">
+      {SECTIONS.map((sec) => (
+        <div key={sec.name}>
+          {sec.items.length > 1 || sec.name !== sec.items[0][1] ? <div className="mb-1 px-3 text-[12px] font-medium text-quiet/80">{sec.name}</div> : null}
+          <div className="grid gap-0.5">
+            {sec.items.map(([href, label, icon]) => {
+              const on = isOn(path, href);
+              return (
+                <Link key={href} href={href} onClick={onGo} aria-current={on ? "page" : undefined}
+                  className={`a-press flex h-10 items-center gap-3 rounded-xl px-3 text-[15px] ${on ? "bg-s2 font-medium text-ink" : "text-ink/65 hover:bg-s1 hover:text-ink"}`}>
+                  <Icon name={icon} className="h-[19px] w-[19px]" />{label}{href === "/admin/live" ? <LiveCount /> : null}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function Nav({ email }: { email: string }) {
   const path = usePathname();
-  const on = (href: string) => (href === "/admin" ? path === "/admin" : path === href || path.startsWith(href + "/") || (href === "/admin/visitors" && (path.startsWith("/admin/live") || path.startsWith("/admin/activity"))) || (href === "/admin/settings" && (path.startsWith("/admin/status") || path.startsWith("/admin/audit"))));
+  const [more, setMore] = useState(false);
+  useEffect(() => setMore(false), [path]);
+  const inBar = BAR.some(([href]) => isOn(path, href));
   return (
     <>
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-paper px-4 py-7 md:flex">
-        <Link href="/admin" className="a-press px-3 text-[26px] font-extrabold tracking-[-0.05em]">sahn<span className="ml-1.5 text-[15px] font-medium tracking-normal text-quiet">admin</span></Link>
-        <nav className="mt-10 grid gap-1">
-          {NAV.map(([href, label, icon]) => (
-            <Link key={href} href={href} aria-current={on(href) ? "page" : undefined}
-              className={`a-press flex h-12 items-center gap-3.5 rounded-full px-4 text-[15px] ${on(href) ? "bg-s2 font-semibold text-ink" : "text-quiet hover:bg-s1 hover:text-ink"}`}>
-              <Icon name={icon} className="h-[21px] w-[21px]" />{label}{href === "/admin/visitors" ? <LiveCount /> : null}
-            </Link>
-          ))}
-        </nav>
-        <div className="mt-auto grid gap-1 text-[14px] text-quiet">
-          <span className="truncate px-4 pb-2 text-[13px]" title={email}>{email}</span>
-          <a href="/" target="_blank" rel="noreferrer" className="a-press flex h-11 items-center gap-3.5 rounded-full px-4 hover:bg-s1 hover:text-ink"><Icon name="out" className="h-[19px] w-[19px]" />open the shop</a>
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col overflow-y-auto border-r border-line/40 bg-paper px-3 pb-5 pt-6 md:flex">
+        <Link href="/admin" className="mb-8 px-3 text-[24px] font-extrabold tracking-[-0.05em]">sahn<span className="ml-1.5 text-[14px] font-medium tracking-normal text-quiet">admin</span></Link>
+        <Links path={path} />
+        <div className="mt-auto grid gap-0.5 pt-8 text-[14px] text-ink/65">
+          <span className="truncate px-3 pb-2 text-[13px] text-quiet" title={email}>{email}</span>
+          <a href="/" target="_blank" rel="noreferrer" className="a-press flex h-10 items-center gap-3 rounded-xl px-3 hover:bg-s1 hover:text-ink"><Icon name="out" className="h-[18px] w-[18px]" />open the shop</a>
           <SignOut />
         </div>
       </aside>
 
-      {/* a phone: the six places along the bottom, as an app has them */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-line/50 bg-paper pb-[env(safe-area-inset-bottom)] md:hidden">
-        {NAV.map(([href, label, icon]) => (
-          <Link key={href} href={href} aria-current={on(href) ? "page" : undefined} className="a-press flex flex-col items-center gap-1 pb-2 pt-2.5 text-[11px]">
-            <span className={`relative grid h-8 w-14 place-items-center rounded-full transition-colors ${on(href) ? "bg-s3 text-ink" : "text-quiet"}`}>
-              <Icon name={icon} className="h-[21px] w-[21px]" />{href === "/admin/visitors" ? <LiveCount tiny /> : null}
-            </span>
-            <span className={on(href) ? "font-semibold text-ink" : "text-quiet"}>{label}</span>
-          </Link>
-        ))}
+      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line/40 bg-paper pb-[env(safe-area-inset-bottom)] md:hidden">
+        {BAR.map(([href, label, icon]) => {
+          const on = isOn(path, href);
+          return (
+            <Link key={href} href={href} aria-current={on ? "page" : undefined} className="a-press flex flex-col items-center gap-1 pb-2 pt-2.5 text-[11px]">
+              <span className={`relative grid h-8 w-14 place-items-center rounded-full ${on ? "bg-s2 text-ink" : "text-quiet"}`}><Icon name={icon} className="h-[21px] w-[21px]" />{href === "/admin/live" ? <LiveCount tiny /> : null}</span>
+              <span className={on ? "font-medium text-ink" : "text-quiet"}>{label}</span>
+            </Link>
+          );
+        })}
+        <button type="button" onClick={() => setMore(true)} className="a-press flex flex-col items-center gap-1 pb-2 pt-2.5 text-[11px]">
+          <span className={`grid h-8 w-14 place-items-center rounded-full ${!inBar ? "bg-s2 text-ink" : "text-quiet"}`}><Icon name="list" className="h-[21px] w-[21px]" /></span>
+          <span className={!inBar ? "font-medium text-ink" : "text-quiet"}>more</span>
+        </button>
       </nav>
+      {more ? (
+        <Modal title="everything" onClose={() => setMore(false)}>
+          <div className="-mx-3 mt-2"><Links path={path} onGo={() => setMore(false)} /></div>
+          <div className="-mx-3 mt-6 grid gap-0.5 border-t border-line/40 pt-4 text-[15px] text-ink/65">
+            <a href="/" target="_blank" rel="noreferrer" className="flex h-10 items-center gap-3 rounded-xl px-3"><Icon name="out" className="h-[18px] w-[18px]" />open the shop</a>
+            <SignOut />
+          </div>
+        </Modal>
+      ) : null}
     </>
   );
 }
@@ -182,10 +218,10 @@ export function ShopSwitch({ open, connected }: { open: boolean; connected: bool
 function SignOut() {
   const post = useAdminPost();
   return (
-    <button type="button" className="a-press flex h-11 items-center gap-3.5 rounded-full px-4 text-left hover:bg-s1 hover:text-ink" onClick={async () => {
+    <button type="button" className="a-press flex h-10 items-center gap-3 rounded-xl px-3 text-left hover:bg-s1 hover:text-ink" onClick={async () => {
       await post("/api/admin/session", { signOut: true });
       window.location.href = "/admin/login";
-    }}><Icon name="signout" className="h-[19px] w-[19px]" />sign out</button>
+    }}><Icon name="signout" className="h-[18px] w-[18px]" />sign out</button>
   );
 }
 
@@ -429,7 +465,7 @@ export function SaveBar({ dirty, busy, onSave, onDiscard, summary, warn }: {
   }, [dirty]);
   return (
     <>
-      <div aria-hidden={!dirty} className={`a-spring fixed inset-x-3 bottom-[88px] z-40 mx-auto max-w-[640px] transition-all md:bottom-6 md:left-[17rem] ${dirty ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-[140%] opacity-0"}`}>
+      <div aria-hidden={!dirty} className={`a-spring fixed inset-x-3 bottom-[88px] z-40 mx-auto max-w-[640px] transition-all md:bottom-6 md:left-[16rem] ${dirty ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-[140%] opacity-0"}`}>
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-[28px] bg-s3 py-2.5 pl-5 pr-2.5 shadow-[0_16px_50px_rgba(0,0,0,0.55)]">
           <span className="min-w-0 text-[14px]"><span className="mr-2 inline-block h-2 w-2 rounded-full bg-warn" />{summary} changed</span>
           <div className="flex gap-2">

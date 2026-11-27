@@ -6,8 +6,8 @@ import { shopOpen } from "@/lib/shop/config";
 import { CsrfProvider, Nav, ShopSwitch } from "../ui/client";
 
 /**
- * Signed in only (each page checks the session again itself). The frame: the six places on the left (along the
- * bottom on a phone), the shop's on/off at the top right of every page, the page in the middle.
+ * Signed in only (each page checks the session again itself). The frame: the sections on the left (the main four
+ * along the bottom on a phone, the rest under more), the shop's on/off at the top right of every page, the page.
  */
 export default async function InLayout({ children }: { children: React.ReactNode }) {
   const a = await requireAdmin();
@@ -17,7 +17,7 @@ export default async function InLayout({ children }: { children: React.ReactNode
   return (
     <CsrfProvider token={a.csrf}>
       <Nav email={a.email} />
-      <div className="md:pl-64">
+      <div className="md:pl-60">
         <div className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 bg-paper px-4 md:h-20 md:justify-end md:px-10">
           <Link href="/admin" className="text-[24px] font-extrabold tracking-[-0.05em] md:hidden">sahn</Link>
           <ShopSwitch open={!!s?.open} connected={shopOpen()} />
