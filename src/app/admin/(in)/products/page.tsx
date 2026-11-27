@@ -31,7 +31,7 @@ export default async function Products() {
               <td><A href={`/admin/products/${p.id}`} className="font-medium">{p.no} {p.name}{p.city ? ` ${p.city}` : ""}</A><div className="text-[12px] text-quiet">{p.colour === "cream" ? "off white" : p.colour}</div></td>
               <td><Segmented compact label={p.name} value={p.status} options={STATUS} url={`/api/admin/products/${p.id}`} field="status" /></td>
               <td className="tnum font-semibold">{inr(p.price)}{p.fixedPrice != null ? <div className="text-[11px] font-normal text-quiet">fixed</div> : null}</td>
-              <td className="tnum text-quiet" title="qikink's price, GST included: locked">🔒 {inr(p.cost, true)}</td>
+              <td className="tnum text-quiet" title="qikink's price, GST included: locked">{inr(p.cost, true)}</td>
               <td className="tnum">{inr(Math.round((p.price - p.cost) * 100) / 100, true)}<div className="text-[11px] text-quiet">{p.margin != null ? `own rule ${inr(p.margin)}` : "shop rule"}</div></td>
               <td>
                 <div className="flex flex-wrap gap-1">

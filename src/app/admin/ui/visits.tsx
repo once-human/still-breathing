@@ -18,8 +18,17 @@ export function pageName(p: string | null | undefined) {
   return p.replace(/^\//, "").replace(/\//g, " / ");
 }
 
-const flag = (cc: string | null) => (cc && /^[A-Z]{2}$/.test(cc) ? String.fromCodePoint(...[...cc].map((c) => 0x1f1a5 + c.charCodeAt(0))) : "");
-export const where = (v: Pick<VisitRow, "city" | "country">) => [flag(v.country), v.city ?? v.country ?? "somewhere"].filter(Boolean).join(" ");
+const regions = typeof Intl !== "undefined" && "DisplayNames" in Intl ? new Intl.DisplayNames(["en"], { type: "region" }) : null;
+const country = (cc: string | null) => {
+  if (!cc || !/^[A-Z]{2}$/.test(cc)) return null;
+  try {
+    return (regions?.of(cc) ?? cc).toLowerCase();
+  } catch {
+    return cc;
+  }
+};
+/** "pune, india", or the country alone, or "somewhere" */
+export const where = (v: Pick<VisitRow, "city" | "country">) => [v.city?.toLowerCase(), country(v.country)].filter(Boolean).join(", ") || "somewhere";
 
 /** how far a visit got, as small marks */
 const REACH: [Step, string, string][] = [

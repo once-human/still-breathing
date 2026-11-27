@@ -78,7 +78,7 @@ export function ProductForm({ p, shopMargin }: { p: Product; shopMargin: number 
         <h2 className={legend}>price</h2>
         <div className="flex items-center justify-between gap-4 text-[14px]">
           <span>qikink cost <span className="block text-[12px] text-quiet">what qikink charges for one, GST included</span></span>
-          <span className="tnum flex items-center gap-2 rounded-md bg-ink/[0.04] px-3 py-2 text-quiet" title="qikink's price: it changes only when qikink's does">🔒 {rs(p.cost)}</span>
+          <span className="tnum flex items-center gap-2 rounded-md bg-ink/[0.04] px-3 py-2 text-quiet" title="qikink's price: it changes only when qikink's does">{rs(p.cost)}</span>
         </div>
         <label className="flex items-center justify-between gap-4 text-[14px]"><span>own margin <span className="block text-[12px] text-quiet">empty: the shop&apos;s ₹{shopMargin}, from settings</span></span>
           <span className="flex items-center gap-1 text-quiet">₹<input inputMode="decimal" value={v.margin} onChange={set("margin")} placeholder={String(shopMargin)} className={`${FIELD} !w-28 text-right`} /></span>

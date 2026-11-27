@@ -26,7 +26,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
   const sellable = new Set(pay?.payable[p.id] ?? []);
   return (
     <>
-      <PageHead title={`${p.no} ${p.name}${p.city ? ` ${p.city}` : ""}`} sub={<a href={`/${p.slug}`} target="_blank" rel="noreferrer" className="underline decoration-line underline-offset-4 hover:text-ink">sahn.in/{p.slug} ↗</a>} />
+      <PageHead title={`${p.no} ${p.name}${p.city ? ` ${p.city}` : ""}`} sub={<a href={`/${p.slug}`} target="_blank" rel="noreferrer" className="underline decoration-line underline-offset-4 hover:text-ink">sahn.in/{p.slug}</a>} />
 
       <Section title="status" aside="saved the moment you pick">
         <div className="flex flex-wrap items-center gap-4 rounded-xl border border-line p-4">

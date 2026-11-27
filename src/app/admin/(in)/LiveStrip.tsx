@@ -21,7 +21,7 @@ export function LiveStrip({ initial }: { initial: Count }) {
       <span className="text-quiet"><span className="tnum text-ink">{c.hour}</span> this hour</span>
       <span className="text-quiet">
         <span className="tnum text-ink">{c.today}</span> people today
-        <span className={`ml-1.5 text-[12px] ${diff > 0 ? "text-[#8fd19e]" : diff < 0 ? "text-[#f0a35b]" : ""}`}>{diff > 0 ? "▲" : diff < 0 ? "▼" : "="} {Math.abs(diff)} on yesterday ({c.yesterday})</span>
+        <span className={`ml-1.5 text-[12px] ${diff > 0 ? "text-[#8fd19e]" : diff < 0 ? "text-[#f0a35b]" : ""}`}>{diff > 0 ? `${diff} more than` : diff < 0 ? `${-diff} fewer than` : "same as"} yesterday ({c.yesterday})</span>
       </span>
       <span className="ml-auto text-[12px] text-quiet">watch live →</span>
     </Link>

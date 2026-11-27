@@ -81,7 +81,7 @@ export function SettingsForm({ initial }: { initial: Settings }) {
           ["shirts per parcel", String(initial.shirtsPerParcel), "how many fit under 500 g"],
         ].map(([l, val, hint]) => (
           <div key={l} className={row}><span>{l} <span className="block text-[12px] text-quiet">{hint}</span></span>
-            <span className="tnum rounded-md bg-ink/[0.04] px-3 py-2 text-quiet" title="the partner's rate: locked">🔒 {val}</span>
+            <span className="tnum rounded-md bg-ink/[0.04] px-3 py-2 text-quiet" title="the partner's rate: locked">{val}</span>
           </div>
         ))}
       </section>

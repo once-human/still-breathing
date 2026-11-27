@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { Icon, type IconName } from "./icons";
 
 /**
  * The admin's moving parts. Every change is saved in place (no page reloads): switches and pickers save the moment
@@ -25,10 +26,11 @@ export function CsrfProvider({ token, children }: { token: string; children: Rea
     <Csrf.Provider value={token}>
       <Toasts.Provider value={say}>
         {children}
-        <div className="pointer-events-none fixed bottom-4 right-4 z-[60] grid w-[min(92vw,380px)] gap-2" role="status" aria-live="polite">
+        <div className="pointer-events-none fixed inset-x-4 bottom-24 z-[60] mx-auto grid w-auto max-w-[400px] gap-2 md:inset-x-auto md:bottom-6 md:right-6" role="status" aria-live="polite">
           {toasts.map((t) => (
-            <div key={t.id} className={`pointer-events-auto rounded-lg border bg-[#1a1917] px-4 py-3 text-[13px] shadow-2xl ${t.ok ? "border-[#8fd19e]/40" : "border-[#f08a7a]/50"}`}>
-              <span className={t.ok ? "text-[#8fd19e]" : "text-[#f08a7a]"}>{t.ok ? "✓ " : "✕ "}</span>{t.text}
+            <div key={t.id} className="a-pop pointer-events-auto flex items-start gap-3 rounded-2xl bg-s3 px-4 py-3.5 text-[14px] shadow-[0_12px_40px_rgba(0,0,0,0.5)]">
+              <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full ${t.ok ? "bg-ok/20 text-ok" : "bg-bad/20 text-bad"}`}><Icon name={t.ok ? "check" : "x"} className="h-3.5 w-3.5" /></span>
+              <span className="min-w-0">{t.text}</span>
             </div>
           ))}
         </div>
@@ -121,7 +123,7 @@ export function Nav({ email }: { email: string }) {
         <nav className="mt-8 overflow-y-auto">{links}</nav>
         <div className="mt-auto grid gap-2 px-3 text-[12px] text-quiet">
           <span className="truncate" title={email}>{email}</span>
-          <Link href="/" target="_blank" className="hover:text-ink">open the site ↗</Link>
+          <Link href="/" target="_blank" className="hover:text-ink">open the site</Link>
           <SignOut />
         </div>
       </aside>
@@ -145,16 +147,16 @@ export function SignOutAll() {
 
 /* ---------- buttons, pop-ups ---------- */
 
-const btn = "inline-flex h-9 items-center justify-center gap-2 rounded-md px-3.5 text-[13px] ring-1 transition disabled:cursor-not-allowed disabled:opacity-40";
+const btn = "a-press inline-flex h-11 items-center justify-center gap-2 rounded-full px-5 text-[15px] font-medium disabled:cursor-not-allowed disabled:opacity-40";
 export const BTN = {
-  plain: `${btn} ring-line hover:ring-ink`,
-  main: `${btn} bg-ink font-semibold text-paper ring-ink hover:bg-ink/90`,
-  danger: `${btn} text-[#f08a7a] ring-[#f08a7a]/60 hover:bg-[#f08a7a]/10 hover:ring-[#f08a7a]`,
-  dangerMain: `${btn} bg-[#d9604c] font-semibold text-white ring-[#d9604c] hover:bg-[#c4523f]`,
+  plain: `${btn} bg-s2 text-ink hover:bg-s3`,
+  main: `${btn} bg-ink font-semibold text-paper hover:bg-ink/90`,
+  danger: `${btn} bg-bad/12 text-bad hover:bg-bad/20`,
+  dangerMain: `${btn} bg-bad font-semibold text-black hover:bg-bad/90`,
 };
-export const FIELD = "h-9 w-full rounded-md bg-ink/[0.03] px-2.5 text-[14px] text-ink ring-1 ring-line transition focus:bg-transparent focus:ring-ink focus:outline-none disabled:opacity-60";
+export const FIELD = "h-12 w-full rounded-2xl bg-s2 px-4 text-[15px] text-ink ring-1 ring-transparent transition placeholder:text-quiet/70 focus:bg-s3 focus:ring-ink/30 focus:outline-none disabled:opacity-60";
 
-/** a pop-up over the page: Escape or the backdrop closes it */
+/** a pop-up: a sheet from the bottom on a phone, a card in the middle on a computer; Escape or outside closes it */
 export function Modal({ title, children, onClose, danger }: { title: string; children: React.ReactNode; onClose: () => void; danger?: boolean }) {
   const box = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
@@ -171,10 +173,11 @@ export function Modal({ title, children, onClose, danger }: { title: string; chi
     };
   }, []);
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="a-fade fixed inset-0 z-[70] flex items-end justify-center bg-black/70 md:items-center md:p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div ref={box} role="dialog" aria-modal="true" aria-label={title}
-        className={`max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl border bg-[#151413] p-5 shadow-2xl sm:max-w-md sm:rounded-2xl ${danger ? "border-[#f08a7a]/40" : "border-line"}`}>
-        <h3 className={`text-[17px] font-bold tracking-[-0.01em] ${danger ? "text-[#f08a7a]" : ""}`}>{title}</h3>
+        className="a-sheet max-h-[92dvh] w-full overflow-y-auto rounded-t-[28px] bg-s1 px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-20px_60px_rgba(0,0,0,0.5)] md:max-w-[460px] md:rounded-[28px] md:pb-6 md:pt-6">
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-s3 md:hidden" />
+        <h3 className={`text-[22px] font-bold leading-tight tracking-[-0.02em] ${danger ? "text-bad" : ""}`}>{title}</h3>
         <div className="mt-3">{children}</div>
       </div>
     </div>
@@ -182,14 +185,17 @@ export function Modal({ title, children, onClose, danger }: { title: string; chi
 }
 
 /**
- * One admin action: the button, then a pop-up saying what will happen (with fields if it needs any, and for the ones
- * that can't be undone, a word to type), then a toast with the answer. Nothing happens on the first press.
+ * One admin action: the button (or a whole row, with `row`), then a pop-up saying what will happen (with fields if
+ * it needs any, and for the ones that can't be undone, a word to type), then a toast with the answer. Nothing
+ * happens on the first press.
  */
 type Field = { name: string; label: string; type?: "text" | "number"; placeholder?: string; initial?: string; optional?: boolean; options?: string[] };
 
-export function Act({ label, confirm, url, body, danger, typeToConfirm, done, goTo, fields = [], small }: {
+export function Act({ label, confirm, url, body, danger, typeToConfirm, done, goTo, fields = [], small, row }: {
   label: string; confirm: string; url: string; body: Record<string, unknown>; danger?: boolean; typeToConfirm?: string;
   done?: (data: Record<string, unknown>) => void; /** where to go once it's done (a page that's gone after it) */ goTo?: string; fields?: Field[]; small?: boolean;
+  /** draw it as a row in a group: an icon and a quiet line under the label */
+  row?: { icon: IconName; sub?: string };
 }) {
   const post = useAdminPost();
   const say = useToast();
@@ -213,15 +219,27 @@ export function Act({ label, confirm, url, body, danger, typeToConfirm, done, go
     else router.refresh();
   };
   const blocked = (typeToConfirm && typed.trim().toUpperCase() !== typeToConfirm.toUpperCase()) || fields.some((f) => !f.optional && !values[f.name]?.trim());
+  const start = () => { setErr(""); setOpen(true); };
   return (
     <>
-      <button type="button" className={`${danger ? BTN.danger : BTN.plain} ${small ? "!h-8 !px-2.5 !text-[12px]" : ""}`} onClick={() => { setErr(""); setOpen(true); }}>{label}</button>
+      {row ? (
+        <button type="button" onClick={start} className="group flex min-h-[68px] w-full items-center gap-4 px-5 py-3.5 text-left transition hover:bg-s2 active:bg-s3">
+          <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${danger ? "bg-bad/12 text-bad" : "bg-s3 text-ink/80"}`}><Icon name={row.icon} className="h-[19px] w-[19px]" /></span>
+          <span className="min-w-0 flex-1">
+            <span className={`block text-[15px] leading-snug ${danger ? "text-bad" : ""}`}>{label}</span>
+            {row.sub ? <span className="mt-0.5 block text-[13px] leading-snug text-quiet">{row.sub}</span> : null}
+          </span>
+          <Icon name="chevron" className="h-[18px] w-[18px] text-quiet transition group-hover:translate-x-0.5" />
+        </button>
+      ) : (
+        <button type="button" className={`${danger ? BTN.danger : BTN.plain} ${small ? "!h-9 !px-4 !text-[14px]" : ""}`} onClick={start}>{label}</button>
+      )}
       {open ? (
         <Modal title={label} danger={danger} onClose={() => !busy && setOpen(false)}>
-          <form className="grid gap-3" onSubmit={(e) => { e.preventDefault(); if (!blocked && !busy) void go(); }}>
-            <p className="text-[13px] leading-relaxed text-ink/85">{confirm}</p>
+          <form className="grid gap-4" onSubmit={(e) => { e.preventDefault(); if (!blocked && !busy) void go(); }}>
+            <p className="text-[15px] leading-relaxed text-ink/80">{confirm}</p>
             {fields.map((f) => (
-              <label key={f.name} className="grid gap-1 text-[12px] text-quiet">{f.label}
+              <label key={f.name} className="grid gap-1.5 text-[13px] text-quiet">{f.label}
                 {f.options ? (
                   <select value={values[f.name]} onChange={(e) => setValues({ ...values, [f.name]: e.target.value })} className={FIELD}>
                     {f.options.map((o) => <option key={o}>{o}</option>)}
@@ -232,12 +250,12 @@ export function Act({ label, confirm, url, body, danger, typeToConfirm, done, go
               </label>
             ))}
             {typeToConfirm ? (
-              <label className="grid gap-1 text-[12px] text-quiet">type <span className="font-mono text-ink">{typeToConfirm}</span> to go ahead
+              <label className="grid gap-1.5 text-[13px] text-quiet">type <span className="font-mono text-ink">{typeToConfirm}</span> to go ahead
                 <input value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} className={`${FIELD} font-mono`} />
               </label>
             ) : null}
-            {err ? <p className="rounded-md bg-[#f08a7a]/10 px-3 py-2 text-[12px] text-[#f08a7a]">{err}</p> : null}
-            <div className="mt-1 flex justify-end gap-2">
+            {err ? <p className="a-pop rounded-2xl bg-bad/10 px-4 py-3 text-[14px] text-bad">{err}</p> : null}
+            <div className="mt-2 grid grid-cols-2 gap-2">
               <button type="button" disabled={busy} onClick={() => setOpen(false)} className={BTN.plain}>cancel</button>
               <button type="submit" disabled={!!blocked || busy} className={danger ? BTN.dangerMain : BTN.main}>{busy ? "working…" : label}</button>
             </div>
@@ -250,9 +268,19 @@ export function Act({ label, confirm, url, body, danger, typeToConfirm, done, go
 
 /* ---------- saved the moment they change ---------- */
 
-/** an on/off switch that saves at once; `confirmOff` / `confirmOn` ask first in a pop-up */
-export function Toggle({ label, hint, value, url, body, field, confirmOff, confirmOn }: {
-  label: string; hint?: string; value: boolean; url: string; body?: Record<string, unknown>; field: string; confirmOff?: string; confirmOn?: string;
+/** the switch itself, with a little spring in the knob */
+export function Switch({ on, busy, onClick, label }: { on: boolean; busy?: boolean; onClick: () => void; label: string }) {
+  return (
+    <button type="button" role="switch" aria-checked={on} aria-label={label} disabled={busy} onClick={onClick}
+      className={`relative h-8 w-[52px] shrink-0 rounded-full transition-colors duration-300 disabled:opacity-60 ${on ? "bg-ok" : "bg-s3"}`}>
+      <span className={`a-spring absolute top-1 h-6 w-6 rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.35)] transition-all ${on ? "left-[24px] bg-paper" : "left-1 bg-quiet"}`} />
+    </button>
+  );
+}
+
+/** an on/off row that saves at once; `confirmOff` / `confirmOn` ask first in a pop-up */
+export function Toggle({ label, hint, value, url, body, field, confirmOff, confirmOn, icon }: {
+  label: string; hint?: string; value: boolean; url: string; body?: Record<string, unknown>; field: string; confirmOff?: string; confirmOn?: string; icon?: IconName;
 }) {
   const post = useAdminPost();
   const say = useToast();
@@ -280,19 +308,17 @@ export function Toggle({ label, hint, value, url, body, field, confirmOff, confi
     else void save(next);
   };
   return (
-    <div className="flex items-center justify-between gap-6 py-3">
-      <div className="min-w-0">
-        <div className="text-[14px] font-medium">{label}</div>
-        {hint ? <div className="text-[12px] text-quiet">{hint}</div> : null}
+    <div className="flex min-h-[68px] items-center gap-4 px-5 py-3.5">
+      {icon ? <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full transition-colors ${on ? "bg-ok/12 text-ok" : "bg-s3 text-ink/80"}`}><Icon name={icon} className="h-[19px] w-[19px]" /></span> : null}
+      <div className="min-w-0 flex-1">
+        <div className="text-[15px] leading-snug">{label}</div>
+        {hint ? <div className="mt-0.5 text-[13px] leading-snug text-quiet">{hint}</div> : null}
       </div>
-      <button type="button" role="switch" aria-checked={on} aria-label={label} disabled={busy} onClick={flip}
-        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-60 ${on ? "bg-[#4fae6a]" : "bg-ink/15"}`}>
-        <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${on ? "left-6" : "left-1"}`} />
-      </button>
+      <Switch on={on} busy={busy} onClick={flip} label={label} />
       {ask !== null ? (
-        <Modal title={`${label}: ${ask ? "on" : "off"}?`} danger={!ask} onClose={() => setAsk(null)}>
-          <p className="text-[13px] leading-relaxed text-ink/85">{ask ? confirmOn : confirmOff}</p>
-          <div className="mt-4 flex justify-end gap-2">
+        <Modal title={ask ? `turn ${label} on?` : `turn ${label} off?`} danger={!ask} onClose={() => setAsk(null)}>
+          <p className="text-[15px] leading-relaxed text-ink/80">{ask ? confirmOn : confirmOff}</p>
+          <div className="mt-6 grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setAsk(null)} className={BTN.plain}>cancel</button>
             <button type="button" onClick={() => void save(ask)} className={ask ? BTN.main : BTN.dangerMain}>turn {ask ? "on" : "off"}</button>
           </div>
@@ -326,12 +352,12 @@ export function Segmented<T extends string>({ value, options, url, body, field, 
     say(true, `${label}: ${options.find((o) => o.value === next)?.label}`);
     router.refresh();
   };
-  const tone = { ok: "bg-[#4fae6a] text-white", warn: "bg-[#f0a35b] text-black", off: "bg-ink/25 text-ink" };
+  const tone = { ok: "bg-ok text-black", warn: "bg-warn text-black", off: "bg-ink text-paper" };
   return (
-    <div role="radiogroup" aria-label={label} className={`inline-flex rounded-lg bg-ink/[0.06] p-0.5 ${busy ? "opacity-70" : ""}`}>
+    <div role="radiogroup" aria-label={label} className={`inline-flex rounded-full bg-s2 p-1 ${busy ? "opacity-70" : ""}`}>
       {options.map((o) => (
         <button key={o.value} type="button" role="radio" aria-checked={v === o.value} onClick={() => void pick(o.value)}
-          className={`rounded-md ${compact ? "px-2 py-1 text-[11px]" : "px-3 py-1.5 text-[12px]"} transition ${v === o.value ? `${tone[o.tone ?? "off"]} font-semibold shadow` : "text-quiet hover:text-ink"}`}>
+          className={`a-press whitespace-nowrap rounded-full ${compact ? "px-3 py-1.5 text-[13px]" : "px-4 py-2 text-[14px]"} ${v === o.value ? `${tone[o.tone ?? "off"]} font-semibold shadow-sm` : "text-quiet hover:text-ink"}`}>
           {o.label}
         </button>
       ))}
@@ -340,8 +366,8 @@ export function Segmented<T extends string>({ value, options, url, body, field, 
 }
 
 /**
- * A form's "save changes" bar: it slides up once anything differs from what's saved, with discard and save; a change
- * that moves prices or closes the shop asks first. Leaving the page with changes unsaved asks too.
+ * A form's "save changes" bar: it springs up once anything differs from what's saved, with discard and save; a
+ * change that moves prices or closes the shop asks first. Leaving the page with changes unsaved asks too.
  */
 export function SaveBar({ dirty, busy, onSave, onDiscard, summary, warn }: {
   dirty: boolean; busy: boolean; onSave: () => void; onDiscard: () => void; summary: string; warn?: string | null;
@@ -355,19 +381,19 @@ export function SaveBar({ dirty, busy, onSave, onDiscard, summary, warn }: {
   }, [dirty]);
   return (
     <>
-      <div aria-hidden={!dirty} className={`fixed inset-x-0 bottom-0 z-40 border-t border-line bg-[#151413]/95 backdrop-blur transition-transform duration-200 md:left-60 ${dirty ? "translate-y-0" : "pointer-events-none translate-y-full"}`}>
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3 md:px-10">
-          <span className="min-w-0 text-[13px]"><span className="mr-2 inline-block h-2 w-2 rounded-full bg-[#f0a35b]" />unsaved: {summary}</span>
+      <div aria-hidden={!dirty} className={`a-spring fixed inset-x-3 bottom-[88px] z-40 mx-auto max-w-[640px] transition-all md:bottom-6 md:left-[17rem] ${dirty ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-[140%] opacity-0"}`}>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[28px] bg-s3 py-2.5 pl-5 pr-2.5 shadow-[0_16px_50px_rgba(0,0,0,0.55)]">
+          <span className="min-w-0 text-[14px]"><span className="mr-2 inline-block h-2 w-2 rounded-full bg-warn" />{summary} changed</span>
           <div className="flex gap-2">
-            <button type="button" disabled={busy} onClick={onDiscard} className={BTN.plain}>discard</button>
-            <button type="button" disabled={busy} onClick={() => (warn ? setAsk(true) : onSave())} className={BTN.main}>{busy ? "saving…" : "save changes"}</button>
+            <button type="button" disabled={busy} onClick={onDiscard} className={`${BTN.plain} !h-10 !bg-s2`}>discard</button>
+            <button type="button" disabled={busy} onClick={() => (warn ? setAsk(true) : onSave())} className={`${BTN.main} !h-10`}>{busy ? "saving…" : "save"}</button>
           </div>
         </div>
       </div>
       {ask ? (
         <Modal title="save these changes?" onClose={() => setAsk(false)}>
-          <p className="text-[13px] leading-relaxed text-ink/85">{warn}</p>
-          <div className="mt-4 flex justify-end gap-2">
+          <p className="text-[15px] leading-relaxed text-ink/80">{warn}</p>
+          <div className="mt-6 grid grid-cols-2 gap-2">
             <button type="button" onClick={() => setAsk(false)} className={BTN.plain}>cancel</button>
             <button type="button" onClick={() => { setAsk(false); onSave(); }} className={BTN.main}>save</button>
           </div>
@@ -394,8 +420,8 @@ export function NoteForm({ url, body }: { url: string; body: Record<string, unkn
       if (r.ok) { setText(""); say(true, "note saved"); router.refresh(); } else say(false, r.error);
     }}>
       <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={2000} placeholder="a note for yourself (the buyer never sees it)"
-        className="w-full resize-y rounded-md bg-ink/[0.03] p-2.5 text-[13px] ring-1 ring-line focus:ring-ink focus:outline-none" />
-      <div><button disabled={busy || !text.trim()} className={BTN.plain}>{busy ? "saving…" : "add note"}</button></div>
+        className={`${FIELD} !h-auto resize-y py-3 leading-relaxed`} />
+      {text.trim() ? <div className="a-pop"><button disabled={busy} className={`${BTN.main} !h-10`}>{busy ? "saving…" : "add note"}</button></div> : null}
     </form>
   );
 }

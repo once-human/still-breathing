@@ -44,7 +44,7 @@ function Versus({ today, yesterday }: { today: Totals; yesterday: Totals }) {
   return (
     <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
       {rows.map(([l, a, b, f]) => (
-        <Stat key={l} label={l} value={f(a)} sub={<span className={a > b ? "text-[#8fd19e]" : a < b ? "text-[#f0a35b]" : ""}>{a > b ? "▲" : a < b ? "▼" : "="} yesterday {f(b)}</span>} />
+        <Stat key={l} label={l} value={f(a)} sub={<span className={a > b ? "text-[#8fd19e]" : a < b ? "text-[#f0a35b]" : ""}>{a > b ? "up on" : a < b ? "down on" : "same as"} yesterday, {f(b)}</span>} />
       ))}
     </div>
   );
@@ -158,7 +158,7 @@ export default async function Home() {
         </Table>
         <p className="mt-3 text-[12px] text-quiet">
           qikink&apos;s API has no wallet balance, so it isn&apos;t shown. a low wallet shows up in “needs you” the moment a print order is refused for it, and you get an email.
-          keep at least {inr(settings.lowWallet)} in it: <a className="underline" href="https://qikink.com" target="_blank" rel="noreferrer">qikink ↗</a>
+          keep at least {inr(settings.lowWallet)} in it: <a className="underline" href="https://qikink.com" target="_blank" rel="noreferrer">qikink</a>
         </p>
       </Section>
     </>

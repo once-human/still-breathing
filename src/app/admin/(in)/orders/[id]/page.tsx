@@ -49,7 +49,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   return (
     <>
       <PageHead title={`#${o.id}`} sub={<>placed {dt(o.createdAt)}{o.paidAt ? ` · paid ${dt(o.paidAt)}` : ""} · <StageBadge stage={o.stage} /></>}>
-        <a href={orderPath(o.id)} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center px-3 text-[13px] ring-1 ring-line hover:ring-ink">buyer&apos;s page ↗</a>
+        <a href={orderPath(o.id)} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center px-3 text-[13px] ring-1 ring-line hover:ring-ink">buyer&apos;s page</a>
       </PageHead>
 
       {o.problem ? <p className="mb-8 border-l-2 border-[#f0a35b] py-1 pl-3 text-[14px]">{o.problem}</p> : null}
@@ -115,7 +115,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             ["last checked", o.syncedAt ? dt(o.syncedAt) : "–"],
             ["courier", o.tracking?.courier ?? "–"],
             ["awb", o.tracking?.awb ? <span key="a" className="font-mono text-[12px]">{o.tracking.awb}</span> : "–"],
-            ["tracking", o.tracking?.url ? <a key="t" className="underline decoration-line" href={o.tracking.url} target="_blank" rel="noreferrer">open ↗</a> : "–"],
+            ["tracking", o.tracking?.url ? <a key="t" className="underline decoration-line" href={o.tracking.url} target="_blank" rel="noreferrer">open</a> : "–"],
             ["shipped", o.shippedAt ? dt(o.shippedAt) : "–"],
             ["delivered", o.deliveredAt ? dt(o.deliveredAt) : "–"],
           ]} />
