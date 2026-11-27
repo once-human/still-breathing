@@ -79,54 +79,103 @@ export function usePoll<T>(url: string, ms: number, initial: T) {
 
 /* ---------- navigation ---------- */
 
-const NAV: { group: string; items: [string, string][] }[] = [
-  { group: "shop", items: [["/admin", "home"], ["/admin/orders", "orders"], ["/admin/customers", "customers"], ["/admin/products", "products"]] },
-  { group: "people", items: [["/admin/live", "live now"], ["/admin/visitors", "visitors"], ["/admin/activity", "activity"]] },
-  { group: "setup", items: [["/admin/status", "what's live"], ["/admin/settings", "settings"], ["/admin/audit", "audit log"]] },
+/** six places, one for each kind of job */
+const NAV: [string, string, IconName][] = [
+  ["/admin", "home", "home"],
+  ["/admin/orders", "orders", "orders"],
+  ["/admin/customers", "people", "people"],
+  ["/admin/products", "shirts", "shirt"],
+  ["/admin/visitors", "visitors", "visitors"],
+  ["/admin/settings", "settings", "settings"],
 ];
 
-function LiveDot() {
+function LiveCount({ tiny }: { tiny?: boolean }) {
   const { data } = usePoll<{ now: number }>("/api/admin/live?count=1", 15_000, { now: -1 });
-  if (data.now < 0) return null;
-  return (
-    <span className={`ml-auto inline-flex items-center gap-1.5 text-[11px] tnum ${data.now ? "text-[#8fd19e]" : "text-quiet"}`}>
-      {data.now ? <span className="relative flex h-1.5 w-1.5"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#8fd19e] opacity-60" /><span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#8fd19e]" /></span> : null}
-      {data.now}
-    </span>
-  );
+  if (data.now <= 0) return null;
+  return tiny
+    ? <span className="tnum absolute -right-1.5 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-ok px-1 text-[10px] font-bold text-black">{data.now}</span>
+    : <span className="tnum ml-auto inline-flex items-center gap-1.5 rounded-full bg-ok/15 px-2 py-0.5 text-[12px] font-semibold text-ok"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ok" />{data.now}</span>;
 }
 
 export function Nav({ email }: { email: string }) {
   const path = usePathname();
-  const [open, setOpen] = useState(false);
-  const on = (href: string) => (href === "/admin" ? path === "/admin" : path === href || path.startsWith(href + "/"));
-  const links = NAV.map((g) => (
-    <div key={g.group} className="mb-5">
-      <div className="mb-1.5 pl-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-quiet/70">{g.group}</div>
-      {g.items.map(([href, label]) => (
-        <Link key={href} href={href} onClick={() => setOpen(false)}
-          className={`flex items-center rounded-md px-3 py-1.5 text-[14px] transition ${on(href) ? "bg-ink/[0.08] text-ink" : "text-quiet hover:bg-ink/[0.04] hover:text-ink"}`}>
-          {label}{href === "/admin/live" ? <LiveDot /> : null}
-        </Link>
-      ))}
-    </div>
-  ));
+  const on = (href: string) => (href === "/admin" ? path === "/admin" : path === href || path.startsWith(href + "/") || (href === "/admin/visitors" && (path.startsWith("/admin/live") || path.startsWith("/admin/activity"))) || (href === "/admin/settings" && (path.startsWith("/admin/status") || path.startsWith("/admin/audit"))));
   return (
     <>
-      <div className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-paper/95 px-4 py-3 backdrop-blur md:hidden">
-        <Link href="/admin" className="text-[18px] font-extrabold tracking-[-0.04em]">sahn <span className="font-normal text-quiet">admin</span></Link>
-        <button type="button" onClick={() => setOpen((v) => !v)} className="hit text-[14px]" aria-expanded={open}>{open ? "close" : "menu"}</button>
-      </div>
-      {open ? <nav className="border-b border-line px-2 py-3 md:hidden">{links}<div className="mt-1 px-3"><SignOut /></div></nav> : null}
-      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-line px-3 py-6 md:flex">
-        <Link href="/admin" className="px-3 text-[22px] font-extrabold tracking-[-0.04em]">sahn <span className="font-normal text-quiet">admin</span></Link>
-        <nav className="mt-8 overflow-y-auto">{links}</nav>
-        <div className="mt-auto grid gap-2 px-3 text-[12px] text-quiet">
-          <span className="truncate" title={email}>{email}</span>
-          <Link href="/" target="_blank" className="hover:text-ink">open the site</Link>
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-paper px-4 py-7 md:flex">
+        <Link href="/admin" className="a-press px-3 text-[26px] font-extrabold tracking-[-0.05em]">sahn<span className="ml-1.5 text-[15px] font-medium tracking-normal text-quiet">admin</span></Link>
+        <nav className="mt-10 grid gap-1">
+          {NAV.map(([href, label, icon]) => (
+            <Link key={href} href={href} aria-current={on(href) ? "page" : undefined}
+              className={`a-press flex h-12 items-center gap-3.5 rounded-full px-4 text-[15px] ${on(href) ? "bg-s2 font-semibold text-ink" : "text-quiet hover:bg-s1 hover:text-ink"}`}>
+              <Icon name={icon} className="h-[21px] w-[21px]" />{label}{href === "/admin/visitors" ? <LiveCount /> : null}
+            </Link>
+          ))}
+        </nav>
+        <div className="mt-auto grid gap-1 text-[14px] text-quiet">
+          <span className="truncate px-4 pb-2 text-[13px]" title={email}>{email}</span>
+          <a href="/" target="_blank" rel="noreferrer" className="a-press flex h-11 items-center gap-3.5 rounded-full px-4 hover:bg-s1 hover:text-ink"><Icon name="out" className="h-[19px] w-[19px]" />open the shop</a>
           <SignOut />
         </div>
       </aside>
+
+      {/* a phone: the six places along the bottom, as an app has them */}
+      <nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-line/50 bg-paper pb-[env(safe-area-inset-bottom)] md:hidden">
+        {NAV.map(([href, label, icon]) => (
+          <Link key={href} href={href} aria-current={on(href) ? "page" : undefined} className="a-press flex flex-col items-center gap-1 pb-2 pt-2.5 text-[11px]">
+            <span className={`relative grid h-8 w-14 place-items-center rounded-full transition-colors ${on(href) ? "bg-s3 text-ink" : "text-quiet"}`}>
+              <Icon name={icon} className="h-[21px] w-[21px]" />{href === "/admin/visitors" ? <LiveCount tiny /> : null}
+            </span>
+            <span className={on(href) ? "font-semibold text-ink" : "text-quiet"}>{label}</span>
+          </Link>
+        ))}
+      </nav>
+    </>
+  );
+}
+
+/**
+ * The shop's on/off, always at the top right: one tap, a pop-up to be sure, and it's done. Closed, people can
+ * still look and fill their bag, and checkout shows the closed message.
+ */
+export function ShopSwitch({ open, connected }: { open: boolean; connected: boolean }) {
+  const post = useAdminPost();
+  const say = useToast();
+  const router = useRouter();
+  const [on, setOn] = useState(open);
+  const [ask, setAsk] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setOn(open), [open]);
+  const live = on && connected;
+  const save = async () => {
+    setBusy(true);
+    const r = await post("/api/admin/settings", { open: !on });
+    setBusy(false);
+    setAsk(false);
+    if (!r.ok) return say(false, r.error);
+    setOn(!on);
+    say(true, on ? "the shop is closed: checkout is off" : "the shop is live: checkout is on");
+    router.refresh();
+  };
+  return (
+    <>
+      <button type="button" onClick={() => connected && setAsk(true)} disabled={!connected} title={connected ? undefined : "payments aren't connected"}
+        className={`a-press inline-flex h-10 items-center gap-2.5 rounded-full pl-4 pr-1.5 text-[14px] font-semibold ${live ? "bg-ok/12 text-ok" : "bg-warn/12 text-warn"}`}>
+        <span className="relative flex h-2 w-2">{live ? <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-ok opacity-60" /> : null}<span className={`relative h-2 w-2 rounded-full ${live ? "bg-ok" : "bg-warn"}`} /></span>
+        {!connected ? "not connected" : live ? "shop live" : "shop closed"}
+        <span className={`relative h-7 w-12 rounded-full transition-colors ${live ? "bg-ok" : "bg-s3"}`}><span className={`a-spring absolute top-1 h-5 w-5 rounded-full bg-paper shadow transition-all ${live ? "left-6" : "left-1"}`} /></span>
+      </button>
+      {ask ? (
+        <Modal title={on ? "close the shop?" : "open the shop?"} danger={on} onClose={() => !busy && setAsk(false)}>
+          <p className="text-[15px] leading-relaxed text-ink/80">{on
+            ? "checkout closes on the whole site at once. people can still look and fill their bag; anyone paying right now can finish."
+            : "checkout opens again for everyone, at the prices shown now."}</p>
+          <div className="mt-6 grid grid-cols-2 gap-2">
+            <button type="button" disabled={busy} onClick={() => setAsk(false)} className={BTN.plain}>cancel</button>
+            <button type="button" disabled={busy} onClick={() => void save()} className={on ? BTN.dangerMain : BTN.main}>{busy ? "working…" : on ? "close it" : "open it"}</button>
+          </div>
+        </Modal>
+      ) : null}
     </>
   );
 }
@@ -134,15 +183,15 @@ export function Nav({ email }: { email: string }) {
 function SignOut() {
   const post = useAdminPost();
   return (
-    <button type="button" className="text-left text-[12px] text-quiet hover:text-ink" onClick={async () => {
+    <button type="button" className="a-press flex h-11 items-center gap-3.5 rounded-full px-4 text-left hover:bg-s1 hover:text-ink" onClick={async () => {
       await post("/api/admin/session", { signOut: true });
       window.location.href = "/admin/login";
-    }}>sign out</button>
+    }}><Icon name="signout" className="h-[19px] w-[19px]" />sign out</button>
   );
 }
 
 export function SignOutAll() {
-  return <Act label="sign out everywhere" confirm="every admin session, on every device, ends now (this one too)." url="/api/admin/session" body={{ signOut: true, all: true }} goTo="/admin/login" />;
+  return <Act row={{ icon: "signout", sub: "every admin session on every device ends now, this one too" }} danger label="sign out everywhere" confirm="every admin session, on every device, ends now (this one too)." url="/api/admin/session" body={{ signOut: true, all: true }} goTo="/admin/login" />;
 }
 
 /* ---------- buttons, pop-ups ---------- */
