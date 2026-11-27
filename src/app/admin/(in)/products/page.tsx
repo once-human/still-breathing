@@ -1,12 +1,13 @@
+import Link from "next/link";
 import { SIZE_ORDER } from "@/content/tee";
 import { requireAdmin } from "@/lib/admin/auth";
-import { getSettings } from "@/lib/admin/settings";
 import { payView } from "@/lib/shop/catalog";
 import { products } from "@/lib/shop/products";
 import { Segmented } from "../../ui/client";
-import { A, PageHead, Table, dt, inr } from "../../ui/ui";
+import { Icon } from "../../ui/icons";
+import { Page, inr } from "../../ui/ui";
 
-export const metadata = { title: "products" };
+export const metadata = { title: "shirts" };
 export const dynamic = "force-dynamic";
 
 const STATUS = [
@@ -15,37 +16,43 @@ const STATUS = [
   { value: "draft" as const, label: "hidden", tone: "off" as const },
 ];
 
+/** shirts: one card each with its price, its status (saved the moment you pick) and the sizes that can be bought now */
 export default async function Products() {
   await requireAdmin();
-  const [list, s, pay] = await Promise.all([products(), getSettings(), payView().catch(() => null)]);
+  const [list, pay] = await Promise.all([products(), payView().catch(() => null)]);
   return (
     <>
-      <PageHead title="products" sub={`price = qikink's cost + ${inr(s.margin)}, up to the next ₹10, unless a shirt has its own margin or price. status saves the moment you pick`}>
-        {pay && !pay.pay ? <span className="rounded-full bg-[#f0a35b]/15 px-3 py-1 text-[12px] text-[#f0a35b]">checkout is closed: nothing can be bought</span> : null}
-      </PageHead>
-      <Table head={["shirt", "status", "price", "qikink cost", "margin", "can be bought", "changed"]}>
+      <Page title="shirts" sub={pay && !pay.pay ? "checkout is closed, so nothing can be bought right now. status saves the moment you pick." : "status saves the moment you pick; tap a shirt for its words and price"} />
+      <div className="grid gap-3 md:grid-cols-2">
         {list.map((p) => {
           const sellable = new Set(pay?.payable[p.id] ?? []);
           return (
-            <tr key={p.id}>
-              <td><A href={`/admin/products/${p.id}`} className="font-medium">{p.no} {p.name}{p.city ? ` ${p.city}` : ""}</A><div className="text-[12px] text-quiet">{p.colour === "cream" ? "off white" : p.colour}</div></td>
-              <td><Segmented compact label={p.name} value={p.status} options={STATUS} url={`/api/admin/products/${p.id}`} field="status" /></td>
-              <td className="tnum font-semibold">{inr(p.price)}{p.fixedPrice != null ? <div className="text-[11px] font-normal text-quiet">fixed</div> : null}</td>
-              <td className="tnum text-quiet" title="qikink's price, GST included: locked">{inr(p.cost, true)}</td>
-              <td className="tnum">{inr(Math.round((p.price - p.cost) * 100) / 100, true)}<div className="text-[11px] text-quiet">{p.margin != null ? `own rule ${inr(p.margin)}` : "shop rule"}</div></td>
-              <td>
-                <div className="flex flex-wrap gap-1">
+            <div key={p.id} className={`rounded-[22px] bg-s1 ${p.status === "draft" ? "opacity-70" : ""}`}>
+              <Link href={`/admin/products/${p.id}`} className="group flex items-start gap-4 rounded-t-[22px] px-5 pb-4 pt-5 transition hover:bg-s2">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] text-quiet">{p.no} · {p.colour === "cream" ? "off white" : p.colour}{p.city ? ` · ${p.city}` : ""}</div>
+                  <div className="mt-1 truncate text-[20px] font-semibold tracking-[-0.02em]">{p.name}</div>
+                </div>
+                <div className="text-right">
+                  <div className="tnum text-[20px] font-semibold">{inr(p.price)}</div>
+                  <div className="tnum text-[13px] text-quiet">leaves {inr(Math.round(p.price - p.cost))}</div>
+                </div>
+                <Icon name="chevron" className="mt-1 h-[18px] w-[18px] text-quiet transition group-hover:translate-x-0.5 group-hover:text-ink" />
+              </Link>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line/50 px-5 py-4">
+                <Segmented compact label={p.name} value={p.status} options={STATUS} url={`/api/admin/products/${p.id}`} field="status" />
+                <div className="flex gap-1.5" aria-label="sizes that can be bought now">
                   {SIZE_ORDER.map((z) => {
                     const on = sellable.has(z);
-                    return <span key={z} title={on ? "on sale" : p.skus[z] ? "not on sale" : "no qikink product for this size"} className={`rounded px-1.5 py-0.5 text-[11px] ${on ? "bg-[#8fd19e]/15 text-[#8fd19e]" : "text-quiet line-through decoration-ink/30"}`}>{z}</span>;
+                    return <span key={z} title={on ? "can be bought" : p.skus[z] ? "not on sale" : "qikink has no product for this size"}
+                      className={`tnum grid h-7 min-w-7 place-items-center rounded-full px-1.5 text-[12px] ${on ? "bg-s3 text-ink" : "text-quiet/60 line-through decoration-quiet/40"}`}>{z}</span>;
                   })}
                 </div>
-              </td>
-              <td className="text-[12px] text-quiet">{p.updatedAt ? dt(p.updatedAt) : "as in the code"}</td>
-            </tr>
+              </div>
+            </div>
           );
         })}
-      </Table>
+      </div>
     </>
   );
 }

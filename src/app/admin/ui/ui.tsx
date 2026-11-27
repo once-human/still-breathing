@@ -281,3 +281,26 @@ export function A({ href, children, className = "" }: { href: string; children: 
 export function Avatar({ name, tone = "quiet" }: { name: string; tone?: Tone }) {
   return <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-[15px] font-semibold uppercase ${TINT[tone]}`}>{(name.trim()[0] ?? "?").toUpperCase()}</span>;
 }
+
+/* ---------- forms ---------- */
+
+/**
+ * One setting in a group: what it is and a quiet line on the left, its control on the right; `stack` puts the
+ * control under the words (a long text), and `count` shows how much of the limit is used.
+ */
+export function Field({ label, hint, children, stack, count }: { label: React.ReactNode; hint?: React.ReactNode; children: React.ReactNode; stack?: boolean; count?: [number, number] }) {
+  const words = (
+    <span className="min-w-0 flex-1">
+      <span className="flex items-baseline justify-between gap-4 text-[15px] leading-snug">{label}{count ? <span className={`tnum text-[13px] ${count[0] > count[1] ? "text-bad" : "text-quiet"}`}>{count[0]}/{count[1]}</span> : null}</span>
+      {hint ? <span className="mt-0.5 block text-[13px] leading-snug text-quiet">{hint}</span> : null}
+    </span>
+  );
+  return stack
+    ? <label className="grid gap-3 px-5 py-4">{words}{children}</label>
+    : <label className="flex min-h-[68px] flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3.5">{words}<span className="shrink-0">{children}</span></label>;
+}
+
+/** a value that's set somewhere else (a partner's rate, the code): plain grey, nothing to press */
+export function Fixed({ children }: { children: React.ReactNode }) {
+  return <span className="tnum text-[15px] text-quiet">{children}</span>;
+}

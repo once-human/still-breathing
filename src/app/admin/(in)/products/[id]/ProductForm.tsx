@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Product } from "@/lib/shop/products";
 import { FIELD, SaveBar, useAdminPost, useToast } from "../../../ui/client";
+import { Field, Fixed, Group, Section } from "../../../ui/ui";
 
 const rule = (cost: number, margin: number) => Math.ceil((cost + margin) / 10) * 10;
 const rs = (n: number) => `₹${(Math.round(n * 100) / 100).toLocaleString("en-IN")}`;
@@ -56,48 +57,47 @@ export function ProductForm({ p, shopMargin }: { p: Product; shopMargin: number 
     router.refresh();
   };
 
-  const card = "grid gap-4 rounded-xl border border-line p-4 md:p-5";
-  const legend = "text-[12px] font-semibold uppercase tracking-[0.12em] text-quiet";
+  const money = `${FIELD} !w-32 text-right tnum`;
   return (
-    <div className="grid max-w-3xl gap-6 pb-24">
-      <section className={card}>
-        <h2 className={legend}>on the site</h2>
-        <label className="grid gap-1 text-[12px] text-quiet">name · its title on its page, the cards, the header and share text
-          <input value={v.name} onChange={set("name")} maxLength={60} className={FIELD} />
-        </label>
-        <label className="grid gap-1 text-[12px] text-quiet">
-          <span className="flex justify-between">about · the words on its page and its share description <span className="tnum">{v.about.trim().length}/600</span></span>
-          <textarea value={v.about} onChange={set("about")} maxLength={600} rows={5} className={`${FIELD} !h-auto resize-y py-2 leading-snug`} />
-        </label>
-        <label className="flex items-center justify-between gap-4 text-[14px]"><span>order <span className="block text-[12px] text-quiet">lower comes first in its group</span></span>
-          <input inputMode="numeric" value={v.sort} onChange={set("sort")} className={`${FIELD} !w-24 text-right`} />
-        </label>
-      </section>
+    <>
+      <Section title="on the site">
+        <Group>
+          <Field stack label="name" hint="its title on its page, the cards, the header and share text" count={[v.name.trim().length, 60]}>
+            <input value={v.name} onChange={set("name")} maxLength={60} className={FIELD} />
+          </Field>
+          <Field stack label="about" hint="the words on its page and its share description" count={[v.about.trim().length, 600]}>
+            <textarea value={v.about} onChange={set("about")} maxLength={600} rows={5} className={`${FIELD} !h-auto resize-y py-3 leading-snug`} />
+          </Field>
+          <Field label="order" hint="lower comes first in its group">
+            <input inputMode="numeric" value={v.sort} onChange={set("sort")} className={`${FIELD} !w-24 text-right tnum`} />
+          </Field>
+        </Group>
+      </Section>
 
-      <section className={card}>
-        <h2 className={legend}>price</h2>
-        <div className="flex items-center justify-between gap-4 text-[14px]">
-          <span>qikink cost <span className="block text-[12px] text-quiet">what qikink charges for one, GST included</span></span>
-          <span className="tnum flex items-center gap-2 rounded-md bg-ink/[0.04] px-3 py-2 text-quiet" title="qikink's price: it changes only when qikink's does">{rs(p.cost)}</span>
-        </div>
-        <label className="flex items-center justify-between gap-4 text-[14px]"><span>own margin <span className="block text-[12px] text-quiet">empty: the shop&apos;s ₹{shopMargin}, from settings</span></span>
-          <span className="flex items-center gap-1 text-quiet">₹<input inputMode="decimal" value={v.margin} onChange={set("margin")} placeholder={String(shopMargin)} className={`${FIELD} !w-28 text-right`} /></span>
-        </label>
-        <label className="flex items-center justify-between gap-4 text-[14px]"><span>fixed price <span className="block text-[12px] text-quiet">empty: cost + margin, up to the next ₹10</span></span>
-          <span className="flex items-center gap-1 text-quiet">₹<input inputMode="decimal" value={v.fixed} onChange={set("fixed")} placeholder="–" className={`${FIELD} !w-28 text-right`} /></span>
-        </label>
-        <div className="flex flex-wrap items-end justify-between gap-3 border-t border-line pt-4">
-          <div className="text-[14px]">sells at <span className="tnum text-[26px] font-bold">{Number.isFinite(price) ? rs(price) : "–"}</span>
-            {Number.isFinite(price) && price !== was ? <span className="ml-2 rounded-full bg-[#f0a35b]/15 px-2 py-0.5 text-[12px] text-[#f0a35b]">was {rs(was)}</span> : null}</div>
-          <div className="tnum text-right text-[12px] text-quiet">leaves {Number.isFinite(price) ? rs(price - p.cost) : "–"} a shirt<br />before post and the payment fee</div>
-        </div>
-      </section>
+      <Section title="price" id="price">
+        <Group>
+          <Field label="qikink cost" hint="what qikink charges for one, GST included"><Fixed>{rs(p.cost)}</Fixed></Field>
+          <Field label="own margin" hint={`empty: the shop's ₹${shopMargin}, from prices`}>
+            <span className="flex items-center gap-1.5 text-quiet">₹<input inputMode="decimal" value={v.margin} onChange={set("margin")} placeholder={String(shopMargin)} className={money} /></span>
+          </Field>
+          <Field label="fixed price" hint="empty: cost + margin, up to the next ₹10">
+            <span className="flex items-center gap-1.5 text-quiet">₹<input inputMode="decimal" value={v.fixed} onChange={set("fixed")} placeholder="–" className={money} /></span>
+          </Field>
+          <div className="flex flex-wrap items-end justify-between gap-3 px-5 py-5">
+            <div>
+              <div className="text-[13px] text-quiet">sells at{Number.isFinite(price) && price !== was ? <span className="ml-2 text-warn">was {rs(was)}</span> : null}</div>
+              <div className="tnum mt-1 text-[34px] font-extrabold leading-none tracking-[-0.04em]">{Number.isFinite(price) ? rs(price) : "–"}</div>
+            </div>
+            <div className="tnum text-right text-[13px] text-quiet">leaves {Number.isFinite(price) ? rs(price - p.cost) : "–"} a shirt<br />before post and the payment fee</div>
+          </div>
+        </Group>
+      </Section>
 
-      {problems.length && changes.length ? <p className="rounded-md bg-[#f08a7a]/10 px-3 py-2 text-[12px] text-[#f08a7a]">needs {problems.join("; ")}</p> : null}
+      {problems.length && changes.length ? <p className="-mt-6 mb-10 px-1 text-[13px] text-bad">needs {problems.join("; ")}</p> : null}
 
       <SaveBar dirty={changes.length > 0} busy={busy} onSave={save} onDiscard={() => setV(base)}
         summary={changes.map((k) => WORD[k]).join(", ")}
         warn={Number.isFinite(price) && price !== was ? `the price goes from ${rs(was)} to ${rs(price)} on the site and at checkout, at once. orders already paid keep their price.` : null} />
-    </div>
+    </>
   );
 }
