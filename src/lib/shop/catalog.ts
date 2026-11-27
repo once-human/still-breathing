@@ -1,14 +1,18 @@
 import { SHOP } from "@/content/shop";
 import { DESIGNS, SIZE_ORDER, type Design, type Size } from "@/content/tee";
-import { accountsOpen, partnerKeys } from "./config";
+import { accountsOpen, partnerKeys, razorpayKeys } from "./config";
 import { products, type Product } from "./products";
 import { shopAccepting } from "./settings";
 import type { BagItem, PayView } from "./types";
 
-/** the sizes a shirt can be ordered in: a live shirt's sizes with a partner SKU (in the sandbox, any size of the test blank) */
+/**
+ * the sizes a shirt can be ordered in: a live shirt's sizes with a partner SKU (in the sandbox, any size of the test
+ * blank). Real money only buys what can really go to print: with live payment keys and the partner still on its
+ * sandbox, nothing is offered, so no one pays for a shirt that would only wait.
+ */
 function sizesOf(p: Product): Size[] {
   if (p.status !== "live") return [];
-  if (partnerKeys()?.sandbox) return process.env.QIKINK_SANDBOX_SKU ? [...SIZE_ORDER] : [];
+  if (partnerKeys()?.sandbox) return process.env.QIKINK_SANDBOX_SKU && razorpayKeys()?.test ? [...SIZE_ORDER] : [];
   return SIZE_ORDER.filter((s) => p.skus[s]);
 }
 

@@ -56,6 +56,7 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 - The actual size button is called artwork.
 
 ### Fixed
+- A shirt is for sale only when a paid order for it can really go to print: never while the print partner is on its test setup with real payments on, and the shirt codes set in the admin are the ones a paid order is sent with (before, only the ones in the code were).
 - A real payment is never sent to the print partner's sandbox or without the shirt's code: the order waits, paid, and goes to print on the next try once the partner's live keys and codes are in.
 - 3D views: the place around the person is drawn only where the person doesn't cover it: the same picture, less work every frame.
 - 3D views: the full-size back print loads when you zoom in or open on the table (looks the same until then); only the last three shirts' prints and the last two places' sharp pictures stay in graphics memory.

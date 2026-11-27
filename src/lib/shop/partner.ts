@@ -1,7 +1,8 @@
-import { PARTNER_SKUS, PRINTS } from "@/content/shop";
+import { PRINTS } from "@/content/shop";
 import { DESIGNS, type Design, type Size } from "@/content/tee";
 import { partnerKeys, razorpayKeys } from "./config";
 import { ShopError } from "./errors";
+import { products } from "./products";
 
 /**
  * The print partner's custom-store API: a paid order goes in, the partner prints, packs and ships it, paying from
@@ -61,8 +62,13 @@ async function call(path: string, init: { method: "GET" | "POST"; body?: unknown
 export type ShipTo = { name: string; phone: string; email: string; address1: string; address2: string; city: string; state: string; pin: string };
 export type PartnerLine = { design: Design; size: Size; quantity: number; unitPrice: number };
 
-/** the SKU this shirt has in the partner's "My Products" (null: not set up there yet, so not offered) */
-export const partnerSku = (d: Design, s: Size) => PARTNER_SKUS[d][s] ?? null;
+/**
+ * the SKUs each shirt has in the partner's "My Products", per size: the ones set in the admin over the ones in
+ * content/shop.ts, the same list that decides which sizes are offered (a size with none isn't for sale)
+ */
+async function partnerSkus() {
+  return new Map((await products({ fresh: true })).map((p) => [p.id, p.skus]));
+}
 
 /** In the sandbox, "My Products" can't be seen, so each line names a plain blank and its print files instead. */
 function sandboxLine(l: PartnerLine, site: string) {
@@ -113,9 +119,11 @@ export async function sendToPrint(number: string, lines: PartnerLine[], to: Ship
   // A real payment is never handed to the partner's sandbox (nothing would be printed) or sent without the shirt's
   // code in "My Products": the order waits, paid, and goes to print on the next try once the live keys and codes are in.
   if (k.sandbox && razorpayKeys()?.test === false) throw new ShopError("real payment, but the print partner is still on its sandbox: put in its live keys (and the shirts' codes) and it goes on the next try");
-  if (!k.sandbox) {
-    const missing = lines.filter((l) => !partnerSku(l.design, l.size)).map((l) => `${l.design} ${l.size}`);
-    if (missing.length) throw new ShopError(`no partner code for ${missing.join(", ")}: add it in content/shop.ts (PARTNER_SKUS) and it goes on the next try`);
+  const skus = k.sandbox ? null : await partnerSkus();
+  const sku = (l: PartnerLine) => skus?.get(l.design)?.[l.size] ?? null;
+  if (skus) {
+    const missing = lines.filter((l) => !sku(l)).map((l) => `${l.design} ${l.size}`);
+    if (missing.length) throw new ShopError(`no partner code for ${missing.join(", ")}: add it in the admin (the shirt's SKUs) and it goes on the next try`);
   }
   const [first, ...rest] = to.name.trim().split(/\s+/);
   const body = {
@@ -124,7 +132,7 @@ export async function sendToPrint(number: string, lines: PartnerLine[], to: Ship
     gateway: "Prepaid",
     total_order_value: String(total),
     line_items: lines.map((l) =>
-      k.sandbox ? sandboxLine(l, site) : { search_from_my_products: 1, sku: partnerSku(l.design, l.size), quantity: String(l.quantity), price: String(l.unitPrice) },
+      k.sandbox ? sandboxLine(l, site) : { search_from_my_products: 1, sku: sku(l), quantity: String(l.quantity), price: String(l.unitPrice) },
     ),
     shipping_address: {
       first_name: first ?? to.name,
