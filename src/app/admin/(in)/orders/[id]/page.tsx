@@ -4,13 +4,15 @@ import { costs, knownFees, marginOf, shirtName } from "@/lib/admin/data";
 import { auditFor } from "@/lib/admin/log";
 import { getSettings } from "@/lib/admin/settings";
 import { partnerKeys, razorpayKeys } from "@/lib/shop/config";
-import { HOLD_MS, MAIL_KINDS, changeable, emailsSent, loadOrder, orderPath, refunded, validId } from "@/lib/shop/orders";
+import { HOLD_MS, MAIL_KINDS, changeable, emailsSent, loadOrder, orderPath, refunded, validId, type Order } from "@/lib/shop/orders";
 import { products } from "@/lib/shop/products";
 import { EVENT_WORD } from "@/lib/shop/words";
-import { Act, NoteForm } from "../../../ui/client";
-import { A, KV, PageHead, Pill, Section, StageBadge, Table, dt, inr } from "../../../ui/ui";
+import { Act, BTN, NoteForm } from "../../../ui/client";
+import { Icon } from "../../../ui/icons";
+import { Card, Group, KV, Page, Row, Section, StageBadge, dt, inr } from "../../../ui/ui";
 
 export const metadata = { title: "order" };
+export const dynamic = "force-dynamic";
 
 /** Postgres's text time ("2026-11-26 14:00:00.1+00") as ISO */
 const pgTime = (t: string) => {
@@ -18,7 +20,35 @@ const pgTime = (t: string) => {
   return Number.isNaN(d.getTime()) ? new Date(0).toISOString() : d.toISOString();
 };
 
-type Row = { at: string; what: string; note?: string; by: "shop" | "admin" | "note" };
+type Line = { at: string; what: string; note?: string; by: "shop" | "admin" | "note" };
+
+/** where the order is, as four steps: paid, being made, on its way, delivered */
+function Progress({ o }: { o: Order }) {
+  if (o.stage === "cancelled" || o.stage === "paying") {
+    return (
+      <Card className="flex items-center gap-4">
+        <span className="grid h-10 w-10 place-items-center rounded-full bg-s3 text-quiet"><Icon name={o.stage === "cancelled" ? "x" : "clock"} /></span>
+        <div><div className="text-[17px] font-semibold">{o.stage === "cancelled" ? "cancelled" : "not paid"}</div><div className="text-[13px] text-quiet">{o.stage === "cancelled" ? "nothing was made or sent" : `checkout started ${dt(o.createdAt)}, never paid`}</div></div>
+      </Card>
+    );
+  }
+  const made = o.events?.find((e) => e.kind === "printing")?.at ?? (o.partnerId ? o.paidAt : null);
+  const steps: [string, string | null | undefined][] = [["paid", o.paidAt], ["being made", made], ["on its way", o.shippedAt], ["delivered", o.deliveredAt]];
+  const at = steps.filter(([, t]) => t).length - 1;
+  return (
+    <Card>
+      <ol className="grid grid-cols-4 gap-2">
+        {steps.map(([word, t], i) => (
+          <li key={word} className="min-w-0">
+            <div className={`h-1.5 rounded-full ${i <= at ? (o.stage === "attention" && i === at ? "bg-warn" : i === 3 ? "bg-ok" : "bg-ink/80") : "bg-s3"}`} />
+            <div className={`mt-3 text-[14px] ${i <= at ? "font-semibold" : "text-quiet"}`}>{word}</div>
+            <div className="tnum text-[12.5px] text-quiet">{t ? dt(t) : "–"}</div>
+          </li>
+        ))}
+      </ol>
+    </Card>
+  );
+}
 
 export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
   await requireAdmin();
@@ -33,151 +63,145 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   const m = marginOf(o, s, c, fee);
   const dash = razorpayKeys()?.test ? "https://dashboard.razorpay.com/app/test" : "https://dashboard.razorpay.com/app";
 
-  const timeline: Row[] = [
+  const timeline: Line[] = [
     ...(o.events ?? []).map((e) => ({ at: e.at, what: e.kind === "note" ? "note" : e.kind === "admin" ? "you" : EVENT_WORD[e.kind] ?? e.kind, note: e.note, by: e.kind === "note" ? ("note" as const) : e.kind === "admin" ? ("admin" as const) : ("shop" as const) })),
-    // what the order's own events don't hold: tries that failed
     ...log.filter((l) => l.action.endsWith(".failed")).map((l) => ({ at: l.at, what: `${l.action.replace(/^order\./, "").replace(/\.failed$/, "")} failed`, note: String(l.detail?.error ?? ""), by: "admin" as const })),
-    ...mails.map((x) => ({ at: x.at, what: `email sent: ${x.kind}`, by: "shop" as const })),
-  ].sort((a, b) => a.at.localeCompare(b.at));
+    ...mails.map((x) => ({ at: x.at, what: `email: ${x.kind}`, by: "shop" as const })),
+  ].sort((a, b) => b.at.localeCompare(a.at));
 
   const paid = o.stage !== "paying" && !!o.paidAt;
   const inHour = changeable(o) && o.paidAt && Date.now() - Date.parse(o.paidAt) < HOLD_MS;
   const back = refunded(o), left = o.total - back;
-  const refundable = paid && left > 0;
   const shirts = o.lines.reduce((t, l) => t + l.quantity, 0);
+  const url = `/api/admin/orders/${o.id}`;
+  const canPrint = paid && !o.partnerId && o.stage !== "cancelled";
+  const canDelete = o.stage === "paying" || (o.stage === "cancelled" && !(o.refunds ?? []).some((r) => r.status === "pending"));
 
   return (
     <>
-      <PageHead title={`#${o.id}`} sub={<>placed {dt(o.createdAt)}{o.paidAt ? ` · paid ${dt(o.paidAt)}` : ""} · <StageBadge stage={o.stage} /></>}>
-        <a href={orderPath(o.id)} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center px-3 text-[13px] ring-1 ring-line hover:ring-ink">buyer&apos;s page</a>
-      </PageHead>
+      <Page title={o.contact.name.toLowerCase()} back={["/admin/orders", "orders"]}
+        sub={<span className="inline-flex flex-wrap items-center gap-x-3 gap-y-2"><span className="font-mono">#{o.id}</span><StageBadge stage={o.stage} /><span>{inr(o.total)} · {shirts} shirt{shirts > 1 ? "s" : ""}</span></span>}
+        actions={<a href={orderPath(o.id)} target="_blank" rel="noreferrer" className={BTN.plain}>buyer&apos;s page<Icon name="out" className="h-4 w-4" /></a>} />
 
-      {o.problem ? <p className="mb-8 border-l-2 border-[#f0a35b] py-1 pl-3 text-[14px]">{o.problem}</p> : null}
-
-      <div className="grid gap-x-12 lg:grid-cols-2">
-        <Section title="buyer">
-          <KV items={[
-            ["name", o.contact.name],
-            ["email", <A key="e" href={`/admin/customers/${encodeURIComponent(o.contact.email)}`}>{o.contact.email}</A>],
-            ["phone", <a key="p" href={`tel:+91${o.contact.phone}`} className="tnum">+91 {o.contact.phone}</a>],
-            ["ship to", <span key="a">{o.ship.name}<br />{o.ship.address1}{o.ship.address2 ? <><br />{o.ship.address2}</> : null}<br />{o.ship.city}, {o.ship.state} {o.ship.pin}<br /><span className="text-quiet">+91 {o.ship.phone}</span></span>],
-          ]} />
-        </Section>
-
-        <Section title="money" aside={m && !m.feeActual ? "fee estimated until fetched" : undefined}>
-          {m ? (
-            <KV items={[
-              ["paid", inr(o.total)],
-              ["refunded", back ? inr(back) : "–"],
-              ["qikink cost", inr(m.cost, true)],
-              ["razorpay fee", `${inr(m.fee, true)}${m.feeActual ? (fee?.tax != null ? ` (incl. ${inr(Number(fee.tax), true)} gst)` : "") : " est."}`],
-              [`post (${Math.max(1, Math.ceil(shirts / s.shirtsPerParcel))} parcel)`, inr(m.ship, true)],
-              ["margin", <span key="m" className="font-semibold text-blue">{inr(m.margin, true)}</span>],
-            ]} />
-          ) : <p className="text-[13px] text-quiet">not paid: {inr(o.total)} was asked.</p>}
-        </Section>
-      </div>
-
-      <Section title="items">
-        <Table head={["shirt", "size", "qty", "price", "qikink cost", "qikink sku"]}>
-          {o.lines.map((l, i) => (
-            <tr key={i}>
-              <td>{shirtName(l.design)}</td>
-              <td>{l.size}</td>
-              <td className="tnum">{l.quantity}</td>
-              <td className="tnum">{inr(l.unitPrice * l.quantity)}</td>
-              <td className="tnum">{inr((c[l.design] ?? 0) * l.quantity, true)}</td>
-              <td className="font-mono text-[12px] text-quiet">{partnerKeys()?.sandbox ? "sandbox blank" : skuOf(l.design, l.size) ?? "none set"}</td>
-            </tr>
-          ))}
-        </Table>
-      </Section>
-
-      <div className="grid gap-x-12 lg:grid-cols-2">
-        <Section title="payment · razorpay">
-          <KV items={[
-            ["razorpay order", <a key="o" className="font-mono text-[12px] underline decoration-line" href={`${dash}/orders/${o.rzpOrderId}`} target="_blank" rel="noreferrer">{o.rzpOrderId}</a>],
-            ["payment", o.payment ? <a key="p" className="font-mono text-[12px] underline decoration-line" href={`${dash}/payments/${o.payment.id}`} target="_blank" rel="noreferrer">{o.payment.id}</a> : "–"],
-            ["method", fee?.detail ?? o.payment?.label ?? "–"],
-            ["fee", fee?.fee != null ? inr(Number(fee.fee), true) : "not fetched"],
-            ["settlement", fee?.settlement_id ? `${fee.settlement_id}${fee.settled_at ? ` · ${dt(fee.settled_at)}` : ""}` : fee ? "not settled yet" : "not fetched"],
-            ["refunds", o.refunds?.length ? <span key="r" className="grid gap-0.5">{o.refunds.map((r) => (
-              <span key={r.id} className="text-[12px]"><span className="tnum">{inr(r.amount)}</span> · <a className="font-mono underline decoration-line" href={`${dash}/refunds/${r.id}`} target="_blank" rel="noreferrer">{r.id}</a> · {r.status}{r.doneAt ? ` ${dt(r.doneAt)}` : ""}{r.reason ? <span className="text-quiet"> · {r.reason}</span> : null}</span>
-            ))}</span> : "–"],
-          ]} />
-          {paid && o.payment ? <div className="mt-3"><Act label="fetch fee and settlement" confirm="ask razorpay for this payment's fee, tax and settlement now." url={`/api/admin/orders/${o.id}`} body={{ action: "fees" }} /></div> : null}
-        </Section>
-
-        <Section title="print and post · qikink">
-          <KV items={[
-            ["qikink order", o.partnerId ? <span key="q" className="font-mono text-[12px]">{o.partnerId}</span> : paid ? (inHour ? "waits for the change-of-mind hour" : "not sent yet") : "–"],
-            ["status", o.partnerRaw ?? "–"],
-            ["last checked", o.syncedAt ? dt(o.syncedAt) : "–"],
-            ["courier", o.tracking?.courier ?? "–"],
-            ["awb", o.tracking?.awb ? <span key="a" className="font-mono text-[12px]">{o.tracking.awb}</span> : "–"],
-            ["tracking", o.tracking?.url ? <a key="t" className="underline decoration-line" href={o.tracking.url} target="_blank" rel="noreferrer">open</a> : "–"],
-            ["shipped", o.shippedAt ? dt(o.shippedAt) : "–"],
-            ["delivered", o.deliveredAt ? dt(o.deliveredAt) : "–"],
-          ]} />
-          {o.partnerId ? <div className="mt-3"><Act label="ask qikink now" confirm="fetch this order's status, courier and tracking from qikink now (the buyer is emailed if it has shipped)." url={`/api/admin/orders/${o.id}`} body={{ action: "sync" }} /></div> : null}
-        </Section>
-      </div>
-
-      <Section title="actions" aside="each asks first, and every one is in the audit log">
-        <div className="flex flex-wrap gap-2">
-          {paid && !o.partnerId && o.stage !== "cancelled" ? (
-            <Act label="send to qikink now" confirm={inHour ? "the buyer's change-of-mind hour isn't over: sending now ends it. qikink is charged from the wallet." : "hand this order to qikink now. qikink is charged from the wallet."}
-              url={`/api/admin/orders/${o.id}`} body={{ action: "retry" }} />
-          ) : null}
-          {paid && !o.partnerId && o.stage !== "cancelled" ? (
-            <Act danger label="cancel" confirm={`cancel #${o.id}: nothing is made and the buyer gets the cancelled email. with a refund, ${inr(left)} goes back through razorpay.`}
-              typeToConfirm={o.id} url={`/api/admin/orders/${o.id}`} body={{ action: "cancel" }}
-              fields={[{ name: "refund", label: "refund", options: ["full refund", "no refund"], initial: "full refund" }]} />
-          ) : null}
-          {refundable ? (
-            <Act danger label="refund" confirm={`refund through razorpay, back the way it was paid (normal speed: 5–7 working days). the order itself carries on${o.partnerId ? ": it's with qikink already" : ""}. whole rupees, up to ${inr(left)}.`}
-              typeToConfirm={o.id} url={`/api/admin/orders/${o.id}`} body={{ action: "refund" }}
-              fields={[{ name: "amount", label: "amount in ₹", type: "number", initial: String(left) }, { name: "reason", label: "reason (the buyer sees it)", optional: true, placeholder: "a print fault on the back" }]} />
-          ) : null}
-          {paid ? (
-            <Act label="resend an email" confirm={`send one of the buyer's emails again, as the order is now, to ${o.contact.email}.`}
-              url={`/api/admin/orders/${o.id}`} body={{ action: "resend" }}
-              fields={[{ name: "kind", label: "email", options: [...MAIL_KINDS], initial: o.stage === "cancelled" ? "cancelled" : o.deliveredAt ? "delivered" : o.shippedAt ? "shipped" : "confirmed" }]} />
-          ) : null}
-          {changeable(o) ? (
-            <Act label="change the address" confirm="where it goes, before it goes to print. the buyer's saved addresses get it too."
-              url={`/api/admin/orders/${o.id}`} body={{ action: "address" }}
-              fields={[
-                { name: "name", label: "name", initial: o.ship.name }, { name: "phone", label: "phone (10 digits)", initial: o.ship.phone },
-                { name: "address1", label: "house, street", initial: o.ship.address1 }, { name: "address2", label: "area, landmark", initial: o.ship.address2, optional: true },
-                { name: "city", label: "city", initial: o.ship.city }, { name: "state", label: "state", initial: o.ship.state }, { name: "pin", label: "pin", initial: o.ship.pin },
-              ]} />
-          ) : null}
-          {o.stage === "paying" || (o.stage === "cancelled" && !(o.refunds ?? []).some((r) => r.status === "pending")) ? (
-            <Act danger label="delete this order" confirm={`wipe #${o.id} from the shop for good: for test orders and checkouts that were never paid. it can't be brought back.`}
-              typeToConfirm={o.id} url={`/api/admin/orders/${o.id}`} body={{ action: "delete" }} goTo="/admin/orders" />
-          ) : null}
+      {o.problem ? (
+        <div className="a-pop mb-8 flex items-start gap-4 rounded-[22px] bg-warn/10 p-5">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-warn/15 text-warn"><Icon name="alert" /></span>
+          <div><div className="text-[15px] font-semibold text-warn">needs you</div><p className="mt-0.5 text-[14px] text-ink/85">{o.problem}</p></div>
         </div>
-        {o.partnerId && o.stage !== "delivered" && o.stage !== "cancelled" ? <p className="mt-4 text-[12px] text-quiet">it&apos;s with qikink: their API has no cancel or address change, so those are by writing to qikink support.</p> : null}
-      </Section>
+      ) : null}
 
-      <div className="grid gap-x-12 lg:grid-cols-[1.4fr_1fr]">
-        <Section title="timeline">
-          <ol className="grid gap-2 border-l border-line pl-4">
-            {timeline.map((t, i) => (
-              <li key={i} className="relative text-[13px]">
-                <span className={`absolute -left-[21px] top-[6px] h-2 w-2 rounded-full ${t.by === "admin" ? "bg-blue" : t.by === "note" ? "bg-[#f0a35b]" : "bg-ink"}`} />
-                <span className="tnum text-quiet">{dt(t.at)}</span> · <span className="font-medium">{t.what}</span>
-                {t.by === "admin" ? <> <Pill>you</Pill></> : null}
-                {t.note ? <div className="text-quiet">{t.note}</div> : null}
-              </li>
-            ))}
-          </ol>
-        </Section>
-        <Section title="emails and notes">
-          <KV items={[["sent", mails.length ? mails.map((x) => `${x.kind} (${dt(x.at)})`).join(", ") : "none yet"]]} />
-          <div className="mt-4"><NoteForm url={`/api/admin/orders/${o.id}`} body={{ action: "note" }} /></div>
-        </Section>
+      <div className="mb-10"><Progress o={o} /></div>
+
+      <div className="grid gap-x-6 lg:grid-cols-[1.35fr_1fr]">
+        <div>
+          <Section title="shirts">
+            <Group>
+              {o.lines.map((l, i) => (
+                <Row key={i} icon="shirt" title={shirtName(l.design)} sub={`size ${l.size} · ${l.quantity} × ${inr(l.unitPrice)} · ${partnerKeys()?.sandbox ? "sandbox blank" : skuOf(l.design, l.size) ?? "no qikink sku"}`} right={<span className="tnum">{inr(l.unitPrice * l.quantity)}</span>} />
+              ))}
+            </Group>
+          </Section>
+
+          <Section title="money" aside={m && !m.feeActual ? "fee estimated until fetched" : undefined}>
+            {m ? (
+              <KV items={[
+                ["paid", <span key="p" className="tnum">{inr(o.total)}{o.payment ? <span className="text-quiet"> · {o.payment.label}</span> : null}</span>],
+                ...(back ? [["refunded", <span key="r" className="tnum text-warn">−{inr(back)}</span>] as [string, React.ReactNode]] : []),
+                ["qikink", <span key="q" className="tnum text-quiet">−{inr(m.cost, true)}</span>],
+                ["razorpay fee", <span key="f" className="tnum text-quiet">−{inr(m.fee, true)}{m.feeActual ? "" : " est."}</span>],
+                [`post, ${Math.max(1, Math.ceil(shirts / s.shirtsPerParcel))} parcel`, <span key="s" className="tnum text-quiet">−{inr(m.ship, true)}</span>],
+                ["you keep", <span key="m" className="tnum text-[17px] font-bold text-ink">{inr(m.margin, true)}</span>],
+              ]} />
+            ) : <Card><p className="text-[15px] text-quiet">not paid: {inr(o.total)} was asked.</p></Card>}
+          </Section>
+
+          <Section title="everything that happened">
+            <Card>
+              <ol className="relative grid gap-5 before:absolute before:bottom-2 before:left-[5px] before:top-2 before:w-px before:bg-line">
+                {timeline.map((t, i) => (
+                  <li key={i} className="relative pl-7">
+                    <span className={`absolute left-0 top-[5px] h-[11px] w-[11px] rounded-full ring-4 ring-s1 ${t.by === "admin" ? "bg-ink/80" : t.by === "note" ? "bg-warn" : i === 0 ? "bg-ink" : "bg-quiet"}`} />
+                    <div className="text-[15px]">{t.what}{t.by === "admin" ? <span className="ml-2 text-[13px] text-quiet">by you</span> : null}</div>
+                    {t.note ? <div className="mt-0.5 text-[14px] text-quiet">{t.note}</div> : null}
+                    <div className="tnum mt-0.5 text-[13px] text-quiet">{dt(t.at)}</div>
+                  </li>
+                ))}
+              </ol>
+            </Card>
+          </Section>
+        </div>
+
+        <div>
+          <Section title="buyer">
+            <Group>
+              <Row icon="user" title={o.contact.name} sub="all their orders and their account" href={`/admin/people/${encodeURIComponent(o.contact.email)}`} />
+              <Row icon="mail" title={o.contact.email} href={`mailto:${o.contact.email}`} external />
+              <Row icon="phone" title={<span className="tnum">+91 {o.contact.phone}</span>} href={`tel:+91${o.contact.phone}`} external />
+              <Row icon="pin" title={o.ship.name} sub={<>{o.ship.address1}{o.ship.address2 ? `, ${o.ship.address2}` : ""}<br />{o.ship.city}, {o.ship.state} {o.ship.pin} · +91 {o.ship.phone}</>} />
+            </Group>
+          </Section>
+
+          {paid || canDelete ? (
+            <Section title="manage" aside="each asks first">
+              <Group>
+                {canPrint ? (
+                  <Act row={{ icon: "print", sub: inHour ? "skips the rest of the change-of-mind hour" : "hand it to qikink now" }} label="send to print now" url={url} body={{ action: "retry" }}
+                    confirm={inHour ? "the buyer's change-of-mind hour isn't over: sending now ends it. qikink is charged from the wallet." : "hand this order to qikink now. qikink is charged from the wallet."} />
+                ) : null}
+                {changeable(o) ? (
+                  <Act row={{ icon: "pin", sub: "before it goes to print; the buyer is emailed" }} label="change the address" url={url} body={{ action: "address" }}
+                    confirm="where it goes, before it goes to print. the buyer gets an email with the new address."
+                    fields={[
+                      { name: "name", label: "name", initial: o.ship.name }, { name: "phone", label: "phone (10 digits)", initial: o.ship.phone },
+                      { name: "address1", label: "house, street", initial: o.ship.address1 }, { name: "address2", label: "area, landmark", initial: o.ship.address2, optional: true },
+                      { name: "city", label: "city", initial: o.ship.city }, { name: "state", label: "state", initial: o.ship.state }, { name: "pin", label: "pin", initial: o.ship.pin },
+                    ]} />
+                ) : null}
+                {paid ? (
+                  <Act row={{ icon: "mail", sub: `to ${o.contact.email}` }} label="send an email again" url={url} body={{ action: "resend" }}
+                    confirm={`send one of the buyer's emails again, as the order is now, to ${o.contact.email}.`}
+                    fields={[{ name: "kind", label: "which email", options: [...MAIL_KINDS], initial: o.stage === "cancelled" ? "cancelled" : o.deliveredAt ? "delivered" : o.shippedAt ? "shipped" : "confirmed" }]} />
+                ) : null}
+                {paid && left > 0 ? (
+                  <Act row={{ icon: "return", sub: `any part, up to ${inr(left)}; the order carries on` }} danger label="refund" url={url} body={{ action: "refund" }} typeToConfirm={o.id}
+                    confirm={`refund through razorpay, back the way it was paid (5–7 working days). the order itself carries on${o.partnerId ? ": it's with qikink already" : ""}. whole rupees, up to ${inr(left)}.`}
+                    fields={[{ name: "amount", label: "amount in ₹", type: "number", initial: String(left) }, { name: "reason", label: "reason (the buyer sees it)", optional: true, placeholder: "a print fault on the back" }]} />
+                ) : null}
+                {canPrint ? (
+                  <Act row={{ icon: "x", sub: "nothing is made; refund it in full or not" }} danger label="cancel the order" url={url} body={{ action: "cancel" }} typeToConfirm={o.id}
+                    confirm={`cancel #${o.id}: nothing is made and the buyer gets the cancelled email. with a refund, ${inr(left)} goes back through razorpay.`}
+                    fields={[{ name: "refund", label: "refund", options: ["full refund", "no refund"], initial: "full refund" }]} />
+                ) : null}
+                {canDelete ? (
+                  <Act row={{ icon: "trash", sub: "for test orders and checkouts never paid" }} danger label="delete this order" url={url} body={{ action: "delete" }} typeToConfirm={o.id} goTo="/admin/orders"
+                    confirm={`wipe #${o.id} from the shop for good. it can't be brought back.`} />
+                ) : null}
+              </Group>
+              {o.partnerId && o.stage !== "delivered" && o.stage !== "cancelled" ? <p className="mt-3 px-1 text-[13px] text-quiet">it&apos;s with qikink, whose API has no cancel or address change: write to qikink support for those.</p> : null}
+            </Section>
+          ) : null}
+
+          <Section title="payment">
+            <Group>
+              <Row icon="card" title={fee?.detail ?? o.payment?.label ?? "not paid"} sub={fee?.fee != null ? `fee ${inr(Number(fee.fee), true)}${fee.tax != null ? `, ${inr(Number(fee.tax), true)} of it gst` : ""} · ${fee.settlement_id ? `settled ${fee.settled_at ? dt(fee.settled_at) : ""}` : "not settled yet"}` : "fee not fetched yet"}
+                href={o.payment ? `${dash}/payments/${o.payment.id}` : `${dash}/orders/${o.rzpOrderId}`} external />
+              {(o.refunds ?? []).map((r) => (
+                <Row key={r.id} icon="return" tone={r.status === "failed" ? "bad" : "quiet"} title={`${inr(r.amount)} refund, ${r.status}`} sub={`${r.reason ? `${r.reason} · ` : ""}${r.doneAt ? dt(r.doneAt) : dt(r.at)}`} href={`${dash}/refunds/${r.id}`} external />
+              ))}
+              {paid && o.payment ? <Act row={{ icon: "refresh", sub: "the fee, its gst and the settlement, from razorpay" }} label="fetch from razorpay" url={url} body={{ action: "fees" }} confirm="ask razorpay for this payment's fee, tax and settlement now." /> : null}
+            </Group>
+          </Section>
+
+          <Section title="print and post">
+            <Group>
+              <Row icon="print" title={o.partnerId ? `qikink order ${o.partnerId}` : paid ? (inHour ? "waits for the change-of-mind hour" : "not with qikink yet") : "–"} sub={o.partnerRaw ? `qikink says: ${o.partnerRaw}${o.syncedAt ? ` · asked ${dt(o.syncedAt)}` : ""}` : undefined} />
+              {o.tracking ? <Row icon="truck" title={o.tracking.courier?.toLowerCase() ?? "courier"} sub={o.tracking.awb ? `tracking ${o.tracking.awb}` : undefined} href={o.tracking.url ?? undefined} external={!!o.tracking.url} /> : null}
+              {o.partnerId ? <Act row={{ icon: "refresh", sub: "status, courier and tracking; the buyer is emailed if it has left" }} label="ask qikink now" url={url} body={{ action: "sync" }} confirm="fetch this order's status, courier and tracking from qikink now (the buyer is emailed if it has shipped)." /> : null}
+            </Group>
+          </Section>
+
+          <Section title="notes"><Card><NoteForm url={url} body={{ action: "note" }} /></Card></Section>
+        </div>
       </div>
     </>
   );

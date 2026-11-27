@@ -22,7 +22,7 @@ export async function GET(req: Request) {
   const q = p.get("q")?.toLowerCase().trim();
   const list = orders.filter((o) => {
     const st = p.get("stage");
-    if (st === "open" ? !["paid", "printing", "shipped", "out", "attention"].includes(o.stage) : st ? o.stage !== st : o.stage === "paying") return false;
+    if (st === "open" ? !["paid", "printing", "shipped", "out", "attention"].includes(o.stage) : st === "way" ? !["shipped", "out"].includes(o.stage) : st ? o.stage !== st : o.stage === "paying") return false;
     if (p.get("shirt") && !o.lines.some((l) => l.design === p.get("shirt"))) return false;
     if (p.get("size") && !o.lines.some((l) => l.size === p.get("size"))) return false;
     const day = istDay(o.createdAt);
