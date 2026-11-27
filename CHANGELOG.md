@@ -66,6 +66,7 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 - The actual size button is called artwork.
 
 ### Fixed
+- Admin health only raises amber or red for what really stops or slows an order, each with what to do about it; the payment backup waiting for its first payment and an order sync that hasn't run yet stay grey.
 - The visits counted before the new visitor log are back in the admin, page by page, with their bag and checkout steps. Orders sync again whenever the admin is opened and GitHub has skipped its 3-hourly run.
 - Tighter security headers on every page (HTTPS only, no framing by other sites, the camera for the try-on only), the admin never cached or indexed, and the visitor code sent in a header instead of the address.
 - A shirt is for sale only when a paid order for it can really go to print: never while the print partner is on its test setup with real payments on, and the shirt codes set in the admin are the ones a paid order is sent with (before, only the ones in the code were).
