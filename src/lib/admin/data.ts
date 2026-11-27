@@ -173,3 +173,59 @@ export const shirtName = (d: Design | string) => {
   const x = DESIGNS[d as Design];
   return x ? `${x.no} ${x.name}${x.city ? ` ${x.city}` : ""}` : String(d);
 };
+
+/* ---------- any stretch of time ---------- */
+
+export type Period = { key: "month" | "30" | "7" | "all"; label: string; from: number; to: number; prev: { from: number; to: number; word: string } | null };
+
+/** a period ending now, and the one just before it of the same length (for "this month", the same days of last month) */
+export function periodOf(key: string | undefined, now = Date.now()): Period {
+  const d = new Date(now + IST);
+  if (key === "7" || key === "30") {
+    const n = Number(key) * 86400_000;
+    return { key, label: `last ${key} days`, from: now - n, to: now, prev: { from: now - 2 * n, to: now - n, word: key === "7" ? "the week before" : "the 30 days before" } };
+  }
+  if (key === "all") return { key: "all", label: "all time", from: 0, to: now, prev: null };
+  const month = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) - IST;
+  const last = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1) - IST;
+  return { key: "month", label: "this month", from: month, to: now, prev: { from: last, to: Math.min(month, last + (now - month)), word: "the same days last month" } };
+}
+
+/** orders, money and costs for paid orders in [from, to) */
+export function totalsBetween(orders: Order[], s: Settings, c: Costs, fees: Map<string, Fee>, from: number, to: number): Totals {
+  const x = zero();
+  for (const o of orders) {
+    const m = marginOf(o, s, c, fees.get(o.id));
+    if (!m) continue;
+    const at = Date.parse(o.paidAt!);
+    if (at < from || at >= to) continue;
+    if (o.stage === "cancelled") x.cancelled++;
+    else {
+      x.orders++;
+      x.shirts += shirts(o);
+    }
+    const back = refunded(o);
+    if (back > 0) {
+      x.refunds++;
+      x.refunded += back;
+    }
+    x.revenue += m.revenue;
+    x.cost += m.cost;
+    x.fees += m.fee;
+    x.ship += m.ship;
+    x.margin += m.margin;
+    if (!m.feeActual) x.estimated = true;
+  }
+  for (const k of ["revenue", "refunded", "cost", "fees", "ship", "margin"] as const) x[k] = Math.round(x[k] * 100) / 100;
+  return x;
+}
+
+/** everything the overview needs for one period */
+export async function periodData(p: Period) {
+  const [orders, s, fees, c] = await Promise.all([allOrders(), getSettings(), knownFees(), costs()]);
+  const now = totalsBetween(orders, s, c, fees, p.from, p.to);
+  const before = p.prev ? totalsBetween(orders, s, c, fees, p.prev.from, p.prev.to) : null;
+  const byDay = new Map<string, number>();
+  for (const o of orders) if (isPaid(o) && o.stage !== "cancelled" && Date.parse(o.paidAt!) >= p.from) byDay.set(istDay(o.paidAt!), (byDay.get(istDay(o.paidAt!)) ?? 0) + 1);
+  return { orders, settings: s, now, before, byDay, needs: needsYou(orders, s) };
+}

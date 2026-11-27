@@ -393,3 +393,45 @@ export async function dailyPeople(days = 30): Promise<Map<string, number>> {
   ).catch(() => []);
   return new Map(r.map((x) => [x.day, x.people]));
 }
+
+export type Funnel = { people: number; visits: number; returning: number; shirt: number; bag: number; checkout: number; pay: number; paid: number };
+
+/** how far people got between two times (people, each counted once): the overview's way to a sale */
+export async function funnelBetween(from: number, to: number): Promise<Funnel> {
+  const r = await row<Funnel>(
+    `WITH v AS (SELECT id, visitor, started_at FROM visits WHERE kind = 'person' AND started_at >= $1::timestamptz AND started_at < $2::timestamptz),
+       s AS (SELECT v.visitor, array_agg(DISTINCT coalesce(e.step, CASE WHEN e.design IS NOT NULL THEN 'shirt' END)) AS got
+             FROM v LEFT JOIN visit_events e ON e.visit = v.id GROUP BY v.visitor)
+     SELECT (SELECT count(DISTINCT visitor) FROM v)::int AS people, (SELECT count(*) FROM v)::int AS visits,
+       (SELECT count(DISTINCT v.visitor) FROM v WHERE EXISTS (SELECT 1 FROM visits o WHERE o.visitor = v.visitor AND o.started_at < v.started_at))::int AS returning,
+       count(*) FILTER (WHERE 'shirt' = ANY(got) OR 'size' = ANY(got) OR 'look' = ANY(got) OR 'bag' = ANY(got))::int AS shirt,
+       count(*) FILTER (WHERE 'bag' = ANY(got) OR 'buy' = ANY(got))::int AS bag,
+       count(*) FILTER (WHERE 'checkout' = ANY(got) OR 'pay' = ANY(got) OR 'paid' = ANY(got))::int AS checkout,
+       count(*) FILTER (WHERE 'pay' = ANY(got) OR 'paid' = ANY(got))::int AS pay,
+       count(*) FILTER (WHERE 'paid' = ANY(got))::int AS paid
+     FROM s`,
+    [new Date(from).toISOString(), new Date(to).toISOString()],
+  ).catch(() => null);
+  return r ?? { people: 0, visits: 0, returning: 0, shirt: 0, bag: 0, checkout: 0, pay: 0, paid: 0 };
+}
+
+/** people a day between two times (India's days) */
+export async function peoplePerDay(from: number, to: number): Promise<Map<string, number>> {
+  const r = await rows<{ day: string; people: number }>(
+    `SELECT (started_at AT TIME ZONE '${TZ}')::date::text AS day, count(DISTINCT visitor)::int AS people FROM visits
+     WHERE kind = 'person' AND started_at >= $1::timestamptz AND started_at < $2::timestamptz GROUP BY 1`,
+    [new Date(from).toISOString(), new Date(to).toISOString()],
+  ).catch(() => []);
+  return new Map(r.map((x) => [x.day, x.people]));
+}
+
+/** since a time: people, bags, checkouts (for "since you last looked") */
+export async function sinceThen(at: number) {
+  const r = await row<{ people: number; bags: number }>(
+    `SELECT count(DISTINCT v.visitor)::int AS people,
+       (SELECT count(*) FROM visit_events e JOIN visits w ON w.id = e.visit WHERE w.kind = 'person' AND e.step = 'bag' AND e.at >= $1::timestamptz)::int AS bags
+     FROM visits v WHERE v.kind = 'person' AND v.last_at >= $1::timestamptz`,
+    [new Date(at).toISOString()],
+  ).catch(() => null);
+  return r ?? { people: 0, bags: 0 };
+}
