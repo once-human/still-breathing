@@ -31,6 +31,7 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 - On the table: the tee laid flat on a worn wooden table, lit by a window on the right whose frame throws a soft shadow across the boards. Air comes in through it, never quite straight: it dies away, breezes, builds slowly or bursts. Now and then a dry leaf (rarely a thread or a hair) drifts down or skates in; it has weight, holding until a puff beats its grip, then breaking loose, skidding and stopping again. Leaves glow a little with the light behind them. The cotton breathes with the air.
 
 ### Changed
+- All five shirts are made at the print partner in every size (XS to 2XL), each with its own code, so a paid order goes straight to print once the partner's live account is switched on.
 - Prices: the rule is now the print partner's cost plus ₹500, rounded up to the next ₹10, and for now every shirt sells at a fixed ₹1,170 (which beats the rule; the admin can still set its own).
 - Every back now prints at 13.5 x 18 in, the largest the print partner prints at the art's shape (it turns away 15 x 20). The 3D, the true-size view, the try-on, the hover cards and every studio and turntable picture show it at that size.
 - Checkout checks a Maharashtra pin code is really in Maharashtra. Where the shop sends is one setting now (still anywhere in india).

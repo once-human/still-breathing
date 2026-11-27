@@ -42,14 +42,20 @@ export const FIXED_PRICE: number | null = 1170;
 /** one shirt's price in rupees: the fixed price, or else cost + the margin, up to the next ₹10 */
 export const priceOf = (d: Design) => FIXED_PRICE ?? Math.ceil((costOf(d) + RATES.margin) / 10) * 10;
 
-/** what each shirt is in the print partner's catalogue, per size: its SKU under "My Products" once the shirt is made
- *  there with its print files. A shirt with no SKUs isn't offered (fill these in from the partner's dashboard). */
+/** what each shirt is in the print partner's catalogue, per size: the Store SKU (v-…) of its variant under "My
+ *  Products" (read 2026-11-27; its product and design SKUs aren't accepted for orders). A shirt with no SKUs isn't
+ *  offered; the admin can set them too, and its values win. */
 export const PARTNER_SKUS: Record<Design, Partial<Record<Size, string>>> = {
-  c: {},
-  e: {},
-  a: {},
-  d: {},
-  f: {},
+  // 01 crowd (partner product 65128018)
+  c: { XS: "v-9Rul3y-AaVZW1sELNBcgubfVrQLf9Hed", S: "v-9Rul3y-AaVZW1sELNBcgubfVrQLf9Haa", M: "v-9Rul3y-AaVZW1sELNBcgubfVrQLf9Hab", L: "v-9Rul3y-AaVZW1sELNBcgubfVrQLf9HaU", XL: "v-9Rul3y-AaVZW1sELNBcgubfVrQLf9HaV", "2XL": "v-9Rul3y-AaVZW1sELNBcgubfVrQLf9Hec" },
+  // 02 i am a party (partner product 65128036)
+  e: { XS: "v-9Rul3y-AaVZW1sELNBYhubfVrQLf93uV", S: "v-9Rul3y-AaVZW1sELNBYhubfVrQLf93uY", M: "v-9Rul3y-AaVZW1sELNBYhubfVrQLf93uZ", L: "v-9Rul3y-AaVZW1sELNBYhubfVrQLf93ua", XL: "v-9Rul3y-AaVZW1sELNBYhubfVrQLf93ub", "2XL": "v-9Rul3y-AaVZW1sELNBYhubfVrQLf93uU" },
+  // 03 map mumbai (partner product 65128046)
+  a: { XS: "v-9Rul3y-AaVZW1sELNBUqubfVrQLf9nub", S: "v-9Rul3y-AaVZW1sELNBUqubfVrQLf9nue", M: "v-9Rul3y-AaVZW1sELNBUqubfVrQLf9nuf", L: "v-9Rul3y-AaVZW1sELNBUqubfVrQLf9nuY", XL: "v-9Rul3y-AaVZW1sELNBUqubfVrQLf9nuZ", "2XL": "v-9Rul3y-AaVZW1sELNBUqubfVrQLf9nua" },
+  // 04 map bengaluru (partner product 65128056)
+  d: { XS: "v-9Rul3y-AaVZW1sELNBUhubfVrQLf-XSf", S: "v-9Rul3y-AaVZW1sELNBUhubfVrQLf-XeU", M: "v-9Rul3y-AaVZW1sELNBUhubfVrQLf-XeV", L: "v-9Rul3y-AaVZW1sELNBUhubfVrQLf-XSc", XL: "v-9Rul3y-AaVZW1sELNBUhubfVrQLf-XSd", "2XL": "v-9Rul3y-AaVZW1sELNBUhubfVrQLf-XSe" },
+  // 05 actual life (partner product 65128072)
+  f: { XS: "v-9Rul3y-AaVZW1sELNBQvubfVrQLf-Hua", S: "v-9Rul3y-AaVZW1sELNBQvubfVrQLf-Hud", M: "v-9Rul3y-AaVZW1sELNBQvubfVrQLf-Hue", L: "v-9Rul3y-AaVZW1sELNBQvubfVrQLf-Huf", XL: "v-9Rul3y-AaVZW1sELNBQvubfVrQLf-HuY", "2XL": "v-9Rul3y-AaVZW1sELNBQvubfVrQLf-HuZ" },
 };
 
 export const SHOP = {
