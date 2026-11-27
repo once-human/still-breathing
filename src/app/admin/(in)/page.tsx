@@ -1,20 +1,17 @@
-import { cookies } from "next/headers";
-import Link from "next/link";
 import { requireAdmin } from "@/lib/admin/auth";
-import { periodData, periodOf } from "@/lib/admin/data";
+import { periodData } from "@/lib/admin/data";
 import { health, problems } from "@/lib/admin/health";
 import { kv } from "@/lib/shop/kv";
 import { funnelBetween, liveCount, peoplePerDay, sinceThen } from "@/lib/visits/server";
 import type { IconName } from "../ui/icons";
 import { A, Card, Group, Page, Row, Section, Tile, inr } from "../ui/ui";
-import { Remember } from "./Remember";
+import { PeriodTabs, pickPeriod } from "./period";
 
 export const metadata = { title: "overview" };
 export const dynamic = "force-dynamic";
 
 const IST = 5.5 * 3600_000;
 const ICON: Record<string, IconName> = { open: "shop", pay: "card", print: "print", sync: "truck", db: "shield", mail: "mail", alerts: "alert", secret: "key", admin: "user" };
-const PERIODS = [["month", "this month"], ["30", "30 days"], ["7", "7 days"], ["all", "all time"]] as const;
 const day = (ms: number) => new Date(ms + IST).toISOString().slice(0, 10);
 const when = (ms: number) => {
   const h = (Date.now() - ms) / 3600_000;
@@ -84,8 +81,7 @@ function Way({ f }: { f: Awaited<ReturnType<typeof funnelBetween>> }) {
 /** the overview: what needs you, how the period went against the one before, the way to a sale, the days */
 export default async function Overview({ searchParams }: { searchParams: Promise<{ p?: string }> }) {
   await requireAdmin();
-  const want = (await searchParams).p ?? (await cookies()).get("admin-period")?.value;
-  const p = periodOf(PERIODS.some(([k]) => k === want) ? want : "month");
+  const p = await pickPeriod((await searchParams).p);
   const chartFrom = Math.max(p.from, Date.now() - 89 * 86400_000);
   const [d, checks, count, f, fBefore, perDay, seen] = await Promise.all([
     periodData(p), health(false, true), liveCount(), funnelBetween(p.from, p.to),
@@ -104,19 +100,11 @@ export default async function Overview({ searchParams }: { searchParams: Promise
 
   return (
     <>
-      <Remember name="admin-period" value={p.key} />
       <Page title="overview" sub={since
         ? <>since you last looked, {when(seen!)}: <span className="text-ink">{since.people} {since.people === 1 ? "person" : "people"}, {since.bags} put in the bag, {sinceOrders} order{sinceOrders === 1 ? "" : "s"}</span>{count.now ? <>. <span className="text-ink">{count.now} on the site now</span></> : null}</>
         : count.now ? `${count.now} on the site now` : "how the shop is doing"} />
 
-      <nav className="-mx-4 mb-8 overflow-x-auto px-4 md:mx-0 md:px-0">
-        <div className="inline-flex gap-1 rounded-full bg-s1 p-1">
-          {PERIODS.map(([k, l]) => (
-            <Link key={k} href={`?p=${k}`} aria-current={k === p.key ? "page" : undefined}
-              className={`a-press whitespace-nowrap rounded-full px-4 py-2 text-[14px] ${k === p.key ? "bg-ink font-semibold text-paper" : "text-quiet hover:text-ink"}`}>{l}</Link>
-          ))}
-        </div>
-      </nav>
+      <PeriodTabs p={p} />
 
       {issues.length || d.needs.length ? (
         <Section title="needs you">
