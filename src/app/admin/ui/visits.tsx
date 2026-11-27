@@ -32,10 +32,10 @@ export const where = (v: Pick<VisitRow, "city" | "country">) => [v.city?.toLower
 
 /** how far a visit got, as small marks */
 const REACH: [Step, string, string][] = [
-  ["bag", "bag", "text-blue ring-blue/50"],
-  ["checkout", "checkout", "text-[#f0a35b] ring-[#f0a35b]/50"],
-  ["pay", "paying", "text-[#f0a35b] ring-[#f0a35b]/50"],
-  ["paid", "paid", "text-[#8fd19e] ring-[#8fd19e]/50"],
+  ["bag", "bag", "text-ink/80 ring-line"],
+  ["checkout", "checkout", "text-ink/80 ring-line"],
+  ["pay", "paying", "text-ink/80 ring-line"],
+  ["paid", "paid", "text-ok ring-ok/40"],
 ];
 export function Reached({ steps }: { steps: Step[] }) {
   const got = REACH.filter(([s]) => steps.includes(s));
@@ -94,7 +94,7 @@ export function Timeline({ events }: { events: EventRow[] }) {
     <ol className="relative grid gap-0 border-l border-line pl-5">
       {events.map((e) => {
         const step = e.step as Step | null;
-        const money = step === "paid" ? "bg-[#8fd19e]" : step === "pay" || step === "checkout" ? "bg-[#f0a35b]" : step === "bag" || step === "buy" ? "bg-blue" : step === "payfail" ? "bg-[#f08a7a]" : e.type === "page" ? "bg-ink" : "bg-quiet";
+        const money = step === "paid" ? "bg-ok" : step === "payfail" ? "bg-bad" : e.type === "page" ? "bg-ink" : "bg-quiet";
         return (
           <li key={e.seq} className="relative py-2">
             <span className={`absolute -left-[25px] top-[13px] h-2 w-2 rounded-full ${money}`} />

@@ -29,7 +29,7 @@ export const ago = (iso?: string | null) => {
 /** a page's name, big and lowercase as on the site, with a line under it and its own buttons on the right */
 export function Page({ title, sub, back, actions }: { title: string; sub?: React.ReactNode; back?: [string, string]; actions?: React.ReactNode }) {
   return (
-    <header className="a-in mb-9 md:mb-12">
+    <header className="mb-9 md:mb-12">
       {back ? (
         <Link href={back[0]} className="a-press mb-4 inline-flex items-center gap-1 text-[14px] text-quiet transition hover:text-ink">
           <Icon name="back" className="h-4 w-4" />{back[1]}
@@ -59,7 +59,7 @@ export function Rule({ children, note, id }: { children: React.ReactNode; note?:
 /** a part of a page: its rule, then what's in it */
 export function Section({ title, aside, children, className = "", id }: { title: string; aside?: React.ReactNode; children: React.ReactNode; className?: string; id?: string }) {
   return (
-    <section className={`a-in-2 mb-10 md:mb-12 ${className}`}>
+    <section className={`mb-10 md:mb-12 ${className}`}>
       <Rule note={aside} id={id}>{title}</Rule>
       {children}
     </section>
@@ -77,7 +77,9 @@ export function Group({ children, className = "" }: { children: React.ReactNode;
 }
 
 export type Tone = "ok" | "warn" | "bad" | "blue" | "quiet";
-const TINT: Record<Tone, string> = { ok: "bg-ok/12 text-ok", warn: "bg-warn/12 text-warn", bad: "bg-bad/12 text-bad", blue: "bg-blue/15 text-[#93a3ff]", quiet: "bg-s3 text-ink/80" };
+/** icons and badges stay grey; a signal shows only as its colour on the icon or the dot */
+const TINT: Record<Tone, string> = { ok: "bg-s2 text-ok", warn: "bg-s2 text-warn", bad: "bg-s2 text-bad", blue: "bg-s2 text-ink/80", quiet: "bg-s2 text-ink/75" };
+const DOT: Record<Tone, string> = { ok: "bg-ok", warn: "bg-warn", bad: "bg-bad", blue: "bg-ink/60", quiet: "bg-quiet/60" };
 
 /** a round tinted mark for a row */
 export function Mark({ icon, tone = "quiet" }: { icon: IconName; tone?: Tone }) {
@@ -113,7 +115,7 @@ export function Row({ icon, tone, title, sub, right, href, external, muted }: {
 export function Tile({ label, value, sub, delta, href, tone, icon }: {
   label: string; value: React.ReactNode; sub?: React.ReactNode; delta?: { now: number; was: number; word?: string; money?: boolean }; href?: string; tone?: "blue" | "ok" | "warn"; icon?: IconName;
 }) {
-  const color = tone === "blue" ? "text-[#93a3ff]" : tone === "ok" ? "text-ok" : tone === "warn" ? "text-warn" : "";
+  const color = tone === "warn" ? "text-warn" : "";
   const inner = (
     <>
       <div className="flex items-center justify-between gap-2 text-[14px] text-quiet">
@@ -135,7 +137,7 @@ export function Delta({ now, was, word = "yesterday", money }: { now: number; wa
   const f = (n: number) => (money ? inr(Math.abs(n)) : String(Math.abs(n)));
   if (!d) return <span>same as {word}</span>;
   return (
-    <span className={`inline-flex items-center gap-1 ${d > 0 ? "text-ok" : "text-warn"}`}>
+    <span className="inline-flex items-center gap-1 text-ink/75">
       <Icon name={d > 0 ? "up" : "fall"} className="h-4 w-4" />{f(d)} {d > 0 ? "more" : "less"} than {word}
     </span>
   );
@@ -144,8 +146,8 @@ export function Delta({ now, was, word = "yesterday", money }: { now: number; wa
 /** a small word in a tinted pill */
 export function Badge({ children, tone = "quiet", dot }: { children: React.ReactNode; tone?: Tone; dot?: boolean }) {
   return (
-    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[12.5px] font-medium leading-none ${TINT[tone]}`}>
-      {dot ? <span className="h-1.5 w-1.5 rounded-full bg-current" /> : null}{children}
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-s2 px-2.5 py-1 text-[12.5px] font-medium leading-none text-ink/80">
+      {dot ? <span className={`h-1.5 w-1.5 rounded-full ${DOT[tone]}`} /> : null}{children}
     </span>
   );
 }
@@ -210,7 +212,7 @@ export function Stat({ label, value, sub, tone }: { label: string; value: React.
   return (
     <div className="rounded-[22px] bg-s1 p-5">
       <div className="text-[14px] text-quiet">{label}</div>
-      <div className={`tnum mt-3 text-[34px] font-extrabold leading-none tracking-[-0.04em] ${tone === "blue" ? "text-[#93a3ff]" : tone === "warn" ? "text-warn" : ""}`}>{value}</div>
+      <div className={`tnum mt-3 text-[34px] font-extrabold leading-none tracking-[-0.04em] ${tone === "warn" ? "text-warn" : ""}`}>{value}</div>
       {sub ? <div className="tnum mt-2 text-[13px] text-quiet">{sub}</div> : null}
     </div>
   );
@@ -225,7 +227,7 @@ export function Bars({ rows, empty = "nothing yet" }: { rows: { key: string; lab
       {rows.map((r) => (
         <li key={r.key}>
           <div className="flex items-baseline justify-between gap-4 text-[15px]"><span className="min-w-0 truncate">{r.label}</span><span className="tnum shrink-0 text-quiet">{r.n}{r.sub ? <span className="ml-1.5 text-[13px]">{r.sub}</span> : null}</span></div>
-          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-s3"><div className="h-full rounded-full bg-ink/70" style={{ width: `${Math.max(2, (r.n / max) * 100)}%` }} /></div>
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-s3"><div className="h-full rounded-full bg-ink/55" style={{ width: `${Math.max(2, (r.n / max) * 100)}%` }} /></div>
         </li>
       ))}
     </ul>
@@ -270,9 +272,9 @@ export function StageBadge({ stage }: { stage: Stage }) {
 }
 export const STAGE_ADMIN = Object.fromEntries(Object.entries(STAGE).map(([k, v]) => [k, v[0]])) as Record<Stage, string>;
 
-/** a link in the site's way: blue, the underline drawn in on hover */
+/** a link: the text's own colour, a faint underline that firms up on hover */
 export function A({ href, children, className = "" }: { href: string; children: React.ReactNode; className?: string }) {
-  return <Link href={href} className={`draw text-[#93a3ff] transition hover:text-ink ${className}`}>{children}</Link>;
+  return <Link href={href} className={`text-ink/85 underline decoration-ink/25 underline-offset-4 transition hover:text-ink hover:decoration-ink ${className}`}>{children}</Link>;
 }
 
 /** the first letter of a name, in a circle */

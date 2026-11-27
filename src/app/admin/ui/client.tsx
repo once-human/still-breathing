@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, startTransition, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Icon, type IconName } from "./icons";
 
 /**
@@ -29,7 +29,7 @@ export function CsrfProvider({ token, children }: { token: string; children: Rea
         <div className="pointer-events-none fixed inset-x-4 bottom-24 z-[60] mx-auto grid w-auto max-w-[400px] gap-2 md:inset-x-auto md:bottom-6 md:right-6" role="status" aria-live="polite">
           {toasts.map((t) => (
             <div key={t.id} className="a-pop pointer-events-auto flex items-start gap-3 rounded-2xl bg-s3 px-4 py-3.5 text-[14px] shadow-[0_12px_40px_rgba(0,0,0,0.5)]">
-              <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full ${t.ok ? "bg-ok/20 text-ok" : "bg-bad/20 text-bad"}`}><Icon name={t.ok ? "check" : "x"} className="h-3.5 w-3.5" /></span>
+              <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-s2 ${t.ok ? "text-ok" : "text-bad"}`}><Icon name={t.ok ? "check" : "x"} className="h-3.5 w-3.5" /></span>
               <span className="min-w-0">{t.text}</span>
             </div>
           ))}
@@ -144,35 +144,34 @@ export function ShopSwitch({ open, connected }: { open: boolean; connected: bool
   const router = useRouter();
   const [on, setOn] = useState(open);
   const [ask, setAsk] = useState(false);
-  const [busy, setBusy] = useState(false);
   useEffect(() => setOn(open), [open]);
   const live = on && connected;
-  const save = async () => {
-    setBusy(true);
-    const r = await post("/api/admin/settings", { open: !on });
-    setBusy(false);
+  // flips at once; the save runs behind it and flips back if it fails
+  const save = async (next: boolean) => {
     setAsk(false);
-    if (!r.ok) return say(false, r.error);
-    setOn(!on);
-    say(true, on ? "the shop is closed: checkout is off" : "the shop is live: checkout is on");
-    router.refresh();
+    setOn(next);
+    const r = await post("/api/admin/settings", { open: next });
+    if (!r.ok) {
+      setOn(!next);
+      return say(false, r.error);
+    }
+    say(true, next ? "the shop is live" : "the shop is closed: checkout is off");
+    startTransition(() => router.refresh());
   };
   return (
     <>
-      <button type="button" onClick={() => connected && setAsk(true)} disabled={!connected} title={connected ? undefined : "payments aren't connected"}
-        className={`a-press inline-flex h-10 items-center gap-2.5 rounded-full pl-4 pr-1.5 text-[14px] font-semibold ${live ? "bg-ok/12 text-ok" : "bg-warn/12 text-warn"}`}>
-        <span className="relative flex h-2 w-2">{live ? <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-ok opacity-60" /> : null}<span className={`relative h-2 w-2 rounded-full ${live ? "bg-ok" : "bg-warn"}`} /></span>
+      <button type="button" onClick={() => (!connected ? undefined : on ? setAsk(true) : void save(true))} disabled={!connected} title={connected ? undefined : "payments aren't connected"}
+        className="a-press inline-flex h-10 items-center gap-2.5 rounded-full bg-s1 pl-4 pr-1.5 text-[14px] font-medium hover:bg-s2">
+        <span className={`h-2 w-2 rounded-full ${live ? "bg-ok" : "bg-warn"}`} />
         {!connected ? "not connected" : live ? "shop live" : "shop closed"}
-        <span className={`relative h-7 w-12 rounded-full transition-colors ${live ? "bg-ok" : "bg-s3"}`}><span className={`a-spring absolute top-1 h-5 w-5 rounded-full bg-paper shadow transition-all ${live ? "left-6" : "left-1"}`} /></span>
+        <span className={`relative h-7 w-12 rounded-full transition-colors duration-100 ${live ? "bg-ink" : "bg-s3"}`}><span className={`a-spring absolute top-1 h-5 w-5 rounded-full shadow transition-[left,background-color] ${live ? "left-6 bg-paper" : "left-1 bg-quiet"}`} /></span>
       </button>
       {ask ? (
-        <Modal title={on ? "close the shop?" : "open the shop?"} danger={on} onClose={() => !busy && setAsk(false)}>
-          <p className="text-[15px] leading-relaxed text-ink/80">{on
-            ? "checkout closes on the whole site at once. people can still look and fill their bag; anyone paying right now can finish."
-            : "checkout opens again for everyone, at the prices shown now."}</p>
+        <Modal title="close the shop?" danger onClose={() => setAsk(false)}>
+          <p className="text-[15px] leading-relaxed text-ink/80">checkout closes on the whole site at once. people can still look and fill their bag; anyone paying right now can finish.</p>
           <div className="mt-6 grid grid-cols-2 gap-2">
-            <button type="button" disabled={busy} onClick={() => setAsk(false)} className={BTN.plain}>cancel</button>
-            <button type="button" disabled={busy} onClick={() => void save()} className={on ? BTN.dangerMain : BTN.main}>{busy ? "working…" : on ? "close it" : "open it"}</button>
+            <button type="button" onClick={() => setAsk(false)} className={BTN.plain}>cancel</button>
+            <button type="button" onClick={() => void save(false)} className={BTN.dangerMain}>close it</button>
           </div>
         </Modal>
       ) : null}
@@ -265,7 +264,7 @@ export function Act({ label, confirm, url, body, danger, typeToConfirm, done, go
     say(true, String(r.data.message ?? "done"));
     done?.(r.data);
     if (goTo) router.push(goTo);
-    else router.refresh();
+    else startTransition(() => router.refresh());
   };
   const blocked = (typeToConfirm && typed.trim().toUpperCase() !== typeToConfirm.toUpperCase()) || fields.some((f) => !f.optional && !values[f.name]?.trim());
   const start = () => { setErr(""); setOpen(true); };
@@ -273,7 +272,7 @@ export function Act({ label, confirm, url, body, danger, typeToConfirm, done, go
     <>
       {row ? (
         <button type="button" onClick={start} className="group flex min-h-[68px] w-full items-center gap-4 px-5 py-3.5 text-left transition hover:bg-s2 active:bg-s3">
-          <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${danger ? "bg-bad/12 text-bad" : "bg-s3 text-ink/80"}`}><Icon name={row.icon} className="h-[19px] w-[19px]" /></span>
+          <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full bg-s2 ${danger ? "text-bad" : "text-ink/75"}`}><Icon name={row.icon} className="h-[19px] w-[19px]" /></span>
           <span className="min-w-0 flex-1">
             <span className={`block text-[15px] leading-snug ${danger ? "text-bad" : ""}`}>{label}</span>
             {row.sub ? <span className="mt-0.5 block text-[13px] leading-snug text-quiet">{row.sub}</span> : null}
@@ -320,9 +319,9 @@ export function Act({ label, confirm, url, body, danger, typeToConfirm, done, go
 /** the switch itself, with a little spring in the knob */
 export function Switch({ on, busy, onClick, label }: { on: boolean; busy?: boolean; onClick: () => void; label: string }) {
   return (
-    <button type="button" role="switch" aria-checked={on} aria-label={label} disabled={busy} onClick={onClick}
-      className={`relative h-8 w-[52px] shrink-0 rounded-full transition-colors duration-300 disabled:opacity-60 ${on ? "bg-ok" : "bg-s3"}`}>
-      <span className={`a-spring absolute top-1 h-6 w-6 rounded-full shadow-[0_2px_6px_rgba(0,0,0,0.35)] transition-all ${on ? "left-[24px] bg-paper" : "left-1 bg-quiet"}`} />
+    <button type="button" role="switch" aria-checked={on} aria-label={label} aria-busy={busy} onClick={onClick}
+      className={`a-press relative h-8 w-[52px] shrink-0 rounded-full transition-colors duration-100 ${on ? "bg-ink" : "bg-s3"}`}>
+      <span className={`a-spring absolute top-1 h-6 w-6 rounded-full shadow-[0_1px_4px_rgba(0,0,0,0.35)] transition-[left,background-color] ${on ? "left-[24px] bg-paper" : "left-1 bg-quiet"}`} />
     </button>
   );
 }
@@ -349,7 +348,7 @@ export function Toggle({ label, hint, value, url, body, field, confirmOff, confi
       return say(false, r.error);
     }
     say(true, `${label}: ${next ? "on" : "off"}`);
-    router.refresh();
+    startTransition(() => router.refresh());
   };
   const flip = () => {
     const next = !on;
@@ -358,7 +357,7 @@ export function Toggle({ label, hint, value, url, body, field, confirmOff, confi
   };
   return (
     <div className="flex min-h-[68px] items-center gap-4 px-5 py-3.5">
-      {icon ? <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full transition-colors ${on ? "bg-ok/12 text-ok" : "bg-s3 text-ink/80"}`}><Icon name={icon} className="h-[19px] w-[19px]" /></span> : null}
+      {icon ? <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-s2 text-ink/75"><Icon name={icon} className="h-[19px] w-[19px]" /></span> : null}
       <div className="min-w-0 flex-1">
         <div className="text-[15px] leading-snug">{label}</div>
         {hint ? <div className="mt-0.5 text-[13px] leading-snug text-quiet">{hint}</div> : null}
@@ -399,11 +398,11 @@ export function Segmented<T extends string>({ value, options, url, body, field, 
       return say(false, r.error);
     }
     say(true, `${label}: ${options.find((o) => o.value === next)?.label}`);
-    router.refresh();
+    startTransition(() => router.refresh());
   };
-  const tone = { ok: "bg-ok text-black", warn: "bg-warn text-black", off: "bg-ink text-paper" };
+  const tone = { ok: "bg-ink text-paper", warn: "bg-ink text-paper", off: "bg-ink text-paper" };
   return (
-    <div role="radiogroup" aria-label={label} className={`inline-flex rounded-full bg-s2 p-1 ${busy ? "opacity-70" : ""}`}>
+    <div role="radiogroup" aria-label={label} aria-busy={busy} className="inline-flex rounded-full bg-s2 p-1">
       {options.map((o) => (
         <button key={o.value} type="button" role="radio" aria-checked={v === o.value} onClick={() => void pick(o.value)}
           className={`a-press whitespace-nowrap rounded-full ${compact ? "px-3 py-1.5 text-[13px]" : "px-4 py-2 text-[14px]"} ${v === o.value ? `${tone[o.tone ?? "off"]} font-semibold shadow-sm` : "text-quiet hover:text-ink"}`}>
@@ -466,7 +465,7 @@ export function NoteForm({ url, body }: { url: string; body: Record<string, unkn
       setBusy(true);
       const r = await post(url, { ...body, text });
       setBusy(false);
-      if (r.ok) { setText(""); say(true, "note saved"); router.refresh(); } else say(false, r.error);
+      if (r.ok) { setText(""); say(true, "note saved"); startTransition(() => router.refresh()); } else say(false, r.error);
     }}>
       <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} maxLength={2000} placeholder="a note for yourself (the buyer never sees it)"
         className={`${FIELD} !h-auto resize-y py-3 leading-relaxed`} />

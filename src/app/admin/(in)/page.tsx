@@ -28,13 +28,13 @@ function Chart({ days }: { days: { day: string; people: number; orders: number }
         {days.map((d) => (
           <div key={d.day} className="group relative flex h-full flex-1 flex-col justify-end" title={`${d.day.slice(5)}: ${d.people} people, ${d.orders} orders`}>
             <div className="w-full rounded-[4px] bg-s3 transition-colors group-hover:bg-ink/40" style={{ height: `${(d.people / max) * 100}%`, minHeight: d.people ? 4 : 2 }} />
-            {d.orders ? <div className="absolute inset-x-0 bottom-0 rounded-[4px] bg-blue" style={{ height: `${(d.orders / max) * 100}%`, minHeight: 6 }} /> : null}
+            {d.orders ? <div className="absolute inset-x-0 bottom-0 rounded-[4px] bg-ink/80" style={{ height: `${(d.orders / max) * 100}%`, minHeight: 6 }} /> : null}
           </div>
         ))}
       </div>
       <div className="mt-3 flex justify-between text-[13px] text-quiet">
         <span>{new Date(`${days[0]?.day}T12:00:00+05:30`).toLocaleDateString("en-IN", { day: "numeric", month: "short" }).toLowerCase()}</span>
-        <span className="flex items-center gap-4"><span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-[3px] bg-s3" />people</span><span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-[3px] bg-blue" />orders</span></span>
+        <span className="flex items-center gap-4"><span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-[3px] bg-s3" />people</span><span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-[3px] bg-ink/80" />orders</span></span>
         <span>today</span>
       </div>
     </div>
@@ -71,7 +71,7 @@ export default async function Home() {
         </Section>
       ) : null}
 
-      <div className="a-in-2 mb-10 grid grid-cols-2 gap-3 md:mb-12 lg:grid-cols-4">
+      <div className="mb-10 grid grid-cols-2 gap-3 md:mb-12 lg:grid-cols-4">
         <Tile label="sales today" icon="money" value={inr(t.today.revenue)} delta={{ now: t.today.revenue, was: t.yesterday.revenue, money: true }} href="/admin/orders" />
         <Tile label="orders today" icon="orders" value={t.today.orders} delta={{ now: t.today.orders, was: t.yesterday.orders }} href="/admin/orders" />
         <Tile label="people today" icon="visitors" value={count.today} delta={{ now: count.today, was: count.yesterday }} sub={count.now ? <span className="text-ok">{count.now} here now</span> : undefined} href="/admin/visitors" />
@@ -105,7 +105,7 @@ export default async function Home() {
               {live.slice(0, 5).map((v) => (
                 <Row key={v.id} href={`/admin/visitors/${v.id}`} icon={/phone|iphone|android/i.test(v.device ?? "") ? "phone" : "desktop"} tone="ok"
                   title={<>on {pageName(v.now)}</>} sub={`${where(v)} · ${(v.device ?? "").toLowerCase()} · from ${v.referrer ?? "direct"}`}
-                  right={v.bag.length ? <span className="text-[13px] text-[#93a3ff]">{v.bag.reduce((n, b) => n + b.n, 0)} in bag</span> : undefined} />
+                  right={v.bag.length ? <span className="text-[13px] text-ink">{v.bag.reduce((n, b) => n + b.n, 0)} in bag</span> : undefined} />
               ))}
             </Group>
           ) : <Card><p className="text-[15px] text-quiet">nobody right now. {count.hour ? `${count.hour} ${count.hour === 1 ? "person" : "people"} in the last hour.` : "this fills in the moment someone opens a page."}</p></Card>}
