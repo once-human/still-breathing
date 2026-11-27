@@ -383,3 +383,13 @@ export async function importOld(): Promise<number> {
   await kv("SET", "visits:old-in", new Date().toISOString());
   return made.length;
 }
+
+/** people a day over the last `days` (India's days), for the home page's chart */
+export async function dailyPeople(days = 30): Promise<Map<string, number>> {
+  const d = Math.max(1, Math.min(KEEP_DAYS, Math.floor(days)));
+  const r = await rows<{ day: string; people: number }>(
+    `SELECT (started_at AT TIME ZONE '${TZ}')::date::text AS day, count(DISTINCT visitor)::int AS people FROM visits
+     WHERE kind = 'person' AND started_at > now() - make_interval(days => ${d + 1}) GROUP BY 1`,
+  ).catch(() => []);
+  return new Map(r.map((x) => [x.day, x.people]));
+}
