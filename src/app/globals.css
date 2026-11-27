@@ -152,4 +152,3 @@ html.menu-open, html.menu-open body { overflow: hidden; }
   .a-spring, .a-press { transition-duration: 0ms !important; }
   .a-press:active { transform: none; }
 }
-}
