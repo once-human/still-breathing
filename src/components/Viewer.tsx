@@ -10,6 +10,7 @@ import { printBackURL, printFrontURL } from "@/lib/viewer/print";
 import { asset } from "@/lib/asset";
 import { word, type WordKind } from "@/lib/words";
 import dynamic from "next/dynamic";
+import { track } from "@/components/Beacon";
 
 // the camera try-on, and the pose model behind it, only download when someone asks for it
 const TryOn = dynamic(() => import("@/components/TryOn").then((m) => m.TryOn), { ssr: false });
@@ -1015,7 +1016,7 @@ export function Viewer({ design, tee, variant, onShot }: { design: Design; tee: 
             {x.label}
           </button>
         ))}
-        <button onClick={() => setTryOn(true)} className="hit ml-auto font-semibold text-blue hover:text-ink">try it on →</button>
+        <button onClick={() => { track("tryon", design); setTryOn(true); }} className="hit ml-auto font-semibold text-blue hover:text-ink">try it on →</button>
       </div>
       {shot.id === "tee" ? (
         <div className="mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1 border-t border-line pt-1.5 text-[13px]" role="group" aria-label="Side">

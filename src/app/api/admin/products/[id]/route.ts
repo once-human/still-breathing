@@ -5,7 +5,8 @@ import { PRODUCTS_TAG, productById, saveProduct, type Product } from "@/lib/shop
 
 export const dynamic = "force-dynamic";
 
-const FIELDS = ["status", "cost", "margin", "fixedPrice", "skus", "name", "about", "sort"] as const;
+/** what the admin may change; qikink's cost and the SKUs are qikink's facts, set from its dashboard in code, never here */
+const FIELDS = ["status", "margin", "fixedPrice", "name", "about", "sort"] as const;
 /** the words are shown on every page, so they're checked here before the shop saves them */
 const TEXT: Record<string, number> = { name: 60, about: 600 };
 

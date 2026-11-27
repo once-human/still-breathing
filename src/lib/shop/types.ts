@@ -12,6 +12,10 @@ export type PayView = {
   prices?: Partial<Record<Design, number>>;
   /** draft shirts aren't shown; sold out ones are shown with no buy */
   status?: Partial<Record<Design, "draft" | "live" | "soldout">>;
+  /** the admin's line over every page, in place of the usual one */
+  notice?: string;
+  /** what checkout says while orders are off */
+  closed?: string;
 };
 
 /** a bag line as the browser keeps it: only which shirt, which size, how many (never a price it could change) */

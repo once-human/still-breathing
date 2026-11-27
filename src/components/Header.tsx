@@ -10,6 +10,7 @@ import { useShirtText } from "@/components/ShirtText";
 import { NAV, BRAND } from "@/lib/site";
 import { CURRENT, fmtDays, paperStill, shirtHref, STILL_H, STILL_W } from "@/content/lineups";
 import { SHOP } from "@/content/shop";
+import { useShop } from "@/lib/shop/client";
 
 const cell = "border-t pt-1.5 truncate transition-colors duration-300";
 const on = (path: string, href: string) => (href === "/" ? path === "/" : path === href || path.startsWith(href + "/"));
@@ -22,6 +23,7 @@ const on = (path: string, href: string) => (href === "/" ? path === "/" : path =
 export function Header() {
   // the shirts on show, in the admin's order and names (a draft leaves the shelf and the menu)
   const { order: shirts, label: shirtLabel } = useShirtText();
+  const notice = useShop().pay?.notice;
   const path = usePathname();
   const [menu, setMenu] = useState(false);
   const [shelf, setShelf] = useState(false);
@@ -65,9 +67,11 @@ export function Header() {
       >
         {/* one quiet line over every page: what a buyer wants to know first */}
         <p className="flex h-7 items-center justify-center gap-2 border-b border-line px-4 text-[12px] text-quiet">
-          <span className="text-ink">free delivery anywhere in {SHOP.where}</span>
-          <span aria-hidden>·</span>
-          <span className="truncate">made to order, with you in about 10 days</span>
+          {notice ? <span className="truncate text-ink">{notice}</span> : <>
+            <span className="text-ink">free delivery anywhere in {SHOP.where}</span>
+            <span aria-hidden>·</span>
+            <span className="truncate">made to order, with you in about 10 days</span>
+          </>}
         </p>
         <nav aria-label="Main" className="grid grid-cols-[1fr_auto_auto] items-end gap-3 px-4 pt-3 pb-2 text-[14px] md:grid-cols-7 md:gap-4 md:text-[15px] lg:grid-cols-9">
           <Link href="/" className={`${cell} ${path === "/" ? "border-blue" : "border-line"} font-semibold`}>{BRAND}</Link>

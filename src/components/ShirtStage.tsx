@@ -12,6 +12,7 @@ import { priceIn, useShop } from "@/lib/shop/client";
 import { useShirtText } from "@/components/ShirtText";
 import { BuyFacts } from "@/components/BuyFacts";
 import { rupees } from "@/lib/shop/money";
+import { track } from "@/components/Beacon";
 import type { Variant } from "@/lib/viewer/raster";
 import { COLOURS, DESIGNS, SIZES, SIZE_ORDER, THE_TEE, type Size } from "@/content/tee";
 import { fmtDays, lineupOf, paperStill, shirtBySlug, shirtHref, STILL_H, STILL_W } from "@/content/lineups";
@@ -29,6 +30,7 @@ export function ShirtStage() {
   const design = lineup ? shirtBySlug(lineup, params.shirt) : undefined;
 
   const [size, setSize] = useState<Size>("M");
+  const shotSeen = useRef<string | null>(null);
   const [variant, setVariant] = useState<Variant>(SHOP);
   const [wearer, setWearer] = useState<Wearer>("him");
   const [shot, setShot] = useState("tee");
@@ -65,7 +67,7 @@ export function ShirtStage() {
   return (
     <section aria-label={`${t.top} ${t.name}`} className="grid grid-cols-1 gap-x-4 gap-y-8 px-4 pt-4 md:grid-cols-12">
       <div className="page-in md:col-span-7 lg:col-span-7">
-        <Viewer design={design} tee={tee} variant={variant} onShot={setShot} />
+        <Viewer design={design} tee={tee} variant={variant} onShot={(s) => { if (shotSeen.current && s !== shotSeen.current) track("look", design, undefined, s); shotSeen.current = s; setShot(s); }} />
         <div className={`mt-2 items-baseline gap-4 text-[13px] ${shot === "worn" ? "flex" : "hidden"}`} role="group" aria-label="Worn by">
           <span className="text-quiet">worn by</span>
           {(Object.keys(WEARERS) as Wearer[]).map((w) => (
@@ -103,7 +105,7 @@ export function ShirtStage() {
             </div>
             <div className="mt-3 grid grid-cols-6 gap-1.5" role="radiogroup" aria-label="Size">
               {SIZE_ORDER.map((x) => (
-                <button key={x} role="radio" aria-checked={x === size} onClick={() => setSize(x)}
+                <button key={x} role="radio" aria-checked={x === size} onClick={() => { if (x !== size) track("size", design, x); setSize(x); }}
                   className={`h-11 border text-[14px] transition-colors duration-200 ${x === size ? "border-ink bg-ink text-paper" : "border-line hover:border-quiet"}`}>{x}</button>
               ))}
             </div>

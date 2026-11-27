@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Label } from "@/components/Label";
+import { YourVisit } from "@/components/YourVisit";
 import { POLICIES, POLICIES_READY, POLICIES_UPDATED, POLICY_ORDER, type PolicySlug } from "@/content/policies";
 import { pageMeta } from "@/lib/site";
 import { shopOpen } from "@/lib/shop/config";
@@ -65,6 +66,7 @@ export default async function PolicyPage({ params }: Params) {
               <div className="prose-sb text-[15px] leading-relaxed">{s.body.map((b) => <p key={b.slice(0, 32)}>{linked(b)}</p>)}</div>
             </section>
           ))}
+          {p.slug === "privacy" ? <YourVisit /> : null}
         </div>
       </div>
     </div>

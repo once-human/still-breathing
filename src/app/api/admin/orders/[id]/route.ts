@@ -2,7 +2,8 @@ import { audit } from "@/lib/admin/auth";
 import { exec } from "@/lib/admin/db";
 import { adminWrite, failedAction, ok, str } from "@/lib/admin/guard";
 import { settlementOf } from "@/lib/admin/razorpay";
-import { MAIL_KINDS, addNote, adminCancel, adminRefund, loadOrder, resendEmail, retryPrint, sync, validId, type MailKind } from "@/lib/shop/orders";
+import { MAIL_KINDS, addNote, adminCancel, adminRefund, changeAddress, deleteOrder, loadOrder, resendEmail, retryPrint, sync, validId, type MailKind } from "@/lib/shop/orders";
+import { checkDetails } from "@/lib/shop/india";
 import { paymentById } from "@/lib/shop/razorpay";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +11,7 @@ export const maxDuration = 30;
 
 
 /**
- * One action on one order: { action: note | sync | fees | retry | cancel | refund | resend, ... }. The money-moving
+ * One action on one order: { action: note | sync | fees | retry | cancel | refund | resend | address | delete, ... }. The money-moving
  * ones (cancel, refund) go through the shop's own functions under the order's lock, exactly as the buyer's own cancel
  * does, so nothing is ever done twice. Every action, done or failed, is in the audit log.
  */
@@ -81,6 +82,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         await resendEmail(id, kind, admin.email);
         await log("resend", { kind, to: o.contact.email });
         return ok({ message: `sent the ${kind} email to ${o.contact.email}` });
+      }
+      case "address": {
+        const f = (k: string) => str(body[k], 200);
+        const c = checkDetails({ name: f("name"), phone: f("phone"), address1: f("address1"), address2: f("address2"), city: f("city"), state: f("state"), pin: f("pin"), email: o.contact.email });
+        if ("field" in c) return ok({ error: `${c.field}: ${c.error}` }, 400);
+        const { email: _e, ...d } = c.ok;
+        void _e;
+        await changeAddress(id, d);
+        await log("address", { city: d.city, state: d.state, pin: d.pin });
+        return ok({ message: "address changed" });
+      }
+      case "delete": {
+        const gone = await deleteOrder(id);
+        await log("delete", { stage: gone.stage, total: gone.total, email: gone.contact.email });
+        return ok({ message: "deleted" });
       }
       default:
         return ok({ error: "unknown action" }, 400);

@@ -22,7 +22,7 @@ const codeHash = (email: string, code: string) => createHmac("sha256", shopSecre
 export const validEmail = (e: string) => e.length <= 120 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
 
 /** email a sign-in code; quietly does nothing past the limits (the page says the same either way) */
-export async function sendCode(email: string) {
+export async function sendCode(email: string, from = "") {
   if (!accountsOpen()) throw new ShopError("accounts not set up", 503);
   const sent = await kv<number>("INCR", `otp-sent:${email}`);
   if (sent === 1) await kv("EXPIRE", `otp-sent:${email}`, 900);
@@ -30,7 +30,7 @@ export async function sendCode(email: string) {
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
   await setJson(`otp:${email}`, { hash: codeHash(email, code), tries: 0 }, 1);
   await kv("EXPIRE", `otp:${email}`, 600);
-  await sendEmail(email, `${code} is your sahn sign-in code`, `your code is ${code}\n\nit works for 10 minutes. if you didn't ask for it, ignore this email: nothing happens without it.\n\nsahn`, `otp-${email}-${sha(code).slice(0, 12)}`);
+  await sendEmail(email, `${code} is your sahn sign-in code`, `your code is ${code}\n\nasked at ${new Date().toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}${from ? ` from ${from}` : ""}. it works for 10 minutes. if you didn't ask for it, ignore this email: nothing happens without it.\n\nsahn`, `otp-${email}-${sha(code).slice(0, 12)}`);
 }
 
 /** the code checked in constant time; right → a new session cookie */
@@ -91,6 +91,20 @@ export async function listAccounts(opts: { limit?: number; offset?: number; q?: 
 export async function countAccounts() {
   const r = await query("SELECT count(*)::text FROM kv WHERE key LIKE 'user:%' AND (expires_at IS NULL OR expires_at > now())");
   return Number(r[0]?.[0] ?? 0);
+}
+
+/** sign an email out on every device (its sessions are kept by token hash, with the email as the value) */
+export async function signOutEverywhere(email: string) {
+  const r = await query("DELETE FROM kv WHERE key LIKE 'sess:%' AND value = $1 RETURNING key", [email]);
+  return r.length;
+}
+
+/** an account gone: its details, saved addresses, order list and every session (its orders are the orders' own business) */
+export async function deleteAccount(email: string) {
+  const sessions = await signOutEverywhere(email);
+  await kv("DEL", `user:${email}`);
+  await kv("DEL", `uorders:${email}`);
+  return { sessions };
 }
 
 /** the account's orders, newest first */

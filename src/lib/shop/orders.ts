@@ -131,12 +131,13 @@ const sign = () => `${SHOP.merchant}${OPERATOR.email ? `\n${OPERATOR.email}` : "
 const istTime = (iso: string) => new Date(iso).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 
 /** the emails a buyer gets; refund:<refund id> is a refund that isn't a cancel */
-export type MailKind = "confirmed" | "shipped" | "delivered" | "cancelled" | `refund:${string}`;
-export const MAIL_KINDS = ["confirmed", "shipped", "delivered", "cancelled"] as const;
+export type MailKind = "confirmed" | "printing" | "shipped" | "out" | "delivered" | "cancelled" | `refund:${string}` | `address:${number}`;
+export const MAIL_KINDS = ["confirmed", "printing", "shipped", "out", "delivered", "cancelled"] as const;
 
 /** an email's subject and words for this order as it is now, or null when there's nothing to say yet */
 function emailFor(o: Order, kind: MailKind): [string, string] | null {
   const link = `${site()}${orderPath(o.id)}`;
+  const to = `${o.ship.city}, ${o.ship.state} ${o.ship.pin}`;
   const back = (r: Refund) => `${rs(r.amount)} is on its way back${o.payment ? ` to your ${o.payment.label.split(" · ")[0]}` : ""}. banks usually show it within 5–7 working days. refund reference: ${r.id}.`;
   switch (kind) {
     case "confirmed": {
@@ -152,10 +153,25 @@ function emailFor(o: Order, kind: MailKind): [string, string] | null {
         sign(),
       ].join("\n\n")];
     }
+    case "printing":
+      if (!o.partnerId) return null;
+      return [`sahn: order #${o.id} is being made`, [
+        `your order #${o.id} has gone to print. from here it's printed, checked and packed just for you: about ${SHOP.make[0]}–${SHOP.make[1]} days, then ${SHOP.road[0]}–${SHOP.road[1]} days on the road to ${o.ship.city.toLowerCase()}.`,
+        `the address can't be changed from your order's page any more. if something's wrong with it, write back today.`,
+        `your order: ${link}`,
+        sign(),
+      ].join("\n\n")];
+    case "out":
+      if (!o.events?.some((e) => e.kind === "out")) return null;
+      return [`sahn: order #${o.id} is out for delivery`, [
+        `your order #${o.id} is out for delivery to ${o.ship.city.toLowerCase()} today.`,
+        `keep your phone on: the courier calls before coming.${o.tracking?.url ? ` track it: ${o.tracking.url}` : ""}`,
+        sign(),
+      ].join("\n\n")];
     case "shipped":
       if (!o.shippedAt || !o.tracking) return null;
       return [`sahn: order #${o.id} is on its way`, [
-        `it's left. your order #${o.id} is with the courier${o.tracking.courier ? ` (${o.tracking.courier.toLowerCase()})` : ""}.`,
+        `it's left. your order #${o.id} is with the courier${o.tracking.courier ? ` (${o.tracking.courier.toLowerCase()})` : ""}, on its way to ${to}. most parcels get there in ${SHOP.road[0]}–${SHOP.road[1]} days.`,
         o.tracking.url ? `track it: ${o.tracking.url}` : `tracking number: ${o.tracking.awb}`,
         `keep your phone on: the courier calls before delivering. your order: ${link}`,
         sign(),
@@ -165,7 +181,8 @@ function emailFor(o: Order, kind: MailKind): [string, string] | null {
       return [`sahn: order #${o.id} is with you`, [
         `your order #${o.id} has been delivered.`,
         `if anything's wrong with it, write back within 7 days with an unboxing video and photos and we'll put it right.`,
-        `wash it cold, inside out, and dry it in the shade.`,
+        `wash it cold, inside out, and dry it in the shade. iron on the back, never on the print.`,
+        `your order: ${link}`,
         sign(),
       ].join("\n\n")];
     case "cancelled": {
@@ -179,6 +196,15 @@ function emailFor(o: Order, kind: MailKind): [string, string] | null {
       ].join("\n\n")];
     }
     default: {
+      if (kind.startsWith("address:")) {
+        if (!o.events?.some((e) => e.kind === "address")) return null;
+        return [`sahn: a new address for order #${o.id}`, [
+          `the address on your order #${o.id} is now:\n${o.ship.name}, ${o.ship.phone}\n${o.ship.address1}${o.ship.address2 ? `, ${o.ship.address2}` : ""}\n${to}`,
+          `if this isn't right, write back straight away: it hasn't gone to print yet, so it can still be fixed.`,
+          `your order: ${link}`,
+          sign(),
+        ].join("\n\n")];
+      }
       const r = o.refunds?.find((x) => `refund:${x.id}` === kind);
       if (!r || r.status === "failed") return null;
       return [`sahn: a refund on order #${o.id}`, [
@@ -212,6 +238,18 @@ async function alert(o: Order, problem: string) {
   await sendEmail(to, `sahn: order #${o.id} needs you`, `order #${o.id} (${rs(o.total)}, paid ${o.paidAt ?? "?"})\n\n${problem}\n\n${itemsText(o)}\n\nship to: ${o.ship.name}, ${o.ship.city}, ${o.ship.state} ${o.ship.pin}`, `alert-${o.id}-${Date.now() >> 26}`).catch((e) => console.error("alert:", e));
 }
 
+/** a new paid order: Onkar hears at once, once */
+async function newOrder(o: Order) {
+  const to = ownerEmail();
+  if (!to || !(await once(`mail:${o.id}:owner`, 400 * 86400))) return;
+  const n = o.lines.reduce((t, l) => t + l.quantity, 0);
+  await sendEmail(to, `sahn: new order #${o.id}, ${rs(o.total)}`, [
+    `${o.contact.name} in ${o.ship.city.toLowerCase()} just paid ${rs(o.total)}${o.payment ? ` by ${o.payment.label}` : ""} for ${n} shirt${n > 1 ? "s" : ""}.`,
+    itemsText(o),
+    `it goes to print by itself after the change-of-mind hour. open it: ${site()}/admin/orders/${o.id}`,
+  ].join("\n\n"), `owner-${o.id}`);
+}
+
 /** hand it to the partner; on a refusal the order waits in attention and is tried again every few hours */
 async function toPrint(o: Order) {
   try {
@@ -219,6 +257,7 @@ async function toPrint(o: Order) {
     o.stage = "printing";
     delete o.problem;
     note(o, "printing");
+    await emailOnce(o, "printing").catch(quietly("printing"));
     return true;
   } catch (e) {
     const first = o.stage !== "attention";
@@ -250,6 +289,7 @@ export async function advance(id: string): Promise<Order | null> {
       await save(o);
       await rememberAddress(o.contact.email, { ...o.ship, email: o.contact.email }).catch((e) => console.error("address:", e));
       await emailOnce(o, "confirmed").catch(quietly("confirm"));
+      await newOrder(o).catch(quietly("new order"));
     }
     if ((o.stage === "paid" || (o.stage === "attention" && !o.partnerId)) && released(o)) {
       await toPrint(o);
@@ -314,6 +354,7 @@ export const changeAddress = (id: string, d: Omit<ShipTo, "email">) =>
     note(o, "address", `${d.city}, ${d.state} ${d.pin}`);
     await save(o);
     await rememberAddress(o.contact.email, { ...o.ship }).catch(() => {});
+    await emailOnce(o, `address:${o.events?.filter((e) => e.kind === "address").length ?? 1}`).catch(quietly("address"));
     return o;
   });
 
@@ -399,6 +440,22 @@ export async function listOrders(opts: { limit?: number; offset?: number; stage?
   return rows.map((r) => JSON.parse(r[0] ?? "null") as Order).filter(Boolean);
 }
 
+/**
+ * An order wiped from the store, for test orders only: one that was never paid, or one cancelled with its refund
+ * done. A paid order that's still going has to be cancelled (and refunded) first, so no real sale disappears.
+ */
+export async function deleteOrder(id: string) {
+  const o = await loadOrder(id);
+  if (!o) throw new ShopError("no such order", 404);
+  const done = o.stage === "paying" || (o.stage === "cancelled" && !pendingRefund(o));
+  if (!done) throw new ShopError(o.stage === "cancelled" ? "its refund is still pending: wait for it to finish" : "a paid order that's still going: cancel it first (that refunds it)", 409);
+  await kv("DEL", key(id));
+  await kv("ZREM", OPEN, id);
+  await kv("ZREM", `uorders:${o.contact.email}`, id);
+  await kv("DEL", `rzp:${o.rzpOrderId}`);
+  return o;
+}
+
 /** how many orders are at each stage */
 export async function countOrders(): Promise<Partial<Record<Stage, number>>> {
   const rows = await query("SELECT value::jsonb->>'stage', count(*)::text FROM kv WHERE key LIKE 'order:%' AND (expires_at IS NULL OR expires_at > now()) GROUP BY 1");
@@ -460,6 +517,7 @@ export async function sync(id: string): Promise<Order | null> {
     o.stage = next;
     await save(o);
     await emailOnce(o, "shipped").catch(quietly("shipped"));
+    if (o.stage === "out") await emailOnce(o, "out").catch(quietly("out"));
     if (o.stage === "delivered") {
       await emailOnce(o, "delivered").catch(quietly("delivered"));
       if (!pendingRefund(o)) await kv("ZREM", OPEN, o.id);

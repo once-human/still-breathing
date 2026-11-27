@@ -65,13 +65,14 @@ export function periodStarts(now = Date.now()) {
 }
 export const istDay = (iso: string) => new Date(Date.parse(iso) + IST).toISOString().slice(0, 10);
 
-export type Totals = { orders: number; shirts: number; revenue: number; cost: number; fees: number; ship: number; margin: number; estimated: boolean };
-const zero = (): Totals => ({ orders: 0, shirts: 0, revenue: 0, cost: 0, fees: 0, ship: 0, margin: 0, estimated: false });
+/** orders: paid and not cancelled; cancelled and refunds are counted apart, and revenue is what's left after refunds */
+export type Totals = { orders: number; cancelled: number; refunds: number; refunded: number; shirts: number; revenue: number; cost: number; fees: number; ship: number; margin: number; estimated: boolean };
+const zero = (): Totals => ({ orders: 0, cancelled: 0, refunds: 0, refunded: 0, shirts: 0, revenue: 0, cost: 0, fees: 0, ship: 0, margin: 0, estimated: false });
 
 export async function overview() {
   const [orders, s, fees, c] = await Promise.all([allOrders(), getSettings(), knownFees(), costs()]);
   const { today, week } = periodStarts();
-  const t = { today: zero(), week: zero(), all: zero() };
+  const t = { today: zero(), yesterday: zero(), week: zero(), all: zero() };
   const bySize: Record<string, Record<Size, number>> = {};
   for (const d of Object.keys(DESIGNS)) bySize[d] = Object.fromEntries(SIZE_ORDER.map((z) => [z, 0])) as Record<Size, number>;
   const byDay = new Map<string, { orders: number; revenue: number }>();
@@ -79,11 +80,19 @@ export async function overview() {
     const m = marginOf(o, s, c, fees.get(o.id));
     if (!m) continue;
     const at = Date.parse(o.paidAt!);
-    for (const [k, from] of [["all", 0], ["week", week], ["today", today]] as const) {
-      if (at < from) continue;
+    for (const [k, from, to] of [["all", 0, Infinity], ["week", week, Infinity], ["today", today, Infinity], ["yesterday", today - 86400_000, today]] as const) {
+      if (at < from || at >= to) continue;
       const x = t[k];
-      x.orders++;
-      if (o.stage !== "cancelled") x.shirts += shirts(o);
+      if (o.stage === "cancelled") x.cancelled++;
+      else {
+        x.orders++;
+        x.shirts += shirts(o);
+      }
+      const back = refunded(o);
+      if (back > 0) {
+        x.refunds++;
+        x.refunded += back;
+      }
       x.revenue += m.revenue;
       x.cost += m.cost;
       x.fees += m.fee;
@@ -94,11 +103,11 @@ export async function overview() {
     if (o.stage !== "cancelled") for (const l of o.lines) if (bySize[l.design]) bySize[l.design][l.size] += l.quantity;
     const day = istDay(o.paidAt!);
     const b = byDay.get(day) ?? { orders: 0, revenue: 0 };
-    b.orders++;
+    if (o.stage !== "cancelled") b.orders++;
     b.revenue += m.revenue;
     byDay.set(day, b);
   }
-  for (const x of Object.values(t)) for (const k of ["revenue", "cost", "fees", "ship", "margin"] as const) x[k] = Math.round(x[k] * 100) / 100;
+  for (const x of Object.values(t)) for (const k of ["revenue", "refunded", "cost", "fees", "ship", "margin"] as const) x[k] = Math.round(x[k] * 100) / 100;
   return { orders, totals: t, bySize, byDay, settings: s, needs: needsYou(orders, s) };
 }
 

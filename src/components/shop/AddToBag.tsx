@@ -5,6 +5,7 @@ import type { Design, Size } from "@/content/tee";
 import { notMade, priceIn, shop, useShop } from "@/lib/shop/client";
 import { rupees } from "@/lib/shop/money";
 import { BagDrawerHost } from "./BagDrawer";
+import { track } from "@/components/Beacon";
 
 /**
  * The buy controls for one shirt in the size picked: "add to bag · ₹1,170" (the main one) and "buy now" (into the
@@ -22,6 +23,7 @@ export function AddToBag({ design, size, variant }: { design: Design; size: Size
 
   const buyNow = () => {
     if (missing) return;
+    track("buy", design, size);
     shop.addQuietly(design, size);
     router.push("/checkout");
   };

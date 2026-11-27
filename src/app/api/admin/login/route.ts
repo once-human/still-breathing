@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { askedFrom } from "@/lib/visits/ua";
 import { requestLink, useLink } from "@/lib/admin/auth";
 import { ipOf, sameOrigin } from "@/lib/shop/guard";
 
@@ -23,14 +24,14 @@ export async function POST(req: Request) {
   }
   const ip = ipOf(req);
   if (typeof b.token === "string") {
-    const done = await useLink(b.token, ip, req.headers.get("user-agent") ?? "").catch((e) => {
+    const done = await useLink(b.token, ip, req.headers.get("user-agent") ?? "", askedFrom(req)).catch((e) => {
       console.error("admin login:", e);
       return false;
     });
     return done ? answer({ ok: true }) : answer({ error: "that link is used, old or wrong: ask for a new one" }, 400);
   }
   if (typeof b.email === "string" && b.email.length <= 120) {
-    await requestLink(b.email, ip).catch((e) => console.error("admin link:", e));
+    await requestLink(b.email, ip, askedFrom(req)).catch((e) => console.error("admin link:", e));
     // the same answer, after about the same time, whoever asked
     await new Promise((r) => setTimeout(r, 300 + Math.random() * 300));
     return answer({ ok: true });

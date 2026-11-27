@@ -1,12 +1,13 @@
 import { OPERATOR, POLICIES_UPDATED } from "@/content/policies";
 import { SHOP } from "@/content/shop";
 import { adminEmail, requireAdmin } from "@/lib/admin/auth";
-import { getSettings, DEFAULTS } from "@/lib/admin/settings";
+import { getSettings } from "@/lib/admin/settings";
 import { SettingsForm } from "./SettingsForm";
 import { SignOutAll } from "../../ui/client";
 import { KV, PageHead, Pill, Section } from "../../ui/ui";
 
 export const metadata = { title: "settings" };
+export const dynamic = "force-dynamic";
 
 /** every key the site reads, by what it's for; only whether each is set is shown, never a value */
 const KEYS: [string, string[]][] = [
@@ -22,13 +23,11 @@ export default async function SettingsPage() {
   await requireAdmin();
   const s = await getSettings(true);
   const set = (k: string) => !!process.env[k]?.trim();
-  const mode = (k: string) => (k === "RAZORPAY_KEY_ID" && set(k) ? (process.env[k]!.trim().startsWith("rzp_live_") ? "live" : "test") : null);
+  const mode = (k: string) => (k === "RAZORPAY_KEY_ID" && set(k) ? (process.env[k]!.trim().startsWith("rzp_live_") ? "live" : "test") : k === "QIKINK_SANDBOX" && set(k) ? "sandbox on" : null);
   return (
     <>
-      <PageHead title="settings" />
-      <Section title="shop" aside="saved to the database, in the audit log">
-        <SettingsForm initial={s} defaults={DEFAULTS} />
-      </Section>
+      <PageHead title="settings" sub="only what's yours to change is open; the partners' rates and the code's facts are locked. every change goes in the audit log" />
+      <SettingsForm initial={s} />
 
       <div className="grid gap-x-12 lg:grid-cols-2">
         <Section title="policy details" aside={`policies last changed ${POLICIES_UPDATED}`}>

@@ -4,7 +4,7 @@ import { allOrders, isPaid, shirtName } from "@/lib/admin/data";
 import { notesFor } from "@/lib/admin/log";
 import { loadAccount, validEmail } from "@/lib/shop/account";
 import { refunded } from "@/lib/shop/orders";
-import { NoteForm } from "../../../ui/client";
+import { Act, NoteForm } from "../../../ui/client";
 import { A, KV, PageHead, Section, StageBadge, Table, dateOnly, dt, inr } from "../../../ui/ui";
 
 export const metadata = { title: "customer" };
@@ -53,9 +53,21 @@ export default async function Customer({ params }: { params: Promise<{ email: st
           ))}
         </Table>
       </Section>
+      <Section title="actions" aside="each asks first, and every one is in the audit log">
+        <div className="flex flex-wrap gap-2">
+          {account ? (
+            <Act label="edit name and phone" confirm="the account's own name and phone (their past orders keep what was on them)."
+              url="/api/admin/customers" body={{ action: "edit", email }}
+              fields={[{ name: "name", label: "name", initial: account.name }, { name: "phone", label: "phone (10 digits)", initial: account.phone, optional: true }]} />
+          ) : null}
+          {account ? <Act label="sign them out everywhere" confirm={`every session of ${email}, on every device, ends now. they sign in again with a code.`} url="/api/admin/customers" body={{ action: "signout", email }} /> : null}
+          <Act danger label="delete this customer" typeToConfirm="DELETE" url="/api/admin/customers" body={{ action: "delete", email }} goTo="/admin/customers"
+            confirm={`wipe ${email} for good: the account, saved addresses, sessions, and their orders that were never paid or were cancelled. a paid order still going stops it. it can't be brought back.`} />
+        </div>
+      </Section>
       <Section title="notes">
         {notes.length ? <ul className="mb-4 grid gap-2 text-[13px]">{notes.map((n) => <li key={n.id}><span className="text-quiet">{dt(n.at)}</span> · {n.text}</li>)}</ul> : null}
-        <NoteForm url="/api/admin/customers" body={{ email }} />
+        <NoteForm url="/api/admin/customers" body={{ action: "note", email }} />
       </Section>
     </>
   );

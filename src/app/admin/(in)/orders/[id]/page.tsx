@@ -124,7 +124,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
       </div>
 
       <Section title="actions" aside="each asks first, and every one is in the audit log">
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="flex flex-wrap gap-2">
           {paid && !o.partnerId && o.stage !== "cancelled" ? (
             <Act label="send to qikink now" confirm={inHour ? "the buyer's change-of-mind hour isn't over: sending now ends it. qikink is charged from the wallet." : "hand this order to qikink now. qikink is charged from the wallet."}
               url={`/api/admin/orders/${o.id}`} body={{ action: "retry" }} />
@@ -143,6 +143,19 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             <Act label="resend an email" confirm={`send one of the buyer's emails again, as the order is now, to ${o.contact.email}.`}
               url={`/api/admin/orders/${o.id}`} body={{ action: "resend" }}
               fields={[{ name: "kind", label: "email", options: [...MAIL_KINDS], initial: o.stage === "cancelled" ? "cancelled" : o.deliveredAt ? "delivered" : o.shippedAt ? "shipped" : "confirmed" }]} />
+          ) : null}
+          {changeable(o) ? (
+            <Act label="change the address" confirm="where it goes, before it goes to print. the buyer's saved addresses get it too."
+              url={`/api/admin/orders/${o.id}`} body={{ action: "address" }}
+              fields={[
+                { name: "name", label: "name", initial: o.ship.name }, { name: "phone", label: "phone (10 digits)", initial: o.ship.phone },
+                { name: "address1", label: "house, street", initial: o.ship.address1 }, { name: "address2", label: "area, landmark", initial: o.ship.address2, optional: true },
+                { name: "city", label: "city", initial: o.ship.city }, { name: "state", label: "state", initial: o.ship.state }, { name: "pin", label: "pin", initial: o.ship.pin },
+              ]} />
+          ) : null}
+          {o.stage === "paying" || (o.stage === "cancelled" && !(o.refunds ?? []).some((r) => r.status === "pending")) ? (
+            <Act danger label="delete this order" confirm={`wipe #${o.id} from the shop for good: for test orders and checkouts that were never paid. it can't be brought back.`}
+              typeToConfirm={o.id} url={`/api/admin/orders/${o.id}`} body={{ action: "delete" }} goTo="/admin/orders" />
           ) : null}
         </div>
         {o.partnerId && o.stage !== "delivered" && o.stage !== "cancelled" ? <p className="mt-4 text-[12px] text-quiet">it&apos;s with qikink: their API has no cancel or address change, so those are by writing to qikink support.</p> : null}

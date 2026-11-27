@@ -2,7 +2,7 @@ import { SHOP } from "@/content/shop";
 import { DESIGNS, SIZE_ORDER, type Design, type Size } from "@/content/tee";
 import { accountsOpen, partnerKeys, razorpayKeys } from "./config";
 import { products, type Product } from "./products";
-import { shopAccepting } from "./settings";
+import { getSettings, shopAccepting } from "./settings";
 import type { BagItem, PayView } from "./types";
 
 /**
@@ -22,13 +22,15 @@ export async function payView(): Promise<PayView> {
   const prices = Object.fromEntries(list.map((p) => [p.id, p.price])) as PayView["prices"];
   const status = Object.fromEntries(list.map((p) => [p.id, p.status])) as PayView["status"];
   const accounts = accountsOpen();
-  if (!(await shopAccepting())) return { pay: false, payable: {}, accounts, prices, status };
+  const s = await getSettings();
+  const words = { ...(s.notice ? { notice: s.notice } : {}), ...(s.closed ? { closed: s.closed } : {}) };
+  if (!(await shopAccepting())) return { pay: false, payable: {}, accounts, prices, status, ...words };
   const payable: PayView["payable"] = {};
   for (const p of list) {
     const sizes = sizesOf(p);
     if (sizes.length) payable[p.id] = sizes;
   }
-  return { pay: Object.keys(payable).length > 0, payable, accounts, prices, status };
+  return { pay: Object.keys(payable).length > 0, payable, accounts, prices, status, ...words };
 }
 
 /** a bag from the browser, checked line by line against what's actually for sale; merged, bounded, or null */

@@ -71,7 +71,7 @@ const subscribe = (f: () => void) => {
 };
 
 function put(design: Design, size: Size) {
-  track("bag", design, size); // the activity count: cookieless, nothing under Do Not Track or GPC
+  track("bag", design, size); // the site's own visitor log: nothing under Do Not Track, GPC or the privacy switch
   const bag = [...state.bag];
   const l = bag.find((x) => x.design === design && x.size === size);
   if (l) bag.splice(bag.indexOf(l), 1, { ...l, quantity: l.quantity + 1 });
@@ -84,8 +84,11 @@ export const shop = {
   add: (design: Design, size: Size) => set({ bag: put(design, size), drawer: true }),
   /** into the bag without opening it (buy now goes straight on to checkout) */
   addQuietly: (design: Design, size: Size) => set({ bag: put(design, size) }),
-  setQuantity: (design: Design, size: Size, quantity: number) =>
-    set({ bag: fit(state.bag.map((x) => (x.design === design && x.size === size ? { ...x, quantity } : x)).filter((x) => x.quantity > 0)) }),
+  setQuantity: (design: Design, size: Size, quantity: number) => {
+    const had = state.bag.find((x) => x.design === design && x.size === size)?.quantity ?? 0;
+    if (quantity < had) track("unbag", design, size);
+    set({ bag: fit(state.bag.map((x) => (x.design === design && x.size === size ? { ...x, quantity } : x)).filter((x) => x.quantity > 0)) });
+  },
   /** a past order's shirts back in the bag (reorder), on top of what's there */
   addLines: (lines: BagItem[]) => {
     const bag = [...state.bag];

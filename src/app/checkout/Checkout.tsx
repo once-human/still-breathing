@@ -12,6 +12,7 @@ import type { Account } from "@/lib/shop/account";
 import { checkDetails, type Details } from "@/lib/shop/india";
 import { rupees } from "@/lib/shop/money";
 import type { PayStart } from "@/lib/shop/types";
+import { track } from "@/components/Beacon";
 
 type RzpResponse = { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string };
 type RzpCheckout = { open(): void; on(ev: string, f: (r: unknown) => void): void };
@@ -53,7 +54,7 @@ export function Checkout({ saved = null }: { saved?: Account | null }) {
     if ("error" in c) return setBad(c);
     setBad(null);
     if (!bagPayable(bag, payView)) {
-      return setBad({ error: payView?.pay ? "one of these shirts can't be paid for in that size yet. take it out of the bag to go on." : "payment isn't connected yet, so nothing can be paid or ordered today. nothing has been charged, and your details weren't sent anywhere." });
+      return setBad({ error: payView?.pay ? "one of these shirts can't be paid for in that size yet. take it out of the bag to go on." : payView?.closed ? `${payView.closed} nothing has been charged, and your details weren't sent anywhere.` : "payment isn't connected yet, so nothing can be paid or ordered today. nothing has been charged, and your details weren't sent anywhere." });
     }
     setBusy(true);
     try {
@@ -74,6 +75,7 @@ export function Checkout({ saved = null }: { saved?: Account | null }) {
         config: { display: { blocks: { upi: { name: "pay by UPI", instruments: [{ method: "upi" }] } }, sequence: ["block.upi"], preferences: { show_default_blocks: true } } },
         modal: { ondismiss: () => setBusy(false), confirm_close: true },
         handler: async (res: RzpResponse) => {
+          track("paid");
           const p = await fetch("/api/shop/paid", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId: j.orderId, ...res }) });
           const pj = (await p.json().catch(() => ({}))) as { url?: string; error?: string };
           shop.empty();
@@ -81,7 +83,9 @@ export function Checkout({ saved = null }: { saved?: Account | null }) {
           router.push(pj.url ?? "/order");
         },
       });
+      rzp.on("payment.failed", () => track("payfail"));
       rzp.on("payment.failed", () => setBad({ error: "that payment didn't go through. nothing was taken; try again, or another way to pay" }));
+      track("pay");
       rzp.open();
     } catch (err) {
       setBad({ field: (err as { field?: keyof Details }).field, error: (err as Error).message });

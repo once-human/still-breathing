@@ -1,4 +1,5 @@
 import { accountOrders, loadAccount, saveAccount, sendCode, sessionEmail, signOut, validEmail, verifyCode } from "@/lib/shop/account";
+import { askedFrom } from "@/lib/visits/ua";
 import { accountsOpen } from "@/lib/shop/config";
 import { failed, guardWrite, json, limited } from "@/lib/shop/guard";
 import { checkDetails } from "@/lib/shop/india";
@@ -25,7 +26,7 @@ export async function POST(req: Request) {
       case "code": {
         if (!validEmail(email)) return json({ error: "an email we can send the code to", field: "email" }, 400);
         if (await limited(`acct-code:${email}`, 5, 3_600_000)) return json({ ok: true });
-        await sendCode(email);
+        await sendCode(email, askedFrom(req));
         return json({ ok: true });
       }
       case "verify": {

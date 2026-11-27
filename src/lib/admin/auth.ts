@@ -24,7 +24,7 @@ const IDLE_H = 2;
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 const env = (k: string) => process.env[k]?.trim() || undefined;
 
-/** the one address allowed in, lower case; the admin is closed without it */
+/** the one address allowed in (ADMIN_EMAIL in Vercel), lower case; the admin is closed without it */
 export const adminEmail = () => {
   const e = env("ADMIN_EMAIL")?.toLowerCase();
   return e && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e) ? e : null;
@@ -41,11 +41,13 @@ const site = () => (env("SHOP_SITE_URL") ?? SITE_URL).replace(/\/$/, "");
 
 export type Admin = { email: string; csrf: string };
 
+const clock = () => new Date().toLocaleString("en-IN", { hour: "numeric", minute: "2-digit", day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).toLowerCase();
+
 /**
  * Ask for a sign-in link. Every answer is the same whatever the email, so the page tells no one which address
  * works. Limits: 5 asks per IP in 15 minutes, and at most 3 links in 15 minutes and 10 a day in all.
  */
-export async function requestLink(email: string, ip: string) {
+export async function requestLink(email: string, ip: string, from = "") {
   const want = adminEmail();
   if (!adminReady() || !want) return;
   if (await limited(`admin-ask:${ip}`, 5, 900_000)) return;
@@ -58,14 +60,14 @@ export async function requestLink(email: string, ip: string) {
   await sendEmail(
     want,
     "sahn admin: your sign-in link",
-    `someone (you, we hope) asked to sign in to the sahn admin${ip !== "?" ? ` from ${ip}` : ""}.\n\nsign in: ${link}\n\nthe link works once, for ${LINK_MIN} minutes, and only after you press the button on the page it opens. if you didn't ask for it, ignore this email: nothing happens without it.`,
+    `someone (you, we hope) asked to sign in to the sahn admin at ${clock()}.\nasked from: ${from || "a device we couldn't name"}${ip !== "?" ? ` (ip ${ip})` : ""}\n\nsign in: ${link}\n\nthe link works once, for ${LINK_MIN} minutes, and only after you press the button on the page it opens. if you didn't ask for it, ignore this email: nothing happens without it.`,
     `admin-link-${sha(token).slice(0, 16)}`,
   );
   await audit(want, "login.link", null, null, ip);
 }
 
 /** the link's token, used once: right → a new session cookie */
-export async function useLink(token: string, ip: string, ua: string) {
+export async function useLink(token: string, ip: string, ua: string, from = "") {
   if (!adminReady() || !/^[\w-]{40,50}$/.test(token)) return false;
   if (await limited(`admin-use:${ip}`, 10, 900_000)) return false;
   const t = await row<{ email: string }>(
@@ -81,6 +83,13 @@ export async function useLink(token: string, ip: string, ua: string) {
   await exec(`INSERT INTO admin_sessions (hash, email, csrf, expires_at, ua) VALUES ($1, $2, $3, now() + interval '${SESSION_H} hours', $4)`, [sha(session), t.email, csrf, ua.slice(0, 200)]);
   (await cookies()).set(COOKIE, session, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "strict", path: "/", maxAge: SESSION_H * 3600 });
   await audit(t.email, "login", null, { ua: ua.slice(0, 120) }, ip);
+  // a sign-in you didn't make should never go unseen
+  await sendEmail(
+    t.email,
+    "sahn admin: you're signed in",
+    `you just signed in to the sahn admin at ${clock()}, on ${from || "a device we couldn't name"}${ip !== "?" ? ` (ip ${ip})` : ""}.\n\nnot you? open settings → sessions and sign out everywhere, then change your email password.`,
+    `admin-in-${sha(session).slice(0, 16)}`,
+  ).catch((e) => console.error("admin sign-in email:", e));
   return true;
 }
 

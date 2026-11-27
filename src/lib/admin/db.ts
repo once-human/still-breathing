@@ -15,8 +15,18 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS admin_notes (id bigserial PRIMARY KEY, order_id text NOT NULL, at timestamptz NOT NULL DEFAULT now(), who text NOT NULL, text text NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS admin_notes_order ON admin_notes (order_id, at)`,
   `CREATE TABLE IF NOT EXISTS admin_payments (payment_id text PRIMARY KEY, order_id text NOT NULL, fee numeric, tax numeric, method text, detail text, settlement_id text, settled_at timestamptz, fetched_at timestamptz NOT NULL DEFAULT now())`,
-  `CREATE TABLE IF NOT EXISTS events (id bigserial PRIMARY KEY, at timestamptz NOT NULL DEFAULT now(), day date NOT NULL, kind text NOT NULL, path text, ref text, source text, device text, region text, visitor text, design text, size text)`,
-  `CREATE INDEX IF NOT EXISTS events_day ON events (day, kind)`,
+  // the visitor log (src/lib/visits): every visit in full for 90 days, then folded into visit_days / visit_day_pages
+  `CREATE TABLE IF NOT EXISTS visits (id text PRIMARY KEY, visitor text, kind text NOT NULL, reason text, started_at timestamptz NOT NULL DEFAULT now(),
+     last_at timestamptz NOT NULL DEFAULT now(), city text, region text, country text, device text, lang text, screen text, referrer text,
+     pages int NOT NULL DEFAULT 0, active_ms int NOT NULL DEFAULT 0)`,
+  `CREATE INDEX IF NOT EXISTS visits_last ON visits (last_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS visits_started ON visits (started_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS visits_visitor ON visits (visitor) WHERE visitor IS NOT NULL`,
+  `CREATE TABLE IF NOT EXISTS visit_events (visit text NOT NULL REFERENCES visits(id) ON DELETE CASCADE, seq int NOT NULL, at timestamptz NOT NULL,
+     type text NOT NULL, path text NOT NULL, detail text, ms int, scroll smallint, step text, design text, size text, PRIMARY KEY (visit, seq))`,
+  `CREATE INDEX IF NOT EXISTS visit_events_step ON visit_events (step) WHERE step IS NOT NULL`,
+  `CREATE TABLE IF NOT EXISTS visit_days (day date NOT NULL, country text NOT NULL, kind text NOT NULL, visitors int NOT NULL, visits int NOT NULL, pages int NOT NULL, PRIMARY KEY (day, country, kind))`,
+  `CREATE TABLE IF NOT EXISTS visit_day_pages (day date NOT NULL, path text NOT NULL, kind text NOT NULL, views int NOT NULL, PRIMARY KEY (day, path, kind))`,
 ];
 
 let ready: Promise<void> | null = null;

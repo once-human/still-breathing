@@ -33,7 +33,8 @@ export async function getSettings(fresh = false): Promise<Settings> {
     const s = { ...ADMIN_DEFAULTS };
     for (const { key, value } of r) {
       const k = key.slice(6) as keyof AdminOnly;
-      if (k in BOUNDS && typeof value === "number") s[k] = value;
+      // only the wallet reminder is the admin's; the rates are the partners', from code
+      if (k === "lowWallet" && typeof value === "number") s[k] = value;
     }
     cache = { at: Date.now(), s };
   }
@@ -41,14 +42,18 @@ export async function getSettings(fresh = false): Promise<Settings> {
 }
 
 /** checked key by key; returns what changed (from → to) */
+/** what the admin may change; the fee rate and the post are Razorpay's and Qikink's rates, kept in code */
+export const EDITABLE = ["open", "margin", "notice", "closed", "lowWallet"] as const;
+
 export async function saveSettings(patch: Record<string, unknown>, by: string) {
+  for (const k of Object.keys(patch)) if (!(EDITABLE as readonly string[]).includes(k)) throw Object.assign(new Error(`${k} is fixed: it comes from the partner, not from here`), { status: 400 });
   const now = await getSettings(true);
   const changed: Record<string, [unknown, unknown]> = {};
   const shop: Partial<ShopSettings> = {};
   for (const [k, v] of Object.entries(patch)) {
     if (!(k in DEFAULTS)) throw Object.assign(new Error(`unknown setting ${k}`), { status: 400 });
     if (now[k as keyof Settings] === v) continue;
-    if (k === "open" || k === "margin") {
+    if (k === "open" || k === "margin" || k === "notice" || k === "closed") {
       (shop as Record<string, unknown>)[k] = v;
     } else {
       const [min, max] = BOUNDS[k as keyof AdminOnly];

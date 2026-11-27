@@ -8,10 +8,14 @@ import { query } from "./kv";
  *   open    whether new orders are taken (orders already paid are always carried through)
  *   margin  rupees added to the partner's cost, before rounding up to the next ₹10 (a product's own margin or fixed
  *           price beats it)
+ *   notice  the quiet line over every page, in place of the usual one (empty: the usual one)
+ *   closed  what checkout says while orders are off (empty: the usual words)
  * Server only. Read through a 30-second cache per instance; with no database it's the code's values.
  */
-export type Settings = { open: boolean; margin: number };
-export const DEFAULT_SETTINGS: Settings = { open: true, margin: RATES.margin };
+export type Settings = { open: boolean; margin: number; notice: string; closed: string };
+export const DEFAULT_SETTINGS: Settings = { open: true, margin: RATES.margin, notice: "", closed: "" };
+/** site words from the admin: one line, no markup, capped */
+export const cleanLine = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, max) : null);
 
 let made: Promise<unknown> | null = null;
 const table = () =>
@@ -35,6 +39,8 @@ export async function getSettings(opts: { fresh?: boolean } = {}): Promise<Setti
       const x = JSON.parse(raw ?? "null") as unknown;
       if (k === "open" && typeof x === "boolean") v.open = x;
       if (k === "margin" && okMargin(x)) v.margin = x;
+      if (k === "notice" && typeof x === "string") v.notice = cleanLine(x, 140) ?? "";
+      if (k === "closed" && typeof x === "string") v.closed = cleanLine(x, 200) ?? "";
     }
     cache = { v, at: Date.now() };
     return v;
@@ -48,6 +54,8 @@ export async function getSettings(opts: { fresh?: boolean } = {}): Promise<Setti
 export async function saveSettings(patch: Partial<Settings>, by: string) {
   if (patch.open !== undefined && typeof patch.open !== "boolean") throw new ShopError("open must be true or false", 400);
   if (patch.margin !== undefined && !okMargin(patch.margin)) throw new ShopError("margin must be whole rupees, 0 to 5000", 400);
+  if (patch.notice !== undefined) patch.notice = cleanLine(patch.notice, 140) ?? "";
+  if (patch.closed !== undefined) patch.closed = cleanLine(patch.closed, 200) ?? "";
   await table();
   for (const [k, v] of Object.entries(patch)) {
     if (v === undefined) continue;

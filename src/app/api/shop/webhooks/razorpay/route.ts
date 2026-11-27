@@ -22,6 +22,8 @@ export async function POST(req: Request) {
   } catch {
     return new NextResponse(null, { status: 400 });
   }
+  // the admin's status page shows when razorpay last got through, signed
+  await kv("SET", "hook:razorpay:last", JSON.stringify({ at: new Date().toISOString(), event: String(ev.event ?? "").slice(0, 40) })).catch(() => {});
   if (ev.event !== "order.paid" && ev.event !== "payment.captured") return new NextResponse(null, { status: 200 });
   const eventId = req.headers.get("x-razorpay-event-id");
   const rzpOrder = ev.payload?.order?.entity?.id ?? ev.payload?.payment?.entity?.order_id;

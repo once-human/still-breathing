@@ -24,7 +24,7 @@ export const OPERATOR = {
 export const POLICIES_READY = !!OPERATOR.email;
 
 /** the day these words last changed, yyyy-mm-dd */
-export const POLICIES_UPDATED = "2026-11-26";
+export const POLICIES_UPDATED = "2026-11-27";
 
 export type PolicySlug = "shipping" | "refunds" | "terms" | "privacy" | "contact";
 export type Policy = { slug: PolicySlug; title: string; summary: string; sections: { heading: string; body: string[] }[] };
@@ -170,10 +170,11 @@ export const POLICIES: Record<PolicySlug, Policy> = {
         body: [
           "when you order: your name, email, phone number, delivery address, what you bought and what you paid. you give these at checkout, and we need them to make and send your shirt.",
           "when you just look: nothing that names you. no ad trackers, no analytics cookies, no third-party pixels.",
-          "the site counts its own visits, and nobody else sees the counts: which page was opened, whether you came from a link, a search or a post (the site, never who), the kind of device and the country and state, and whether a shirt went into the bag. no cookie and no address are kept: a visit is tied together by a code that changes every day and can't be traced back to you. do not track or global privacy control turns it off. the counts are kept for about a year.",
+          "the site keeps its own visit log, and nobody else sees it: the pages you open, how long each is on screen and how far down you read, whether you came from a link, a search or a post (the site, never who), the kind of device and browser, your rough city from the connection, and the shop steps you take (a size picked, a shirt put in the bag, checkout opened, paid). it isn't tied to your name, your email or your orders. visits from one browser are tied together by a random code that browser makes for itself and keeps in its own storage; it's made from nothing about you, and no cookie and no IP address are kept.",
+          "the full log is kept for 90 days, then only daily totals stay. do not track or global privacy control turns it off, and so does the switch at the end of this page, where you can also see everything kept about your browser and delete it at once.",
           "the bag is kept in your own browser (which shirts, which sizes, how many) until you pay or empty it. no cookies are set for it.",
           "if you sign in (with a code we email you, no password), we keep your name, phone and up to five delivery addresses so checkout fills itself in, and one cookie that keeps you signed in for 30 days. your account shows every order placed with your email. you can sign out any time, and ask us to delete the account.",
-          "to show the nearest show, the site uses the rough city your connection comes from (the hosting service adds it to every request). it's rounded to about 10 km, used once for the distance and never stored.",
+          "to show the nearest show, the site uses the rough city your connection comes from (the hosting service adds it to every request). it's rounded to about 10 km and used once for the distance; only the city's name goes in the visit log.",
         ],
       },
       {
@@ -194,6 +195,7 @@ export const POLICIES: Record<PolicySlug, Policy> = {
       {
         heading: "how long we keep it",
         body: [
+          "the visit log: 90 days in full, then daily totals with nothing about any one visit.",
           "order records are kept for as long as GST law requires (about 6 years), then deleted. emails you send us are kept while we're helping you and for a year after.",
         ],
       },
