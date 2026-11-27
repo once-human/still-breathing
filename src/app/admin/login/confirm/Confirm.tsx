@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BTN } from "../../ui/client";
 
 export function Confirm() {
   const [token, setToken] = useState<string | null>(null);
@@ -12,11 +13,11 @@ export function Confirm() {
     history.replaceState(null, "", window.location.pathname); // the token leaves the address bar and history
   }, []);
   if (token === null) return null;
-  if (!token) return <p className="text-[14px]">this link is incomplete. <a className="underline" href="/admin/login">ask for a new one</a>.</p>;
+  if (!token) return <p className="rounded-[22px] bg-s1 p-5 text-[15px]">this link is incomplete. <a className="underline decoration-ink/25 underline-offset-4" href="/admin/login">ask for a new one</a>.</p>;
   return (
-    <div className="grid gap-3">
-      <p className="text-[14px]">sign this browser in to the sahn admin? the session lasts 12 hours, or 2 hours without use.</p>
-      <button disabled={state === "busy"} className="h-11 bg-ink text-[15px] font-semibold text-paper disabled:opacity-50" onClick={async () => {
+    <div className="grid gap-4">
+      <p className="rounded-[22px] bg-s1 p-5 text-[15px] leading-snug">sign this browser in to the sahn admin? the session lasts 12 hours, or 2 hours without use.</p>
+      <button disabled={state === "busy"} className={`${BTN.main} h-12 w-full`} onClick={async () => {
         setState("busy");
         const r = await fetch("/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) }).catch(() => null);
         if (r?.ok) { window.location.href = "/admin"; return; }
@@ -24,7 +25,7 @@ export function Confirm() {
         setErr(j?.error ?? "that didn't go through");
         setState("error");
       }}>{state === "busy" ? "signing in…" : "sign in"}</button>
-      {state === "error" ? <p className="text-[12px] text-[#f08a7a]">{err}. <a className="underline" href="/admin/login">ask for a new link</a>.</p> : null}
+      {state === "error" ? <p className="text-[13px] text-bad">{err}. <a className="underline underline-offset-4" href="/admin/login">ask for a new link</a>.</p> : null}
     </div>
   );
 }
