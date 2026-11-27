@@ -168,3 +168,16 @@ export async function partnerStatus(partnerId: string): Promise<PartnerStatus> {
     trackingUrl: awb && url && /^https:\/\//.test(url) && !url.endsWith("=") ? url : null,
   };
 }
+
+/** whether the partner takes the keys this deployment has (a fresh token, nothing else): for the health check */
+export async function partnerCheck() {
+  const k = partnerKeys();
+  if (!k) return { mode: null, ok: false, why: "not set up" };
+  token = null;
+  try {
+    await accessToken();
+    return { mode: k.sandbox ? "sandbox" : "live", ok: true };
+  } catch (e) {
+    return { mode: k.sandbox ? "sandbox" : "live", ok: false, why: (e as Error).message };
+  }
+}
