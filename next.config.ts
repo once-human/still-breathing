@@ -7,6 +7,10 @@ const nextConfig: NextConfig = {
       { source: "/lineups", destination: "/shop", permanent: true },
       { source: "/lineup-01", destination: "/fred-again-india", permanent: true },
       { source: "/lineup-01/:shirt", destination: "/fred-again-india/:shirt", permanent: true },
+      // the admin's old page names
+      { source: "/admin/customers", destination: "/admin/people", permanent: false },
+      { source: "/admin/customers/:email", destination: "/admin/people/:email", permanent: false },
+      { source: "/admin/activity", destination: "/admin/insights", permanent: false },
     ];
   },
   async headers() {

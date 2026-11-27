@@ -22,9 +22,9 @@ export async function allOrders(): Promise<Order[]> {
   return out;
 }
 
-export async function allAccounts(): Promise<Account[]> {
-  // through the shop's listAccounts (newest first, 200 a page)
-  const out: Account[] = [];
+export async function allAccounts(): Promise<(Account & { orders: number })[]> {
+  // through the shop's listAccounts (newest first, 200 a page), each with how many orders it has
+  const out: (Account & { orders: number })[] = [];
   for (let offset = 0; offset < 20000; offset += 200) {
     const page = await listAccounts({ limit: 200, offset });
     out.push(...page);

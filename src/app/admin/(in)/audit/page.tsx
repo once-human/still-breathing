@@ -6,7 +6,7 @@ export const metadata = { title: "audit log" };
 
 const target = (t: string | null) =>
   !t ? "–" : /^S\d{6}[A-Z0-9]{4}$/.test(t) ? <A href={`/admin/orders/${t}`} className="font-mono">{t}</A>
-  : t.startsWith("customer:") ? <A href={`/admin/customers/${encodeURIComponent(t.slice(9))}`}>{t.slice(9)}</A>
+  : t.startsWith("customer:") ? <A href={`/admin/people/${encodeURIComponent(t.slice(9))}`}>{t.slice(9)}</A>
   : t.startsWith("product:") ? <A href={`/admin/products/${t.slice(8)}`}>{t.slice(8)}</A>
   : t;
 
