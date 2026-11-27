@@ -1,0 +1,23 @@
+# The print partner's files: every placement of the shirts on sale as a 300 dpi PNG (printfiles.py), with
+# PLACEMENT numbers in report.json. Kept as a run artifact, not committed: download it from the run's page.
+name: printfiles
+on:
+  workflow_dispatch:
+
+jobs:
+  printfiles:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get install -y -q libfribidi0 libraqm0 >/dev/null
+          pip install -q numpy pillow
+      - name: Print files
+        working-directory: pipeline
+        run: python3 printfiles.py ../print-files
+      - uses: actions/upload-artifact@v4
+        with:
+          name: print-files
+          path: print-files
+          retention-days: 30
+          compression-level: 0

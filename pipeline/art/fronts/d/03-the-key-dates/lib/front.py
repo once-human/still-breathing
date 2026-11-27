@@ -15,7 +15,7 @@ import math, os, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, '..', '..', '..', '..', '..', '..'))   # this copy sits one folder deeper
 DRAFT = os.environ.get('R', '') == '1'
-FULL_PX_MM = 9.4
+FULL_PX_MM = float(os.environ.get('PRINT_PXMM', 9.4))   # PRINT_PXMM: draw at another size (the print files)
 
 INK = {
     'key': '#22201D',      # the back's line ink

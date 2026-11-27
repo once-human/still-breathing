@@ -16,7 +16,7 @@ import os, sys, subprocess
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, '..', '..', '..', '..', '..'))
-PXMM = 9.4
+PXMM = float(os.environ.get('PRINT_PXMM', 9.4))   # PRINT_PXMM: draw at another size (the print files)
 TEE = '#151515'
 PAL = {'cream': '#F1E7D0', 'yellow': '#FFC04E', 'orange': '#F27C24', 'violet': '#6B2499', 'blue': '#4C66F5'}
 SHIFT = {'cream': (0, 0), 'yellow': (0.22, 0.18), 'orange': (-0.2, 0.22), 'violet': (0.16, -0.14), 'blue': (0.1, 0.12)}
