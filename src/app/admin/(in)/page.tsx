@@ -47,7 +47,7 @@ const line = (t: Totals) => `${t.orders} order${t.orders === 1 ? "" : "s"} · ma
 export default async function Home() {
   await requireAdmin();
   const [{ orders, totals: t, byDay, needs, settings }, checks, count, live, people] = await Promise.all([
-    overview(), health(), liveCount(), liveNow().catch(() => []), dailyPeople(30),
+    overview(), health(false, true), liveCount(), liveNow().catch(() => []), dailyPeople(30),
   ]);
   // the shop's own switch is at the top right already, so it isn't repeated here
   const issues = problems(checks).filter((c) => c.key !== "open");

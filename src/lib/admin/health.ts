@@ -18,13 +18,19 @@ export type Check = { key: string; name: string; tone: Health; state: string; de
 const timed = <T,>(p: Promise<T>, ms = 6000) => Promise.race([p, new Promise<never>((_, no) => setTimeout(() => no(new Error("no answer in 6 seconds")), ms))]);
 let cache: { at: number; v: Check[] } | null = null;
 
-export async function health(fresh = false): Promise<Check[]> {
-  if (!fresh && cache && Date.now() - cache.at < 120_000) return cache.v;
+/**
+ * `fresh` asks Razorpay and Qikink again; `quick` never waits on them (the overview's way: the last answer from the
+ * past 10 minutes if there is one, else only what the keys and the database say).
+ */
+export async function health(fresh = false, quick = false): Promise<Check[]> {
+  if (!fresh && cache && Date.now() - cache.at < (quick ? 600_000 : 120_000)) return cache.v;
   const rz = razorpayKeys(), pk = partnerKeys(), store = kvKeys(), mail = mailKeys();
   const [db, razor, qikink, sync, hook, s] = await Promise.all([
     timed(rows("SELECT 1")).then(() => null, (e: Error) => e.message),
-    rz ? timed(rzpGet("/orders?count=1")).then(() => null, (e: Error) => e.message) : Promise.resolve("not set up"),
-    pk ? timed(partnerCheck()).catch((e: Error) => ({ mode: null, ok: false, why: e.message })) : Promise.resolve({ mode: null, ok: false, why: "not set up" }),
+    !rz ? Promise.resolve("not set up") : quick ? Promise.resolve(null) : timed(rzpGet("/orders?count=1")).then(() => null, (e: Error) => e.message),
+    !pk ? Promise.resolve({ mode: null, ok: false, why: "not set up" })
+      : quick ? Promise.resolve({ mode: pk.sandbox ? "sandbox" : "live", ok: true, why: undefined as string | undefined })
+      : timed(partnerCheck()).catch((e: Error) => ({ mode: null, ok: false, why: e.message })),
     lastSync(),
     kv<string | null>("GET", "hook:razorpay:last").then((v) => (v ? (JSON.parse(v) as { at: string; event: string }) : null)).catch(() => null),
     getSettings({ fresh: true }),
@@ -76,7 +82,7 @@ export async function health(fresh = false): Promise<Check[]> {
     { key: "secret", name: "link secret", tone: shopSecret() ? "ok" : "bad", state: shopSecret() ? "set" : "missing", detail: "signs order links and the sync job", fix: shopSecret() ? undefined : "add SHOP_SECRET (32+ characters) in vercel" },
     { key: "admin", name: "admin sign-in", tone: adminEmail() ? "ok" : "bad", state: adminEmail() ? "set" : "missing", detail: adminEmail() ? `links go to ${adminEmail()}` : "nobody can sign in" },
   ];
-  cache = { at: Date.now(), v };
+  if (!quick) cache = { at: Date.now(), v };
   return v;
 }
 
