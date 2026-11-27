@@ -1,6 +1,6 @@
 import { PARTNER_SKUS, PRINTS } from "@/content/shop";
 import { DESIGNS, type Design, type Size } from "@/content/tee";
-import { partnerKeys } from "./config";
+import { partnerKeys, razorpayKeys } from "./config";
 import { ShopError } from "./errors";
 
 /**
@@ -110,6 +110,13 @@ function dig(o: unknown, keys: string[], depth = 0): string | null {
 export async function sendToPrint(number: string, lines: PartnerLine[], to: ShipTo, total: number, site: string) {
   const k = partnerKeys();
   if (!k) throw new ShopError("print partner not set up", 503);
+  // A real payment is never handed to the partner's sandbox (nothing would be printed) or sent without the shirt's
+  // code in "My Products": the order waits, paid, and goes to print on the next try once the live keys and codes are in.
+  if (k.sandbox && razorpayKeys()?.test === false) throw new ShopError("real payment, but the print partner is still on its sandbox: put in its live keys (and the shirts' codes) and it goes on the next try");
+  if (!k.sandbox) {
+    const missing = lines.filter((l) => !partnerSku(l.design, l.size)).map((l) => `${l.design} ${l.size}`);
+    if (missing.length) throw new ShopError(`no partner code for ${missing.join(", ")}: add it in content/shop.ts (PARTNER_SKUS) and it goes on the next try`);
+  }
   const [first, ...rest] = to.name.trim().split(/\s+/);
   const body = {
     order_number: number,
