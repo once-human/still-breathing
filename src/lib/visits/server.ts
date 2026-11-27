@@ -347,3 +347,39 @@ export async function foldOld(): Promise<{ folded: number }> {
   );
   return { folded: (await rows<{ id: string }>(`DELETE FROM visits WHERE ${old} RETURNING id`, [cutoff])).length };
 }
+
+/* ---- the old counter's visits ---- */
+
+/**
+ * Before this log, the site counted visits in the `events` table (one row a page view, bag or checkout, a visitor
+ * known only for one day). Each old (day, visitor) becomes a visit here with its pages and steps in order, so the
+ * past shows in the admin. Safe to run again: the ids are fixed and nothing is added twice. The old table is left
+ * as it is.
+ */
+export async function importOld(): Promise<number> {
+  if (await kv<string | null>("GET", "visits:old-in").catch(() => null)) return 0;
+  const has = await row<{ t: string | null }>("SELECT to_regclass('public.events')::text AS t").catch(() => null);
+  if (!has?.t) {
+    await kv("SET", "visits:old-in", "none").catch(() => {});
+    return 0;
+  }
+  const id = `md5('old:' || e.day::text || ':' || e.visitor)`;
+  const made = await rows<{ id: string }>(
+    `INSERT INTO visits (id, visitor, kind, started_at, last_at, country, region, device, referrer, pages, active_ms)
+     SELECT ${id}, 'old:' || e.day::text || ':' || e.visitor, 'person', min(e.at), max(e.at),
+       nullif(split_part(min(e.region), '-', 1), ''), nullif(split_part(min(e.region), '-', 2), ''),
+       initcap(min(e.device)), min(e.source), count(*) FILTER (WHERE e.kind = 'view')::int, 0
+     FROM events e WHERE e.visitor IS NOT NULL GROUP BY e.day, e.visitor
+     ON CONFLICT (id) DO NOTHING RETURNING id`,
+  );
+  await exec(
+    `INSERT INTO visit_events (visit, seq, at, type, path, step, design, size)
+     SELECT ${id}, (row_number() OVER (PARTITION BY e.day, e.visitor ORDER BY e.at, e.id) - 1)::int, e.at,
+       CASE WHEN e.kind = 'view' THEN 'page' ELSE 'step' END, coalesce(e.path, '/'),
+       CASE e.kind WHEN 'bag' THEN 'bag' WHEN 'checkout' THEN 'checkout' END, e.design, e.size
+     FROM events e WHERE e.visitor IS NOT NULL
+     ON CONFLICT DO NOTHING`,
+  );
+  await kv("SET", "visits:old-in", new Date().toISOString());
+  return made.length;
+}

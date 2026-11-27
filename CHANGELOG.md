@@ -64,6 +64,7 @@ The shop stays 0.x until launch, which is 1.0.0. Every release is a git tag `vX.
 - The actual size button is called artwork.
 
 ### Fixed
+- The visits counted before the new visitor log are back in the admin, page by page, with their bag and checkout steps. Orders sync again whenever the admin is opened and GitHub has skipped its 3-hourly run.
 - Tighter security headers on every page (HTTPS only, no framing by other sites, the camera for the try-on only), the admin never cached or indexed, and the visitor code sent in a header instead of the address.
 - A shirt is for sale only when a paid order for it can really go to print: never while the print partner is on its test setup with real payments on, and the shirt codes set in the admin are the ones a paid order is sent with (before, only the ones in the code were).
 - A real payment is never sent to the print partner's sandbox or without the shirt's code: the order waits, paid, and goes to print on the next try once the partner's live keys and codes are in.
