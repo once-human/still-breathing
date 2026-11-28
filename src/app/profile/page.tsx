@@ -1,10 +1,10 @@
+import { box } from "@/content/mail";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Reorder } from "@/components/shop/Reorder";
 import { paperStill, shirtHref } from "@/content/lineups";
 import { ShirtCard } from "@/components/ShirtCard";
-import { OPERATOR } from "@/content/policies";
 import { WAY_WORD, accountOrders, activity, devices, loadAccount, lookedAt, passwordSetAt, prefs, sessionEmail } from "@/lib/shop/account";
 import { accountsOpen, googleKeys } from "@/lib/shop/config";
 import { rupees } from "@/lib/shop/money";
@@ -278,7 +278,7 @@ function OrderCard({ o }: { o: OrderView }) {
         {o.tracking?.url && <a href={o.tracking.url} target="_blank" rel="noreferrer noopener" className="hit hover:text-ink">track ↗</a>}
         <Link href={`/order/${o.id}/receipt`} className="hit hover:text-ink">receipt</Link>
         <Reorder lines={o.lines} />
-        {OPERATOR.email ? <a href={`mailto:${OPERATOR.email}?subject=${encodeURIComponent(`order #${o.id}`)}`} className="hit hover:text-ink">get help</a> : null}
+        <a href={`mailto:${box("orders")}?subject=${encodeURIComponent(`order #${o.id}`)}`} className="hit hover:text-ink">get help</a>
       </div>
     </li>
   );

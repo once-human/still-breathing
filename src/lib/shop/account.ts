@@ -5,10 +5,13 @@ import { after } from "next/server";
 import { cache } from "react";
 import { accountsOpen, shopSecret } from "./config";
 import { sendEmail } from "./email";
+import { box } from "@/content/mail";
 import { ShopError } from "./errors";
 import { ensure, kv, query } from "./kv";
 import { DESIGNS, SIZE_ORDER, type Design, type Size } from "@/content/tee";
 import type { Details } from "./india";
+import { forget, subscribe, subscribed, unsubscribe } from "./drops";
+import { SITE_URL } from "@/lib/site";
 
 /**
  * Accounts. An account is its email: every order placed with it is in it, whenever it was placed. Three ways in, the
@@ -60,7 +63,7 @@ export async function sendCode(email: string, from = "") {
     [email, codeHash(email, code)],
   );
   if (Number(r[0]?.[0] ?? 9) > 3) return;
-  await sendEmail(email, `${code} is your sahn sign-in code`, `your code is ${code}\n\nasked at ${new Date().toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}${from ? ` from ${from}` : ""}. it works for 10 minutes. if you didn't ask for it, ignore this email: nothing happens without it.\n\nsahn`, `otp-${email}-${sha(code).slice(0, 12)}`);
+  await sendEmail(email, `${code} is your sahn sign-in code`, `your code is ${code}\n\nasked at ${new Date().toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}${from ? ` from ${from}` : ""}. it works for 10 minutes. if you didn't ask for it, ignore this email: nothing happens without it.\n\nsahn`, `otp-${email}-${sha(code).slice(0, 12)}`, "signin");
 }
 
 /** the code checked in constant time (5 tries); right → a new session cookie, and whether the account is new (no name yet) */
@@ -159,6 +162,7 @@ export async function openSession(email: string, way: Way, device: string, name 
   jar.set(COOKIE, token, { httpOnly: true, secure: prod, sameSite: "lax", path: "/", maxAge: COOKIE_DAYS * 86400 });
   jar.set(HINT, "1", { secure: prod, sameSite: "lax", path: "/", maxAge: COOKIE_DAYS * 86400 });
   await did(email, "signed in", `${device.split(", near")[0]}, ${WAY_WORD[way]}`);
+  if (way !== "code") await notice(email, `a new sign-in ${WAY_WORD[way]}`, "someone signed in to your sahn profile.", device);
   return { fresh: !r[0]?.[0] };
 }
 export const WAY_WORD: Record<Way, string> = { code: "with an email code", password: "with a password", google: "with google" };
@@ -240,21 +244,22 @@ export async function deviceCounts(email?: string) {
 export type Prefs = { size: Size | null; drops: boolean; dropsAt: string | null; saved: Design[] };
 
 export async function prefs(email: string): Promise<Prefs> {
-  const [p, sv] = await Promise.all([
-    db("SELECT size, drops::text, drops_at::text FROM user_prefs WHERE email = $1", [email]).catch(() => []),
+  const [p, sv, on] = await Promise.all([
+    db("SELECT size FROM user_prefs WHERE email = $1", [email]).catch(() => []),
     db("SELECT design FROM user_saved WHERE email = $1 ORDER BY at DESC", [email]).catch(() => []),
+    subscribed(email),
   ]);
   const size = p[0]?.[0];
   return {
     size: size && (SIZE_ORDER as readonly string[]).includes(size) ? (size as Size) : null,
-    drops: p[0]?.[1] === "true", dropsAt: p[0]?.[2] ?? null,
+    drops: !!on, dropsAt: on,
     saved: sv.map((r) => r[0] as Design).filter((d) => d in DESIGNS),
   };
 }
 export const setSize = (email: string, size: Size | null) =>
   db("INSERT INTO user_prefs (email, size) VALUES ($1, $2) ON CONFLICT (email) DO UPDATE SET size = $2, updated_at = now()", [email, size]);
-export const setDrops = (email: string, on: boolean) =>
-  db("INSERT INTO user_prefs (email, drops, drops_at) VALUES ($1, $2::boolean, now()) ON CONFLICT (email) DO UPDATE SET drops = $2::boolean, drops_at = now(), updated_at = now()", [email, String(on)]);
+/** new-drop emails on or off: the one list everyone shares, signed in or not (drops.ts) */
+export const setDrops = (email: string, on: boolean, source = "profile") => (on ? subscribe(email, source) : unsubscribe(email));
 export const saveShirt = (email: string, d: Design, on: boolean) =>
   on ? db("INSERT INTO user_saved (email, design) VALUES ($1, $2) ON CONFLICT DO NOTHING", [email, d]) : db("DELETE FROM user_saved WHERE email = $1 AND design = $2", [email, d]);
 
@@ -282,6 +287,27 @@ export async function linkedPeople(email?: string) {
     [email ?? null],
   ).catch(() => []);
   return new Map(r.map(([id, e, n]) => [id ?? "", { email: e ?? "", name: n ?? "" }]));
+}
+
+/* ---------- security emails ---------- */
+
+const clock = () => new Date().toLocaleString("en-IN", { hour: "numeric", minute: "2-digit", day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).toLowerCase();
+
+/**
+ * Something that matters for the safety of a profile, told to its owner by email, so a change they didn't make never
+ * goes unseen: a sign-in by password or Google, a password set, changed or removed, Google turned on or off, every
+ * device signed out, the profile deleted. (A sign-in by code needs no notice: the code itself came by email.)
+ */
+export async function notice(email: string, headline: string, detail: string, device = "") {
+  const where = device ? `\n\nfrom: ${device}` : "";
+  const help = `write to ${box("security")}`;
+  await sendEmail(
+    email,
+    `sahn: ${headline}`,
+    `${headline}, ${clock()}.${where}\n\n${detail}\n\nnot you? sign in at ${(process.env.SHOP_SITE_URL?.trim() || SITE_URL).replace(/\/$/, "")}/profile with a code sent to this email, then sign-in → sign out everywhere, and change or remove the password. or ${help} and we'll help.\n\nsahn`,
+    `notice-${email}-${headline}-${Date.now()}`.replace(/[^\w@.-]/g, "-").slice(0, 200),
+    "security",
+  ).catch((e) => console.error("notice:", e));
 }
 
 /* ---------- what the buyer did ---------- */
@@ -416,6 +442,7 @@ export async function deleteAccount(email: string) {
   await db("DELETE FROM visitor_people WHERE email = $1", [email]);
   await db("DELETE FROM user_prefs WHERE email = $1", [email]);
   await db("DELETE FROM user_saved WHERE email = $1", [email]);
+  await forget(email);
   return { sessions };
 }
 

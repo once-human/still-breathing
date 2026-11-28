@@ -1,3 +1,4 @@
+import { box } from "@/content/mail";
 import { SHOP } from "@/content/shop";
 
 /**
@@ -14,7 +15,7 @@ export const OPERATOR = {
   /** the legal name the shop runs under: a person's full name, or a firm */
   legalName: null as string | null,
   /** the email that answers orders */
-  email: "contact@sahn.in" as string | null,
+  email: "hello@sahn.in" as string | null,
   /** a phone number, or null for none */
   phone: null as string | null,
   /** where the shop is run from, as "city, state" (also where disputes are heard) */
@@ -24,7 +25,7 @@ export const OPERATOR = {
 export const POLICIES_READY = !!OPERATOR.email;
 
 /** the day these words last changed, yyyy-mm-dd */
-export const POLICIES_UPDATED = "2026-11-27";
+export const POLICIES_UPDATED = "2026-11-28";
 
 export type PolicySlug = "shipping" | "refunds" | "terms" | "privacy" | "contact";
 export type Policy = { slug: PolicySlug; title: string; summary: string; sections: { heading: string; body: string[] }[] };
@@ -80,7 +81,7 @@ export const POLICIES: Record<PolicySlug, Policy> = {
         heading: "if something's wrong",
         body: [
           "if your shirt arrives misprinted, damaged, faulty, or isn't the shirt or size you ordered, tell us within 7 days of delivery and we make it right: a new one made and sent free, or a full refund, your choice.",
-          `write to ${mail()} with your order number, an unboxing video (from the sealed parcel to the shirt out of it), and clear photos of the problem and of the packaging. the video is how we can show the fault to be ours and fix it fast; without it we may not be able to.`,
+          `write to ${box("orders")} with your order number, an unboxing video (from the sealed parcel to the shirt out of it), and clear photos of the problem and of the packaging. the video is how we can show the fault to be ours and fix it fast; without it we may not be able to.`,
           "no need to send the shirt back unless we ask you to. if we do, we arrange and pay for the pickup.",
         ],
       },
@@ -96,7 +97,7 @@ export const POLICIES: Record<PolicySlug, Policy> = {
         heading: "changing your mind before it's made",
         body: [
           "for the first hour after you pay, your order waits before going to print. in that hour you can cancel it yourself on your order's page and be refunded in full, straight away, or fix the address there.",
-          `after that it goes to print within a few hours. if you need to cancel or change the size or address then, write to ${mail()} with your order number as soon as you can: if printing hasn't started, we cancel it and refund you in full. once printing has started it can't be cancelled.`,
+          `after that it goes to print within a few hours. if you need to cancel or change the size or address then, write to ${box("orders")} with your order number as soon as you can: if printing hasn't started, we cancel it and refund you in full. once printing has started it can't be cancelled.`,
         ],
       },
       {
@@ -189,7 +190,7 @@ export const POLICIES: Record<PolicySlug, Policy> = {
         heading: "what we use it for",
         body: [
           "making and sending your order, emailing you about it (confirmation, dispatch, tracking, delivery) and the sign-in codes you ask for, answering you, and keeping the records indian tax law requires.",
-          "we only email you about your orders. if we ever start a newsletter, it will be one you choose to join.",
+          `we email you about your orders (from ${box("orders")}), sign-in codes (from ${box("signin")}) and changes to your profile's safety (from ${box("security")}). emails about new drops come from ${box("drops")}, only if you ask for them, and each one has a one-tap way off.`,
         ],
       },
       {
@@ -202,7 +203,7 @@ export const POLICIES: Record<PolicySlug, Policy> = {
       {
         heading: "your rights",
         body: [
-          `under the Digital Personal Data Protection Act, 2023 you can ask what we hold about you, have it corrected, or have it erased (apart from what tax law makes us keep). write to ${mail()}; we answer within 7 days. ${OPERATOR.legalName ? `${OPERATOR.legalName} handles` : "we handle"} these requests and any complaint about how your data is used.`,
+          `under the Digital Personal Data Protection Act, 2023 you can ask what we hold about you, have it corrected, or have it erased (apart from what tax law makes us keep). write to ${box("privacy")}; we answer within 7 days. ${OPERATOR.legalName ? `${OPERATOR.legalName} handles` : "we handle"} these requests and any complaint about how your data is used.`,
           `last updated ${POLICIES_UPDATED}.`,
         ],
       },
@@ -217,7 +218,11 @@ export const POLICIES: Record<PolicySlug, Policy> = {
       {
         heading: "write to us",
         body: [
-          `${mail()}: about an order (put its number in), a size, a fault, anything. we answer within 2 working days, usually sooner.`,
+          `${mail()}: a size, a question, anything. we answer within 2 working days, usually sooner.`,
+          `${box("orders")}: about an order (put its number in), a delivery, a fault or a return.`,
+          `${box("privacy")}: what we keep about you, a copy of it, or erasing it.`,
+          `${box("collab")}: press, stockists, working together.`,
+          `${box("security")}: something about your profile that wasn't you.`,
           ...(OPERATOR.phone ? [`phone: ${OPERATOR.phone}, 11 am – 7 pm, monday to saturday.`] : []),
         ],
       },

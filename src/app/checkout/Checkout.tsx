@@ -9,6 +9,7 @@ import { shirtName } from "@/components/shop/BagDrawer";
 import { bagCount, bagPayable, bagTotal, priceIn, shop, useShop } from "@/lib/shop/client";
 import { AddressFields, EMPTY, addressLine } from "@/components/shop/AddressFields";
 import type { Account } from "@/lib/shop/account";
+import { DropsBox } from "@/components/shop/DropsBox";
 import { checkDetails, type Details } from "@/lib/shop/india";
 import { rupees } from "@/lib/shop/money";
 import type { PayStart } from "@/lib/shop/types";
@@ -36,6 +37,7 @@ export function Checkout({ saved = null }: { saved?: Account | null }) {
   const { bag, pay: payView } = useShop();
   const router = useRouter();
   const first = saved?.addresses[0];
+  const [drops, setDrops] = useState(false);
   const [d, setD] = useState<Details>(saved ? { ...EMPTY, ...(first ?? {}), name: first?.name || saved.name, phone: first?.phone || saved.phone, email: saved.email } : EMPTY);
   const [picked, setPicked] = useState<string | null>(first?.id ?? null);
   const [bad, setBad] = useState<{ field?: keyof Details; error: string } | null>(null);
@@ -58,7 +60,7 @@ export function Checkout({ saved = null }: { saved?: Account | null }) {
     }
     setBusy(true);
     try {
-      const r = await fetch("/api/shop/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bag, details: c.ok }) });
+      const r = await fetch("/api/shop/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bag, details: c.ok, drops }) });
       const j = (await r.json().catch(() => ({}))) as PayStart & { error?: string; field?: keyof Details };
       if (!r.ok) throw Object.assign(new Error(j.error ?? "something went wrong, try again"), { field: j.field });
       await loadRazorpay();
@@ -113,6 +115,7 @@ export function Checkout({ saved = null }: { saved?: Account | null }) {
           </div>
         )}
         <div className="mt-4"><AddressFields d={d} onChange={(x) => { setD(x); if (picked) setPicked(null); }} bad={bad?.field} /></div>
+        <DropsBox on={drops} onChange={setDrops} />
         {bad && <p role="alert" className="mt-4 text-[14px]">{bad.error}</p>}
         <button disabled={busy} className="mt-6 flex h-12 w-full items-center justify-between bg-ink px-4 text-[15px] font-semibold text-paper hover:bg-ink/90 disabled:opacity-60">
           <span>{busy ? "one moment.." : "pay"}</span><span className="tnum">{rupees(total)}</span>

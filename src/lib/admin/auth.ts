@@ -85,7 +85,7 @@ export async function signInWithKey(key: string, ip: string, ua: string, from = 
     const all = await used(WRONG[2][0](ip), WRONG[2][2]);
     const to = adminEmail();
     if (all === WRONG[2][1] && to && mailKeys())
-      await sendEmail(to, "sahn admin: sign-in shut for today", `${all} wrong keys were tried at the sahn admin today, the last at ${clock()} from ${from || "a device we couldn't name"}${ip !== "?" ? ` (ip ${ip})` : ""}. the sign-in is shut for everyone until 5:30 am. if it wasn't you, change ADMIN_SECRET in vercel and redeploy.`, `admin-shut-${Math.floor(Date.now() / 86_400_000)}`).catch(() => {});
+      await sendEmail(to, "sahn admin: sign-in shut for today", `${all} wrong keys were tried at the sahn admin today, the last at ${clock()} from ${from || "a device we couldn't name"}${ip !== "?" ? ` (ip ${ip})` : ""}. the sign-in is shut for everyone until 5:30 am. if it wasn't you, change ADMIN_SECRET in vercel and redeploy.`, `admin-shut-${Math.floor(Date.now() / 86_400_000)}`, "security").catch(() => {});
     return "wrong" as const;
   }
   const session = randomBytes(32).toString("base64url"), csrf = randomBytes(24).toString("base64url");
@@ -101,6 +101,7 @@ export async function signInWithKey(key: string, ip: string, ua: string, from = 
       "sahn admin: you're signed in",
       `the sahn admin was just opened with the key at ${clock()}, on ${from || "a device we couldn't name"}${ip !== "?" ? ` (ip ${ip})` : ""}.\n\nnot you? change ADMIN_SECRET in vercel and redeploy: every session ends with the old key.`,
       `admin-in-${sha(session).slice(0, 16)}`,
+      "security",
     ).catch((e) => console.error("admin sign-in email:", e));
   return "ok" as const;
 }

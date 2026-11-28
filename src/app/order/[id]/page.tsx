@@ -1,9 +1,10 @@
+import { box } from "@/content/mail";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Reorder } from "@/components/shop/Reorder";
-import { OPERATOR, POLICIES_READY } from "@/content/policies";
+import { POLICIES_READY } from "@/content/policies";
 import { SHOP } from "@/content/shop";
 import { sessionEmail } from "@/lib/shop/account";
 import { accountsOpen, shopOpen } from "@/lib/shop/config";
@@ -156,7 +157,7 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
           </div>
           <p className="mt-6 text-[13px] text-quiet">
             something not right?{POLICIES_READY ? <> <Link href="/policies/refunds" className="draw hover:text-ink">returns</Link> ·</> : null}
-            {OPERATOR.email ? <> write to <a href={`mailto:${OPERATOR.email}?subject=${encodeURIComponent(`order #${v.id}`)}`} className="draw hover:text-ink">{OPERATOR.email}</a></> : " reply to your order email"} with order #{v.id}.
+            <> write to <a href={`mailto:${box("orders")}?subject=${encodeURIComponent(`order #${v.id}`)}`} className="draw hover:text-ink">{box("orders")}</a></> with order #{v.id}.
           </p>
         </div>
       </div>

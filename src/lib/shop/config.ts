@@ -32,9 +32,15 @@ export const kvKeys = () => {
   }
 };
 
+/**
+ * Resend's key and the address SHOP_EMAIL_FROM names; every other sender (orders@, signin@, drops@, …) is on that
+ * address's domain, the one Resend has verified.
+ */
 export const mailKeys = () => {
   const key = env("RESEND_API_KEY"), from = env("SHOP_EMAIL_FROM");
-  return key && from ? { key, from } : null;
+  if (!key || !from) return null;
+  const domain = (from.match(/<([^>]+)>/)?.[1] ?? from).split("@")[1]?.trim().toLowerCase() || "sahn.in";
+  return { key, from, domain };
 };
 
 /** signs order links and authorises the sync job; at least 32 characters */

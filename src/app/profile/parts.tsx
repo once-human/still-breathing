@@ -6,6 +6,7 @@ import { AddressFields, EMPTY, addressLine, input, post } from "@/components/sho
 import { SIZE_ORDER, type Design, type Size } from "@/content/tee";
 import type { Address } from "@/lib/shop/account";
 import { pickedSize, refreshMe } from "@/lib/shop/me";
+import { DropsBox } from "@/components/shop/DropsBox";
 import type { Details } from "@/lib/shop/india";
 
 const button = "flex h-12 w-full items-center justify-between bg-ink px-4 text-[15px] font-semibold text-paper hover:bg-ink/90 disabled:opacity-60";
@@ -228,6 +229,7 @@ function Code({ busy, bad, onCode }: { busy: boolean; bad: boolean; onCode: (cod
 /** a new profile's one question: what to call you, and a mobile for the courier (both can wait) */
 export function Hello({ next }: { next: string | null }) {
   const router = useRouter();
+  const [drops, setDrops] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
@@ -240,6 +242,7 @@ export function Hello({ next }: { next: string | null }) {
       setBad(null);
       try {
         await post("/api/shop/account", { action: "profile", name, phone });
+        if (drops) await post("/api/shop/account", { action: "drops", on: true, from: "welcome" }).catch(() => {});
         done();
       } catch (err) {
         setBad(asBad(err));
@@ -258,6 +261,7 @@ export function Hello({ next }: { next: string | null }) {
           <input value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" inputMode="tel" autoComplete="tel-national" maxLength={14} className={`${input} !pl-12`} aria-invalid={bad?.field === "phone"} />
         </span>
       </label>
+      <DropsBox on={drops} onChange={setDrops} />
       {bad && <p role="alert" className="mt-3 text-[14px]">{bad.error}</p>}
       <button disabled={busy || !name.trim()} className={`mt-6 ${button}`}><span>{busy ? "saving.." : "done"}</span><span aria-hidden>→</span></button>
       <button type="button" onClick={done} className="hit mt-3 block text-[13px] text-quiet hover:text-ink">skip for now</button>

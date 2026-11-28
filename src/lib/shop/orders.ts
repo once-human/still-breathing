@@ -1,11 +1,11 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { OPERATOR } from "@/content/policies";
 import { SHOP } from "@/content/shop";
 import { DESIGNS, type Design, type Size } from "@/content/tee";
 import { SITE_URL } from "@/lib/site";
 import { linkOrder, rememberAddress, unlinkOrder } from "./account";
 import { ownerEmail, shopSecret } from "./config";
 import { sendEmail } from "./email";
+import { box } from "@/content/mail";
 import { ShopError } from "./errors";
 import { ensure, kv, once, query, withLock } from "./kv";
 import { partnerStatus, sendToPrint, type ShipTo } from "./partner";
@@ -168,7 +168,7 @@ const site = () => process.env.SHOP_SITE_URL?.replace(/\/$/, "") ?? SITE_URL;
 const shirt = (d: Design) => `${DESIGNS[d].no} ${DESIGNS[d].name}${DESIGNS[d].city ? ` ${DESIGNS[d].city}` : ""}`;
 const rs = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 const itemsText = (o: Order) => o.lines.map((l) => `${shirt(l.design)}, size ${l.size} × ${l.quantity}  ${rs(l.unitPrice * l.quantity)}`).join("\n");
-const sign = () => `${SHOP.merchant}${OPERATOR.email ? `\n${OPERATOR.email}` : ""}`;
+const sign = () => `${SHOP.merchant}\n${box("orders")}`;
 const istTime = (iso: string) => new Date(iso).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 
 /** the emails a buyer gets; refund:<refund id> is a refund that isn't a cancel */
@@ -263,7 +263,7 @@ async function emailOnce(o: Order, kind: MailKind, suffix = "") {
   const m = emailFor(o, kind);
   if (!m || !(await once(`mail:${o.id}:${kind}`, 400 * 86400))) return false;
   try {
-    await sendEmail(o.contact.email, m[0], m[1], `${o.id}-${kind}${suffix}`, OPERATOR.email);
+    await sendEmail(o.contact.email, m[0], m[1], `${o.id}-${kind}${suffix}`, "orders");
     return true;
   } catch (e) {
     await kv("DEL", `mail:${o.id}:${kind}`); // let the next run try again

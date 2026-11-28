@@ -4,6 +4,7 @@ import { razorpayKeys } from "@/lib/shop/config";
 import { shopAccepting } from "@/lib/shop/settings";
 import { failed, guardWrite, json } from "@/lib/shop/guard";
 import { checkDetails } from "@/lib/shop/india";
+import { subscribe } from "@/lib/shop/drops";
 import { startOrder } from "@/lib/shop/orders";
 import type { PayStart } from "@/lib/shop/types";
 
@@ -17,7 +18,7 @@ export async function POST(req: Request) {
   if (!(await shopAccepting())) return json({ error: "the shop isn't taking orders right now" }, 503);
   const g = await guardWrite(req, "checkout", 8);
   if ("fail" in g) return g.fail;
-  const b = g.body as { bag?: unknown; details?: unknown };
+  const b = g.body as { bag?: unknown; details?: unknown; drops?: unknown };
   const bag = await cleanBag(b?.bag).catch(() => null);
   if (!bag) return json({ error: "the bag changed: open it again and check it" }, 400);
   const d = checkDetails(b?.details);
@@ -25,6 +26,8 @@ export async function POST(req: Request) {
   const x = d.ok;
   try {
     const o = await startOrder(bag, { name: x.name, email: x.email, phone: x.phone }, x);
+    // they ticked "tell me when a new drop comes out" (it starts unticked)
+    if (b.drops === true) await subscribe(x.email, "checkout").catch((e) => console.error("subscribe:", e));
     const start: PayStart = {
       orderId: o.id,
       keyId: razorpayKeys()!.id,

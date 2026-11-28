@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { DESIGNS, SIZE_ORDER, type Design } from "@/content/tee";
 import {
-  accountOrders, activity, lookedAt, prefs, saveShirt, setDrops, setSize, checkPassword, deleteAccount, devices, did, endDevice, loadAccount, openSession, passwordSetAt, removePassword,
+  accountOrders, activity, lookedAt, notice, prefs, saveShirt, setDrops, setSize, checkPassword, deleteAccount, devices, did, endDevice, loadAccount, openSession, passwordSetAt, removePassword,
   saveAccount, sendCode, sessionAge, sessionEmail, setPassword, signOut, signOutEverywhere, validEmail, verifyCode, weakPassword,
 } from "@/lib/shop/account";
 import { accountsOpen, googleKeys } from "@/lib/shop/config";
@@ -154,6 +154,7 @@ export async function POST(req: Request) {
           for (const d of await devices(me)) if (!d.current) await endDevice(me, d.id);
         }
         await did(me, had ? "changed your password" : "set a password");
+        await notice(me, had ? "your password was changed" : "a password was set", had ? "every other device was signed out." : "you can now sign in with it, or with a code as before.", device);
         return json({ ok: true });
       }
       case "remove-password": {
@@ -161,12 +162,14 @@ export async function POST(req: Request) {
         if (!(await proven(b.current))) return json({ error: "your current password, to remove it", field: "current" }, 400);
         await removePassword(me);
         await did(me, "removed your password", "sign in with an email code or google");
+        await notice(me, "your password was removed", "sign in with a code by email, or google.", device);
         return json({ ok: true });
       }
       case "google": {
         const on = b.on === true;
         await saveAccount({ ...a, googleOff: !on });
         await did(me, on ? "turned google sign-in on" : "turned google sign-in off");
+        await notice(me, on ? "google sign-in was turned on" : "google sign-in was turned off", on ? "your google account for this email can sign in." : "signing in with google won't open your profile until it's turned back on.", device);
         return json({ ok: true, ready: !!googleKeys() });
       }
       case "size": {
@@ -178,7 +181,7 @@ export async function POST(req: Request) {
       }
       case "drops": {
         const on = b.on === true;
-        await setDrops(me, on);
+        await setDrops(me, on, b.from === "welcome" ? "welcome" : "profile");
         await did(me, on ? "asked to hear about new drops" : "stopped emails about new drops");
         return json({ ok: true });
       }
@@ -201,11 +204,14 @@ export async function POST(req: Request) {
       }
       case "signout-all":
         await signOutEverywhere(me);
+        await did(me, "signed out everywhere");
+        await notice(me, "every device was signed out", "your profile is signed out on every device, this one too.", device);
         await signOut();
         return json({ ok: true });
       case "delete":
         // the orders themselves stay (they're still on their way, and the shop has to keep its records); the account goes
         await deleteAccount(me);
+        await notice(me, "your profile was deleted", "your details, addresses, password, devices and activity are gone. orders you placed still arrive, and their emails still open them. you can always sign in again with this email and start fresh.", device);
         await signOut();
         return json({ ok: true });
       case "orders":
