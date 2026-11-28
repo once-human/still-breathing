@@ -109,9 +109,19 @@ export function ShirtStage() {
               <p className="text-quiet">size · <span className="text-ink">{size}</span></p>
               <Link href="/size-guide" className="draw text-quiet hover:text-ink">size guide</Link>
             </div>
-            <div className="mt-3 grid grid-cols-6 gap-1.5" role="radiogroup" aria-label="Size">
+            <div className="mt-3 grid grid-cols-6 gap-1.5" role="radiogroup" aria-label="Size"
+              onKeyDown={(e) => {
+                // a radio group moves with the arrow keys (and home / end), the way every other one does
+                const i = SIZE_ORDER.indexOf(size), n = SIZE_ORDER.length;
+                const to = { ArrowRight: i + 1, ArrowDown: i + 1, ArrowLeft: i - 1, ArrowUp: i - 1, Home: 0, End: n - 1 }[e.key];
+                if (to == null) return;
+                e.preventDefault();
+                const x = SIZE_ORDER[(to + n) % n]!;
+                track("size", design, x); touched.current = true; pickedSize(x); setSize(x);
+                (e.currentTarget.children[(to + n) % n] as HTMLElement | undefined)?.focus();
+              }}>
               {SIZE_ORDER.map((x) => (
-                <button key={x} role="radio" aria-checked={x === size} onClick={() => { if (x !== size) track("size", design, x); touched.current = true; pickedSize(x); setSize(x); }}
+                <button key={x} role="radio" aria-checked={x === size} tabIndex={x === size ? 0 : -1} onClick={() => { if (x !== size) track("size", design, x); touched.current = true; pickedSize(x); setSize(x); }}
                   className={`h-11 border text-[14px] transition-colors duration-200 ${x === size ? "border-ink bg-ink text-paper" : "border-line hover:border-quiet"}`}>{x}</button>
               ))}
             </div>
@@ -138,7 +148,8 @@ export function ShirtStage() {
               </Link>
             )
           ) : null}
-          <BuyFacts />
+          <SendIt design={design} title={`${t.top} ${t.name}`} />
+          <BuyFacts city={s.city} />
 
           <Fit size={size} shop={WEARERS[wearer]} onVariant={setVariant} />
 
@@ -188,5 +199,41 @@ export function ShirtStage() {
         <AddToBagSlot design={design} size={size} bar />
       </div>
     </section>
+  );
+}
+
+/**
+ * Send this shirt to a friend: the phone's own share sheet (whatsapp, instagram, anywhere) where there is one, else the
+ * link is copied. The link carries utm_source=share, so the log can tell a friend's link from the rest.
+ */
+function SendIt({ design, title }: { design: string; title: string }) {
+  const [said, setSaid] = useState<string | null>(null);
+  const send = async () => {
+    const url = `${location.origin}${location.pathname}?utm_source=share`;
+    track("share", design);
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `${title} · sahn`, url });
+        return;
+      } catch (e) {
+        if ((e as Error).name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setSaid("link copied");
+    } catch {
+      setSaid(url);
+    }
+    setTimeout(() => setSaid(null), 4000);
+  };
+  return (
+    <p className="mt-2 flex items-center gap-2 text-[13px]">
+      <button type="button" onClick={() => void send()} className="hit flex items-center gap-2 text-quiet hover:text-ink">
+        <svg viewBox="0 0 24 24" aria-hidden className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M12 3v12M7.5 7.5 12 3l4.5 4.5" /></svg>
+        send it to a friend
+      </button>
+      {said ? <span role="status" className="text-ink">{said}</span> : null}
+    </p>
   );
 }

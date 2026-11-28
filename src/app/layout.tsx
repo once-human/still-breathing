@@ -8,6 +8,8 @@ import { Footer } from "@/components/Footer";
 import { ShirtTextProvider } from "@/components/ShirtText";
 import { shirtTexts } from "@/lib/live";
 import { SITE_URL, og } from "@/lib/site";
+import { JsonLd } from "@/components/JsonLd";
+import { box } from "@/content/mail";
 
 const description = "sahn makes one shirt per moment. fred again.. india: five fan-made shirts for Fred again..'s December shows in India, drawn by hand from the crowd and the grounds, made to order and sent anywhere in India.";
 
@@ -45,6 +47,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <main id="main" className="min-h-[70vh] pt-[5.25rem] md:pt-[5.75rem]">{children}</main>
         <Footer />
         </ShirtTextProvider>
+        <JsonLd
+          data={{
+            "@context": "https://schema.org",
+            "@graph": [
+              { "@type": "OnlineStore", "@id": `${SITE_URL}/#shop`, name: "sahn", url: SITE_URL, logo: `${SITE_URL}/icons/sahn-512.png`, email: box("hello"), areaServed: "IN" },
+              { "@type": "WebSite", "@id": `${SITE_URL}/#site`, name: "sahn", url: SITE_URL, publisher: { "@id": `${SITE_URL}/#shop` }, inLanguage: "en-IN" },
+            ],
+          }}
+        />
       </body>
     </html>
   );

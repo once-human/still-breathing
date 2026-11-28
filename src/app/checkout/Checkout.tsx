@@ -34,6 +34,8 @@ const loadRazorpay = () =>
 
 /** `saved`: the signed-in buyer's account, to fill in from (their name, phone and the addresses they've sent to) */
 export function Checkout({ saved = null }: { saved?: Account | null }) {
+  // the same dates the shirt page gives (making, the road, a weekend's slack), worked out on this device
+  const arrives = useArrives();
   const { bag, pay: payView } = useShop();
   const router = useRouter();
   const first = saved?.addresses[0];
@@ -137,9 +139,19 @@ export function Checkout({ saved = null }: { saved?: Account | null }) {
           ))}
         </ul>
         <p className="mt-3 flex justify-between text-[15px]"><span>total</span><span className="tnum font-semibold">{rupees(total)}</span></p>
-        <p className="mt-1 text-[12px] text-quiet">All taxes and shipping included. Made for you in {SHOP.make[0]}–{SHOP.make[1]} days, then {SHOP.road[0]}–{SHOP.road[1]} on the road.</p>
+        <p className="mt-1 text-[12px] text-quiet">All taxes and shipping included. Made for you in {SHOP.make[0]}–{SHOP.make[1]} days, then {SHOP.road[0]}–{SHOP.road[1]} on the road{arrives ? <>: usually with you <span className="text-ink tnum">{arrives}</span></> : null}.</p>
         <button type="button" onClick={shop.open} className="hit mt-3 text-[13px] text-quiet hover:text-ink">change the bag</button>
       </div>
     </div>
   );
+}
+
+const day = (t: number) => new Date(t).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).toLowerCase().replace(",", "");
+function useArrives() {
+  const [r, setR] = useState<string | null>(null);
+  useEffect(() => {
+    const now = Date.now(), D = 86_400_000;
+    setR(`${day(now + (SHOP.make[0] + SHOP.road[0]) * D)} – ${day(now + (SHOP.make[1] + SHOP.road[1] + 2) * D)}`);
+  }, []);
+  return r;
 }
