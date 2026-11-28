@@ -13,7 +13,7 @@ const link = "text-quiet transition-colors hover:text-ink";
 export async function Footer() {
   const shirts = await Promise.all((await shownList()).map(async (d) => ({ d, label: (await named(d)).label })));
   return (
-    <footer className="mt-40 overflow-hidden" aria-label="Site">
+    <footer data-seen="footer" className="mt-40 overflow-hidden" aria-label="Site">
       <div className="grid grid-cols-2 gap-x-4 gap-y-10 px-4 text-[14px] md:grid-cols-4 lg:grid-cols-12">
         <div className={`${col} lg:col-span-3`}>
           <p className="font-semibold">{CURRENT.title}</p>

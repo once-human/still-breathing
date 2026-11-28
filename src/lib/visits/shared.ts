@@ -4,11 +4,11 @@
  */
 
 /** Every visit is kept in full this long; after that only daily counts (per country, per page) are. */
-export const KEEP_DAYS = 90;
+export const KEEP_DAYS = 180;
 /** A visit ends after this long with nothing happening; the next page starts a new one. */
 export const IDLE_MS = 30 * 60_000;
 /** At most this many events per visit, and pages per program per day. */
-export const MAX_EVENTS = 500;
+export const MAX_EVENTS = 1500;
 export const MAX_BOT_PAGES = 300;
 /** the browser sends a batch every 15 s while in front: on the site "now" is a batch in the last minute */
 export const LIVE_SECONDS = 60;
@@ -16,11 +16,20 @@ export const LIVE_SECONDS = 60;
 export const ID = /^[a-f0-9]{32}$/;
 
 /**
- * page: a page on screen (its time on screen and how far down grow as it's re-sent)
+ * page:  a page on screen (its time on screen and how far down grow as it's re-sent)
  * click: a link out to another site
- * step: a shop step (what it is in `step`, the shirt and size with it)
+ * step:  a shop step (what it is in `step`, the shirt and size with it; `value` is the rupees on "paid")
+ * tap:   a button or link inside the site, by its label ("rage: …" when tapped again and again in a second)
+ * seen:  a part of a page that was really on screen for a second (a shirt card, the size picker)
+ * field: a form box someone was in: which box (never what was typed), the time in it, `value` 1 if it was left filled
+ * vital: how fast the page was for them (LCP, INP, CLS, FCP, TTFB), in `value`, with its rating in `detail`
+ * error: something on the page broke for them (the message and where, never anything they typed)
  */
-export type EventType = "page" | "click" | "step";
+export const EVENT_TYPES = ["page", "click", "step", "tap", "seen", "field", "vital", "error"] as const;
+export type EventType = (typeof EVENT_TYPES)[number];
+/** at most this many of each noisy kind in a visit, so one busy page can't fill the log */
+export const CAP: Partial<Record<EventType, number>> = { tap: 200, seen: 120, field: 80, vital: 60, error: 15 };
+export const VITALS = ["LCP", "INP", "CLS", "FCP", "TTFB"] as const;
 export const STEPS = ["size", "look", "tryon", "bag", "unbag", "buy", "checkout", "pay", "paid", "payfail", "signin", "share"] as const;
 export type Step = (typeof STEPS)[number];
 
@@ -41,6 +50,17 @@ export interface TrackEvent {
   step?: Step | null;
   design?: string | null;
   size?: string | null;
+  value?: number | null;
+}
+
+/** a campaign link's tags (utm_*), and whose link it came through: "meta" for a link from instagram or facebook (organic or ad), "google ads" for a google ad (only that, never the click's id) */
+export interface Utm {
+  source?: string | null;
+  medium?: string | null;
+  campaign?: string | null;
+  content?: string | null;
+  term?: string | null;
+  via?: "meta" | "google ads" | null;
 }
 
 export interface TrackBatch {
@@ -56,6 +76,11 @@ export interface TrackBatch {
   ref?: string | null;
   lang?: string | null;
   screen?: "phone" | "tablet" | "desktop" | null;
+  utm?: Utm | null;
+  /** the window's size, "390x844" */
+  view?: string | null;
+  /** the connection the browser reports: "4g", "3g", "4g save" (data saver on) */
+  net?: string | null;
   events: TrackEvent[];
 }
 
@@ -76,6 +101,12 @@ export interface VisitRow {
   lang: string | null;
   screen: string | null;
   referrer: string | null;
+  medium: string | null;
+  campaign: string | null;
+  content: string | null;
+  via: string | null;
+  view: string | null;
+  net: string | null;
   pages: number;
   activeMs: number;
   /** Pages in order, as a short trail */
@@ -114,6 +145,7 @@ export interface EventRow {
   step: Step | null;
   design: string | null;
   size: string | null;
+  value: number | null;
 }
 
 /** "Googlebot", "ChatGPT", "curl"… from a program's user agent. */

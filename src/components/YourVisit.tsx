@@ -71,6 +71,11 @@ export function YourVisit() {
               <div className="text-[12px] text-quiet">{[v.city, v.country].filter(Boolean).join(", ") || "somewhere"} · {v.device ?? "a device"} · from {v.referrer ?? "direct"}</div>
               <div className="mt-1 text-[12px] text-quiet">
                 {v.events.map((e) => (e.type === "page" ? e.path : e.type === "step" && e.step ? STEP_WORD[e.step] : e.type === "click" ? `link out: ${e.detail ?? ""}` : "")).filter(Boolean).slice(0, 14).join(" → ")}
+                {(() => {
+                  const n = (t: string) => v.events.filter((e) => e.type === t).length;
+                  const more = [[n("tap"), "taps"], [n("seen"), "parts seen"], [n("field"), "form boxes (not what you typed)"], [n("vital"), "speed readings"], [n("error"), "errors"]].filter(([k]) => k);
+                  return more.length ? <span className="block text-quiet">also: {more.map(([k, w]) => `${k} ${w}`).join(", ")}</span> : null;
+                })()}
               </div>
             </li>
           ))}

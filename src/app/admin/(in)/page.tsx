@@ -87,7 +87,7 @@ export default async function Overview({ searchParams }: { searchParams: Promise
         <Section title="the way to a sale" aside={<A href="/admin/insights?v=shirts">each shirt →</A>}>
           <Card>
             <Funnel steps={[["came to the site", f.people], ["looked at a shirt", f.shirt], ["put one in the bag", f.bag], ["opened checkout", f.checkout], ["paid", f.paid]]} />
-            <p className="mt-5 border-t border-line/40 pt-4 text-[13px] text-quiet">{f.people ? `${rate}% of the people who came bought.` : "nobody came in this time."} visits are kept 90 days.</p>
+            <p className="mt-5 border-t border-line/40 pt-4 text-[13px] text-quiet">{f.people ? `${rate}% of the people who came bought.` : "nobody came in this time."} visits are kept 180 days.</p>
           </Card>
         </Section>
         <Section title={p.key === "all" && p.from < chartFrom ? "the last 90 days" : `${p.label}, day by day`} aside={<A href="/admin/visitors">every visit →</A>}>

@@ -98,9 +98,22 @@ export function Timeline({ events }: { events: EventRow[] }) {
                   <span className="text-[12px] text-quiet">{e.ms ? ` · ${span(e.ms)} on screen` : ""}{e.scroll != null ? ` · ${e.scroll}% down` : ""}</span></span>
               ) : e.type === "click" ? (
                 <span><span className="text-quiet">went out to </span><span className="font-medium">{e.detail}</span></span>
+              ) : e.type === "tap" ? (
+                e.detail?.startsWith("rage: ")
+                  ? <span><span className="text-bad">tapped again and again </span><span className="font-medium">{e.detail.slice(6)}</span></span>
+                  : <span><span className="text-quiet">tapped </span><span className="font-medium">{e.detail}</span></span>
+              ) : e.type === "seen" ? (
+                <span><span className="text-quiet">saw </span><span className="font-medium">{[e.detail, e.design ? shirtLabel(e.design) : null].filter(Boolean).join(" · ")}</span></span>
+              ) : e.type === "field" ? (
+                <span><span className="text-quiet">filled in </span><span className="font-medium">{e.detail}</span>
+                  <span className="text-[12px] text-quiet">{e.ms ? ` · ${span(e.ms)}` : ""}{e.value === 0 ? " · left empty" : ""}</span></span>
+              ) : e.type === "vital" ? (
+                <span className="text-[12px] text-quiet">speed {e.detail?.replace(":", " ")} {e.value != null ? (e.detail?.startsWith("CLS") ? e.value.toFixed(2) : `${Math.round(e.value)} ms`) : ""}</span>
+              ) : e.type === "error" ? (
+                <span><span className="text-bad">broke </span><span className="font-mono text-[12px]">{e.detail}</span></span>
               ) : (
                 <span><span className="text-quiet">{step ? STEP_WORD[step] : "did"} </span>
-                  <span className="font-medium">{[e.design ? shirtLabel(e.design) : null, e.size, step === "look" ? e.detail : null].filter(Boolean).join(" · ")}</span></span>
+                  <span className="font-medium">{[e.design ? shirtLabel(e.design) : null, e.size, step === "look" || step === "paid" ? e.detail : null, step === "paid" && e.value ? `₹${e.value.toLocaleString("en-IN")}` : null].filter(Boolean).join(" · ")}</span></span>
               )}
             </div>
           </li>

@@ -77,7 +77,7 @@ export function Checkout({ saved = null }: { saved?: Account | null }) {
         config: { display: { blocks: { upi: { name: "pay by UPI", instruments: [{ method: "upi" }] } }, sequence: ["block.upi"], preferences: { show_default_blocks: true } } },
         modal: { ondismiss: () => setBusy(false), confirm_close: true },
         handler: async (res: RzpResponse) => {
-          track("paid");
+          track("paid", undefined, undefined, `#${j.orderId}`, Math.round(j.amount / 100));
           const p = await fetch("/api/shop/paid", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId: j.orderId, ...res }) });
           const pj = (await p.json().catch(() => ({}))) as { url?: string; error?: string };
           shop.empty();

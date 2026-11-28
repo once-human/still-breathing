@@ -12,7 +12,7 @@ import { CardArt } from "@/components/CardArt";
 export async function ShirtCard({ d, eager = false, big = false }: { d: Design; eager?: boolean; big?: boolean }) {
   const t = await named(d), s = DESIGNS[d], price = (await livePrices())[d];
   return (
-    <Link href={shirtHref(d)} className="group block focus-visible:outline-offset-4">
+    <Link href={shirtHref(d)} data-seen="shirt card" data-design={d} className="group block focus-visible:outline-offset-4">
       <span className="relative block overflow-hidden bg-studio">
         <img
           src={paperStill(d, "back")} alt={`${t.top} ${t.name}, the back`} width={STILL_W} height={STILL_H}

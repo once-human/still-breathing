@@ -36,7 +36,7 @@ export default async function Visitors({ searchParams }: { searchParams: Promise
 
   return (
     <>
-      <Page title="visits" sub="every visit page by page, kept 90 days. a person is a random code their browser made: no names, no IP addresses" />
+      <Page title="visits" sub="every visit page by page, kept 180 days. a person is a random code their browser made: no names, no IP addresses" />
       <div className="mb-5 flex flex-wrap gap-x-3 [&>nav]:mb-3">
         <Tabs active={tab} items={TABS.map(([t, l]) => ({ key: t, label: l, href: link({ tab: t }) }))} />
         <PeriodTabs p={p} keep={{ tab: sp.tab }} />
@@ -66,7 +66,7 @@ export default async function Visitors({ searchParams }: { searchParams: Promise
       ) : null}
 
       {tab === "people" ? (
-        <Section title={`${people.length} ${people.length === 1 ? "person" : "people"}`} aside={`seen ${range === "all time" ? "in the kept 90 days" : range}, latest first`}>
+        <Section title={`${people.length} ${people.length === 1 ? "person" : "people"}`} aside={`seen ${range === "all time" ? "in the kept 180 days" : range}, latest first`}>
           {people.length ? (
             <Group>
               {people.map((p) => (
@@ -79,7 +79,7 @@ export default async function Visitors({ searchParams }: { searchParams: Promise
           ) : <p className="rounded-[14px] bg-s1 px-5 py-10 text-center text-[15px] text-quiet">nobody in this time</p>}
         </Section>
       ) : (
-        <Section title={`${visits.length} ${tab === "bots" ? "program visits" : `visit${visits.length === 1 ? "" : "s"}`}`} aside={filters.length ? `filtered by ${filters.join(", ")}` : range === "all time" ? "the kept 90 days" : range}>
+        <Section title={`${visits.length} ${tab === "bots" ? "program visits" : `visit${visits.length === 1 ? "" : "s"}`}`} aside={filters.length ? `filtered by ${filters.join(", ")}` : range === "all time" ? "the kept 180 days" : range}>
           <VisitTable visits={visits} names={names} empty={tab === "bots" ? "no programs in this time" : "no visits in this time"} />
         </Section>
       )}

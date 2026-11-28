@@ -98,7 +98,7 @@ export function Fit({ size, shop = SHOP, onVariant }: { size: Size; shop?: Varia
   }, [on, dir, shown, pose, skin, seat, shop]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="mt-8 border-t border-line pt-1.5 text-[13px]">
+    <div data-seen="size and fit" className="mt-8 border-t border-line pt-1.5 text-[13px]">
       <div className="flex items-baseline justify-between">
         <p className="text-quiet">fit</p>
         <button onClick={() => setOn(!on)} aria-pressed={on} className={`hit ${on ? "font-semibold" : "text-blue hover:text-ink"}`}>{on ? "back to the tee" : "see it on a body like yours →"}</button>

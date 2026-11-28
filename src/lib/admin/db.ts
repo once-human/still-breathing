@@ -15,7 +15,7 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS admin_notes (id bigserial PRIMARY KEY, order_id text NOT NULL, at timestamptz NOT NULL DEFAULT now(), who text NOT NULL, text text NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS admin_notes_order ON admin_notes (order_id, at)`,
   `CREATE TABLE IF NOT EXISTS admin_payments (payment_id text PRIMARY KEY, order_id text NOT NULL, fee numeric, tax numeric, method text, detail text, settlement_id text, settled_at timestamptz, fetched_at timestamptz NOT NULL DEFAULT now())`,
-  // the visitor log (src/lib/visits): every visit in full for 90 days, then folded into visit_days / visit_day_pages
+  // the visitor log (src/lib/visits): every visit in full for KEEP_DAYS (180), then folded into visit_days / visit_day_pages
   `CREATE TABLE IF NOT EXISTS visits (id text PRIMARY KEY, visitor text, kind text NOT NULL, reason text, started_at timestamptz NOT NULL DEFAULT now(),
      last_at timestamptz NOT NULL DEFAULT now(), city text, region text, country text, device text, lang text, screen text, referrer text,
      pages int NOT NULL DEFAULT 0, active_ms int NOT NULL DEFAULT 0)`,
@@ -27,6 +27,11 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS visit_events_step ON visit_events (step) WHERE step IS NOT NULL`,
   `CREATE TABLE IF NOT EXISTS visit_days (day date NOT NULL, country text NOT NULL, kind text NOT NULL, visitors int NOT NULL, visits int NOT NULL, pages int NOT NULL, PRIMARY KEY (day, country, kind))`,
   `CREATE TABLE IF NOT EXISTS visit_day_pages (day date NOT NULL, path text NOT NULL, kind text NOT NULL, views int NOT NULL, PRIMARY KEY (day, path, kind))`,
+  // campaign tags, whose link it came through, the window's size and connection; a number with an event (rupees paid, a speed)
+  `ALTER TABLE visits ADD COLUMN IF NOT EXISTS medium text, ADD COLUMN IF NOT EXISTS campaign text, ADD COLUMN IF NOT EXISTS content text,
+     ADD COLUMN IF NOT EXISTS term text, ADD COLUMN IF NOT EXISTS via text, ADD COLUMN IF NOT EXISTS view text, ADD COLUMN IF NOT EXISTS net text`,
+  `ALTER TABLE visit_events ADD COLUMN IF NOT EXISTS value real`,
+  `CREATE INDEX IF NOT EXISTS visit_events_type ON visit_events (type) WHERE type NOT IN ('page', 'step')`,
 ];
 
 let ready: Promise<void> | null = null;

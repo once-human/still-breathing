@@ -29,16 +29,17 @@ export default async function Visit({ params }: { params: Promise<{ id: string }
               ["who", v.kind === "bot" ? `a program: ${v.reason ?? ""}` : v.nth && v.nth > 1 ? `came back: visit ${v.nth}` : "first visit"],
               ["where", `${v.city ?? "–"}${v.region ? `, ${v.region}` : ""}${v.country ? ` (${v.country})` : ""}`],
               ["device", v.device],
-              ["screen", v.screen],
+              ["screen", [v.screen, v.view, v.net].filter(Boolean).join(" · ") || null],
               ["language", v.lang],
-              ["came from", v.referrer ?? "direct: typed, a bookmark or an app"],
+              ["came from", `${v.referrer ?? "direct: typed, a bookmark or an app"}${v.via ? ` (via ${v.via})` : ""}`],
+              ["campaign", [v.campaign, v.medium, v.content].filter(Boolean).join(" · ") || "–"],
               ["shirts seen", v.shirts.map(shirtLabel).join(", ") || "–"],
               ["got to", v.reached.length ? <Reached key="r" steps={v.reached} /> : "browsing"],
             ]} />
           </Section>
           {v.person ? (
             <Section title="this person">
-              <Group><Row icon="user" title="every visit of theirs" sub="the same browser, over the kept 90 days" href={`/admin/visitors/person/${v.person}`} /></Group>
+              <Group><Row icon="user" title="every visit of theirs" sub="the same browser, over the kept log" href={`/admin/visitors/person/${v.person}`} /></Group>
             </Section>
           ) : null}
         </div>

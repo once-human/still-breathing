@@ -10,7 +10,7 @@ import { VisitTable, time } from "../../../../ui/visits";
 export const metadata = { title: "visitor" };
 export const dynamic = "force-dynamic";
 
-/** one browser over the kept 90 days: its visits, and a way to forget it */
+/** one browser over the kept 180 days: its visits, and a way to forget it */
 export default async function Person({ params }: { params: Promise<{ id: string }> }) {
   await requireAdmin();
   const id = (await params).id;

@@ -3,12 +3,13 @@ import { createHash } from "node:crypto";
 import { exec, row, rows } from "@/lib/admin/db";
 import { kv } from "@/lib/shop/kv";
 import { isBotAgent, isDatacentreTown, notOurPage } from "./bots";
-import { KEEP_DAYS, LIVE_SECONDS, MAX_BOT_PAGES, MAX_EVENTS, STEPS, botName, cleanPath, isTerminal, refHost, type EventRow, type PersonRow, type Step, type TrackBatch, type VisitRow } from "./shared";
+import { EVENT_TYPES, KEEP_DAYS, LIVE_SECONDS, MAX_BOT_PAGES, MAX_EVENTS, STEPS, VITALS, botName, cleanPath, isTerminal, refHost, type EventRow, type PersonRow, type Step, type TrackBatch, type VisitRow } from "./shared";
 import { deviceName, geoOf } from "./ua";
 
 /**
- * The visitor log, server side: visits (one row each: where from, what device, how long) and their events (pages in
- * order with time on screen and how far down, links out, shop steps). Never an IP address. "visitor" is a random code
+ * The visitor log, server side: visits (one row each: where from, which campaign, what device, how long) and their
+ * events (pages in order with time on screen and how far down, links out, shop steps, taps, what was seen, form
+ * boxes used, page speed, what broke). Never an IP address. "visitor" is a random code
  * the browser makes for itself. Programs are logged from src/proxy.ts, one row a day per program. Every visit is kept
  * in full for KEEP_DAYS, then folded into daily counts and deleted.
  */
@@ -18,6 +19,10 @@ const screen = (s: unknown) => (s === "phone" || s === "tablet" || s === "deskto
 const clip = (s: unknown, n: number) => (typeof s === "string" && s.trim() ? s.trim().replace(/[\u0000-\u001f<>]/g, " ").slice(0, n) : null);
 const DESIGN = /^[a-z0-9-]{1,40}$/;
 const SIZE = /^[A-Z0-9]{1,4}$/;
+const tag = (s: unknown) => (typeof s === "string" && /^[\w.+|: -]{1,60}$/.test(s) ? s.toLowerCase() : null);
+const VIEW = /^\d{2,5}x\d{2,5}$/;
+const NET = /^(slow-2g|2g|3g|4g)( save)?$/;
+const DETAIL: Record<string, number> = { step: 60, tap: 120, seen: 60, field: 60, vital: 30, error: 200 };
 
 /** The SHA-256 of a browser's code: what the admin shows (12 characters of it) to tell people apart. */
 export const personHash = (code: string) => createHash("sha256").update(code, "utf8").digest("hex");
@@ -34,48 +39,58 @@ export async function record(req: Request, b: TrackBatch): Promise<boolean> {
   const kind = programUA || b.bot || !b.human || headers || farm ? "bot" : "person";
   const reason = programUA ? `says it's a program (${botName(ua)})` : b.bot ? clip(b.bot, 80) : headers ? headers : farm ? `from a cloud datacentre town (${g.city})` : !b.human ? "didn't move, scroll or tap" : null;
   const events = b.events
-    .filter((e) => Number.isInteger(e.seq) && e.seq >= 0 && e.seq < MAX_EVENTS && ["page", "click", "step"].includes(e.type))
+    .filter((e) => Number.isInteger(e.seq) && e.seq >= 0 && e.seq < MAX_EVENTS && (EVENT_TYPES as readonly string[]).includes(e.type))
     // the admin and the API are never visits, whatever a browser sends
     .filter((e) => typeof e.path !== "string" || !/^\/(admin|api)(\/|$)/.test(e.path))
-    .slice(0, 100)
+    .slice(0, 200)
     .map((e) => {
       const step = e.type === "step" && (STEPS as readonly string[]).includes(String(e.step)) ? (e.step as Step) : null;
+      const withShirt = step || e.type === "seen" || e.type === "tap";
       return {
         seq: e.seq,
         // The browser's clock can be off; never in the future.
         at: new Date(Math.min(Date.now(), Number(e.at) || Date.now())).toISOString(),
         type: e.type,
         path: cleanPath(String(e.path ?? "/")),
-        detail: clip(e.detail, e.type === "step" ? 60 : 200),
+        detail: clip(e.detail, DETAIL[e.type] ?? 200),
         ms: Number.isFinite(e.ms) ? Math.max(0, Math.min(86_400_000, Math.round(e.ms!))) : null,
         scroll: Number.isFinite(e.scroll) ? Math.max(0, Math.min(100, Math.round(e.scroll!))) : null,
         step,
-        design: step && typeof e.design === "string" && DESIGN.test(e.design) ? e.design : null,
+        design: withShirt && typeof e.design === "string" && DESIGN.test(e.design) ? e.design : null,
         size: step && typeof e.size === "string" && SIZE.test(e.size) ? e.size : null,
+        value: Number.isFinite(e.value) ? Math.max(-1e7, Math.min(1e7, Number(e.value))) : null,
       };
     })
-    .filter((e) => e.type !== "step" || e.step);
+    .filter((e) => e.type !== "step" || e.step)
+    .filter((e) => e.type !== "vital" || (VITALS as readonly string[]).includes(String(e.detail).split(":")[0]!));
 
   // A browser that just asked to be forgotten stays forgotten, even if a batch was still on its way.
   if (await kv<string | null>("GET", `track:forgot:${b.v}`).catch(() => null)) return false;
   const owner = await row<{ visitor: string | null }>(
-    `INSERT INTO visits (id, visitor, kind, reason, city, region, country, device, lang, screen, referrer)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `INSERT INTO visits (id, visitor, kind, reason, city, region, country, device, lang, screen, referrer, medium, campaign, content, term, via, view, net)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
      ON CONFLICT (id) DO UPDATE SET
        last_at = now(),
        kind = CASE WHEN visits.kind = 'person' OR EXCLUDED.kind = 'person' THEN 'person' ELSE 'bot' END,
        reason = CASE WHEN visits.kind = 'person' OR EXCLUDED.kind = 'person' THEN NULL ELSE EXCLUDED.reason END,
-       referrer = coalesce(visits.referrer, EXCLUDED.referrer)
+       referrer = coalesce(visits.referrer, EXCLUDED.referrer),
+       medium = coalesce(visits.medium, EXCLUDED.medium), campaign = coalesce(visits.campaign, EXCLUDED.campaign),
+       content = coalesce(visits.content, EXCLUDED.content), term = coalesce(visits.term, EXCLUDED.term), via = coalesce(visits.via, EXCLUDED.via),
+       view = coalesce(EXCLUDED.view, visits.view), net = coalesce(EXCLUDED.net, visits.net)
      RETURNING visitor`,
-    [b.s, b.v, kind, reason, g.city, g.region, g.country, programUA ? botName(ua) : deviceName(ua), clip(b.lang, 16), screen(b.screen), host(b.ref)],
+    [
+      b.s, b.v, kind, reason, g.city, g.region, g.country, programUA ? botName(ua) : deviceName(ua), clip(b.lang, 16), screen(b.screen), host(b.ref),
+      tag(b.utm?.medium), tag(b.utm?.campaign), tag(b.utm?.content), tag(b.utm?.term), b.utm?.via === "meta" || b.utm?.via === "google ads" ? b.utm.via : null,
+      typeof b.view === "string" && VIEW.test(b.view) ? b.view : null, typeof b.net === "string" && NET.test(b.net) ? b.net : null,
+    ],
   );
   // A visit belongs to the browser that started it.
   if (!owner || owner.visitor !== b.v) return false;
   if (events.length) {
     await exec(
-      `INSERT INTO visit_events (visit, seq, at, type, path, detail, ms, scroll, step, design, size)
-       SELECT $1, x.seq, x.at, x.type, x.path, x.detail, x.ms, x.scroll, x.step, x.design, x.size
-       FROM json_to_recordset($2::json) AS x(seq int, at timestamptz, type text, path text, detail text, ms int, scroll smallint, step text, design text, size text)
+      `INSERT INTO visit_events (visit, seq, at, type, path, detail, ms, scroll, step, design, size, value)
+       SELECT $1, x.seq, x.at, x.type, x.path, x.detail, x.ms, x.scroll, x.step, x.design, x.size, x.value
+       FROM json_to_recordset($2::json) AS x(seq int, at timestamptz, type text, path text, detail text, ms int, scroll smallint, step text, design text, size text, value real)
        ON CONFLICT (visit, seq) DO UPDATE SET ms = coalesce(EXCLUDED.ms, visit_events.ms), scroll = greatest(EXCLUDED.scroll, visit_events.scroll)`,
       [b.s, JSON.stringify(events)],
     );
@@ -117,21 +132,23 @@ export async function recordBot(req: Request, path: string): Promise<void> {
 type Raw = {
   id: string; visitor: string | null; person: string | null; kind: "person" | "bot"; reason: string | null; started_at: string; last_at: string;
   city: string | null; region: string | null; country: string | null; device: string | null; lang: string | null; screen: string | null; referrer: string | null;
+  medium: string | null; campaign: string | null; content: string | null; via: string | null; view: string | null; net: string | null;
   pages: number; active_ms: number; trail: string[] | null; reached: Step[] | null; shirts: string[] | null; nth: number | null;
 };
 const toRow = (r: Raw): VisitRow => ({
   id: r.id, visitor: r.visitor, person: r.person, kind: r.kind, reason: r.reason,
   startedAt: new Date(r.started_at).toISOString(), lastAt: new Date(r.last_at).toISOString(),
   city: r.city, region: r.region, country: r.country, device: r.device, lang: r.lang, screen: r.screen, referrer: r.referrer,
+  medium: r.medium ?? null, campaign: r.campaign ?? null, content: r.content ?? null, via: r.via ?? null, view: r.view ?? null, net: r.net ?? null,
   pages: r.pages, activeMs: Number(r.active_ms), trail: r.trail ?? [], reached: r.reached ?? [], shirts: r.shirts ?? [], nth: r.nth ?? undefined,
 });
 const PERSON = `CASE WHEN v.visitor IS NULL THEN NULL ELSE left(encode(sha256(convert_to(v.visitor, 'UTF8')), 'hex'), 12) END AS person`;
 const EXTRA = `
   LEFT JOIN LATERAL (SELECT array_agg(path ORDER BY seq) AS trail FROM (SELECT path, seq FROM visit_events e WHERE e.visit = v.id AND e.type = 'page' ORDER BY seq LIMIT 40) x) t ON true
-  LEFT JOIN LATERAL (SELECT array_agg(DISTINCT step) FILTER (WHERE step IS NOT NULL) AS reached, array_agg(DISTINCT design) FILTER (WHERE design IS NOT NULL) AS shirts
+  LEFT JOIN LATERAL (SELECT array_agg(DISTINCT step) FILTER (WHERE step IS NOT NULL) AS reached, array_agg(DISTINCT design) FILTER (WHERE design IS NOT NULL AND e.type = 'step') AS shirts
     FROM visit_events e WHERE e.visit = v.id) s ON true`;
 
-/** a stretch of time as epoch ms, kept inside the 90 days the log holds; SQL bounds made from numbers only */
+/** a stretch of time as epoch ms, kept inside the days the log holds (KEEP_DAYS); SQL bounds made from numbers only */
 export type Window = { from: number; to: number };
 const clampW = (w: Window): Window => ({ from: Math.max(w.from, Date.now() - KEEP_DAYS * 86400_000), to: Math.min(w.to, Date.now() + 60_000) });
 const ts = (ms: number) => `to_timestamp(${Math.floor(ms) / 1000})`;
@@ -235,7 +252,7 @@ export async function visitById(id: string): Promise<{ visit: VisitRow; events: 
 }
 
 export async function visitEvents(id: string): Promise<EventRow[]> {
-  const rs = await rows<EventRow>(`SELECT seq, at, type, path, detail, ms, scroll, step, design, size FROM visit_events WHERE visit = $1 ORDER BY seq LIMIT ${MAX_EVENTS}`, [id]);
+  const rs = await rows<EventRow>(`SELECT seq, at, type, path, detail, ms, scroll, step, design, size, value FROM visit_events WHERE visit = $1 ORDER BY seq LIMIT ${MAX_EVENTS}`, [id]);
   return rs.map((r) => ({ ...r, at: new Date(r.at).toISOString() }));
 }
 
@@ -259,7 +276,7 @@ export async function summary(win: Window) {
     row<{ people: number; visits: number; pages: number; active: number; returning: number; shirt: number; bag: number; checkout: number; pay: number; paid: number }>(
       `WITH s AS (SELECT v.visitor, v.id, v.pages, v.active_ms,
            EXISTS (SELECT 1 FROM visits o WHERE o.visitor = v.visitor AND o.started_at < v.started_at) AS back,
-           (SELECT array_agg(DISTINCT coalesce(step, CASE WHEN design IS NOT NULL OR path LIKE '/fred-again-india/%' THEN 'shirt' END)) FROM visit_events e WHERE e.visit = v.id) AS got
+           (SELECT array_agg(DISTINCT coalesce(step, CASE WHEN (design IS NOT NULL AND e.type = 'step') OR (e.type = 'page' AND path LIKE '/fred-again-india/%') THEN 'shirt' END)) FROM visit_events e WHERE e.visit = v.id) AS got
          FROM visits v WHERE ${W})
        SELECT count(DISTINCT visitor)::int AS people, count(*)::int AS visits, coalesce(sum(pages), 0)::int AS pages, coalesce(avg(active_ms), 0)::int AS active,
          count(DISTINCT visitor) FILTER (WHERE back)::int AS returning,
@@ -278,7 +295,7 @@ export async function summary(win: Window) {
     top("v.lang", 10),
     rows<ShirtFunnel>(
       `WITH d AS (SELECT DISTINCT v.visitor, e.design, coalesce(e.step, 'saw') AS step
-         FROM visit_events e JOIN visits v ON v.id = e.visit WHERE ${W} AND e.design IS NOT NULL),
+         FROM visit_events e JOIN visits v ON v.id = e.visit WHERE ${W} AND e.design IS NOT NULL AND e.type = 'step'),
        money AS (SELECT DISTINCT v.visitor, e.step FROM visit_events e JOIN visits v ON v.id = e.visit WHERE ${W} AND e.step IN ('checkout', 'pay', 'paid'))
        SELECT design, count(DISTINCT visitor) FILTER (WHERE step IN ('saw', 'look', 'size'))::int AS saw, count(DISTINCT visitor) FILTER (WHERE step = 'size')::int AS size,
          count(DISTINCT visitor) FILTER (WHERE step = 'look')::int AS look, count(DISTINCT visitor) FILTER (WHERE step = 'tryon')::int AS tryon,
@@ -303,6 +320,106 @@ export async function summary(win: Window) {
     perDay, pages, referrers, devices, places, screens, langs, funnel, bag, bots, folded,
     totals: totals ?? { people: 0, visits: 0, pages: 0, active: 0, returning: 0, shirt: 0, bag: 0, checkout: 0, pay: 0, paid: 0 },
   };
+}
+
+export type Campaign = { source: string; campaign: string; content: string; via: string; visits: number; people: number; shirt: number; bag: number; checkout: number; paid: number; rupees: number };
+export type Vital = { metric: string; screen: string; n: number; p75: number | null; good: number };
+export type VitalPage = { key: string; visits: number; lcp: number | null; inp: number | null; cls: number | null; ttfb: number | null };
+
+/**
+ * The deeper numbers for the insights page, over a window (people only): campaigns and what each brought in, where
+ * buyers first came from, the pages people land on, page speed, what broke, what people tap, what they really saw,
+ * how they get on with the checkout form, and the hours they come.
+ */
+export async function deeper(win: Window) {
+  const w = clampW(win);
+  const W = `v.kind = 'person' AND v.started_at >= ${ts(w.from)} AND v.started_at < ${ts(w.to)}`;
+  const EV = `visit_events e JOIN visits v ON v.id = e.visit`;
+  const ORDER = `coalesce(e.detail, e.visit || ':' || e.seq)`;
+  const has = (steps: string) => `EXISTS (SELECT 1 FROM visit_events x WHERE x.visit = v.id AND x.step IN (${steps}))`;
+  const [campaigns, firstTouch, landing, vitals, vitalPages, errors, taps, rage, cards, seen, fields, stopped, hours, nets, views] = await Promise.all([
+    rows<Campaign>(
+      `WITH vs AS (SELECT v.id, v.visitor, coalesce(v.referrer, 'direct') AS source, coalesce(v.campaign, '') AS campaign, coalesce(v.content, '') AS content, coalesce(v.via, '') AS via,
+           (SELECT array_agg(DISTINCT x.step) FROM visit_events x WHERE x.visit = v.id AND x.step IS NOT NULL) AS steps,
+           EXISTS (SELECT 1 FROM visit_events x WHERE x.visit = v.id AND x.type = 'page' AND x.path LIKE '/fred-again-india/%') AS shirt
+         FROM visits v WHERE ${W}),
+       money AS (SELECT DISTINCT ON (${ORDER}) e.visit, e.value FROM visit_events e JOIN vs ON vs.id = e.visit WHERE e.step = 'paid' ORDER BY ${ORDER}, e.at)
+       SELECT source, campaign, content, via, count(*)::int AS visits, count(DISTINCT visitor)::int AS people,
+         count(DISTINCT visitor) FILTER (WHERE shirt)::int AS shirt,
+         count(DISTINCT visitor) FILTER (WHERE 'bag' = ANY(steps) OR 'buy' = ANY(steps))::int AS bag,
+         count(DISTINCT visitor) FILTER (WHERE 'checkout' = ANY(steps) OR 'pay' = ANY(steps))::int AS checkout,
+         count(DISTINCT visitor) FILTER (WHERE 'paid' = ANY(steps))::int AS paid,
+         coalesce((SELECT sum(m.value) FROM money m JOIN vs x ON x.id = m.visit
+           WHERE x.source = g.source AND x.campaign = g.campaign AND x.content = g.content AND x.via = g.via), 0)::int AS rupees
+       FROM vs g GROUP BY source, campaign, content, via ORDER BY people DESC, visits DESC LIMIT 40`,
+    ),
+    rows<{ source: string; campaign: string; orders: number; people: number; rupees: number; days: number }>(
+      `WITH buyers AS (SELECT DISTINCT ON (${ORDER}) v.visitor, e.value, e.at FROM ${EV} WHERE ${W} AND e.step = 'paid' AND v.visitor IS NOT NULL ORDER BY ${ORDER}, e.at),
+       first AS (SELECT DISTINCT ON (o.visitor) o.visitor, coalesce(o.referrer, 'direct') AS source, coalesce(o.campaign, '') AS campaign, o.started_at
+         FROM visits o WHERE o.kind = 'person' AND o.visitor IN (SELECT visitor FROM buyers) ORDER BY o.visitor, o.started_at)
+       SELECT f.source, f.campaign, count(*)::int AS orders, count(DISTINCT b.visitor)::int AS people, coalesce(sum(b.value), 0)::int AS rupees,
+         coalesce(avg(extract(epoch FROM (b.at - f.started_at)) / 86400), 0)::real AS days
+       FROM buyers b JOIN first f ON f.visitor = b.visitor GROUP BY 1, 2 ORDER BY rupees DESC, orders DESC LIMIT 20`,
+    ),
+    rows<{ key: string; visits: number; people: number; left: number; bag: number; paid: number }>(
+      `WITH l AS (SELECT v.visitor, v.pages, v.active_ms, (SELECT x.path FROM visit_events x WHERE x.visit = v.id AND x.type = 'page' ORDER BY x.seq LIMIT 1) AS path,
+           ${has("'bag', 'buy'")} AS bag, ${has("'paid'")} AS paid FROM visits v WHERE ${W})
+       SELECT path AS key, count(*)::int AS visits, count(DISTINCT visitor)::int AS people, count(*) FILTER (WHERE pages <= 1 AND active_ms < 15000)::int AS left,
+         count(*) FILTER (WHERE bag)::int AS bag, count(*) FILTER (WHERE paid)::int AS paid
+       FROM l WHERE path IS NOT NULL GROUP BY path ORDER BY visits DESC LIMIT 20`,
+    ),
+    rows<Vital>(
+      `SELECT split_part(e.detail, ':', 1) AS metric, coalesce(v.screen, '?') AS screen, count(*)::int AS n,
+         (percentile_cont(0.75) WITHIN GROUP (ORDER BY e.value))::real AS p75, count(*) FILTER (WHERE split_part(e.detail, ':', 2) = 'good')::int AS good
+       FROM ${EV} WHERE ${W} AND e.type = 'vital' AND e.value IS NOT NULL GROUP BY 1, 2 ORDER BY 1, 2`,
+    ),
+    rows<VitalPage>(
+      `SELECT e.path AS key, count(DISTINCT v.id)::int AS visits,
+         (percentile_cont(0.75) WITHIN GROUP (ORDER BY e.value) FILTER (WHERE e.detail LIKE 'LCP%'))::real AS lcp,
+         (percentile_cont(0.75) WITHIN GROUP (ORDER BY e.value) FILTER (WHERE e.detail LIKE 'INP%'))::real AS inp,
+         (percentile_cont(0.75) WITHIN GROUP (ORDER BY e.value) FILTER (WHERE e.detail LIKE 'CLS%'))::real AS cls,
+         (percentile_cont(0.75) WITHIN GROUP (ORDER BY e.value) FILTER (WHERE e.detail LIKE 'TTFB%'))::real AS ttfb
+       FROM ${EV} WHERE ${W} AND e.type = 'vital' AND e.value IS NOT NULL GROUP BY 1 ORDER BY visits DESC LIMIT 20`,
+    ),
+    rows<{ key: string; n: number; people: number; last: string; paths: string[] | null }>(
+      `SELECT e.detail AS key, count(*)::int AS n, count(DISTINCT v.visitor)::int AS people, max(e.at) AS last, (array_agg(DISTINCT e.path))[1:3] AS paths
+       FROM ${EV} WHERE ${W} AND e.type = 'error' AND e.detail IS NOT NULL GROUP BY 1 ORDER BY people DESC, n DESC LIMIT 30`,
+    ),
+    rows<{ path: string; key: string; n: number; people: number }>(
+      `SELECT e.path, e.detail AS key, count(*)::int AS n, count(DISTINCT v.visitor)::int AS people
+       FROM ${EV} WHERE ${W} AND e.type = 'tap' AND e.detail IS NOT NULL AND e.detail NOT LIKE 'rage: %' GROUP BY 1, 2 ORDER BY people DESC, n DESC LIMIT 40`,
+    ),
+    rows<{ path: string; key: string; n: number; people: number }>(
+      `SELECT e.path, substr(e.detail, 7) AS key, count(*)::int AS n, count(DISTINCT v.visitor)::int AS people
+       FROM ${EV} WHERE ${W} AND e.type = 'tap' AND e.detail LIKE 'rage: %' GROUP BY 1, 2 ORDER BY people DESC, n DESC LIMIT 20`,
+    ),
+    rows<{ design: string; seen: number; tapped: number }>(
+      `SELECT e.design, count(DISTINCT v.visitor) FILTER (WHERE e.type = 'seen')::int AS seen, count(DISTINCT v.visitor) FILTER (WHERE e.type = 'tap')::int AS tapped
+       FROM ${EV} WHERE ${W} AND e.design IS NOT NULL AND e.type IN ('seen', 'tap') GROUP BY 1 ORDER BY seen DESC`,
+    ),
+    rows<{ path: string; key: string; people: number; of: number }>(
+      `WITH s AS (SELECT e.path, e.detail, count(DISTINCT v.visitor)::int AS people FROM ${EV} WHERE ${W} AND e.type = 'seen' AND e.detail <> 'shirt card' GROUP BY 1, 2),
+       p AS (SELECT e.path, count(DISTINCT v.visitor)::int AS people FROM ${EV} WHERE ${W} AND e.type = 'page' GROUP BY 1)
+       SELECT s.path, s.detail AS key, s.people, coalesce(p.people, 0) AS of FROM s LEFT JOIN p USING (path) ORDER BY s.people DESC LIMIT 30`,
+    ),
+    rows<{ path: string; key: string; people: number; ms: number; empty: number; n: number }>(
+      `SELECT e.path, e.detail AS key, count(DISTINCT v.visitor)::int AS people, coalesce(avg(e.ms), 0)::int AS ms, count(*) FILTER (WHERE e.value = 0)::int AS empty, count(*)::int AS n
+       FROM ${EV} WHERE ${W} AND e.type = 'field' AND e.detail IS NOT NULL GROUP BY 1, 2 ORDER BY 1, people DESC LIMIT 60`,
+    ),
+    rows<{ key: string; n: number }>(
+      `WITH c AS (SELECT v.id FROM visits v WHERE ${W} AND ${has("'checkout'")} AND NOT ${has("'pay', 'paid'")})
+       SELECT coalesce((SELECT x.detail FROM visit_events x WHERE x.visit = c.id AND x.type = 'field' ORDER BY x.seq DESC LIMIT 1), 'before any box') AS key, count(*)::int AS n
+       FROM c GROUP BY 1 ORDER BY n DESC LIMIT 15`,
+    ),
+    rows<{ hour: number; people: number; bag: number; paid: number }>(
+      `SELECT extract(hour FROM v.started_at AT TIME ZONE '${TZ}')::int AS hour, count(DISTINCT v.visitor)::int AS people,
+         count(*) FILTER (WHERE ${has("'bag', 'buy'")})::int AS bag, count(*) FILTER (WHERE ${has("'paid'")})::int AS paid
+       FROM visits v WHERE ${W} GROUP BY 1 ORDER BY 1`,
+    ),
+    rows<Count>(`SELECT coalesce(v.net, '?') AS key, count(*)::int AS visits, count(DISTINCT v.visitor)::int AS people FROM visits v WHERE ${W} GROUP BY 1 ORDER BY people DESC LIMIT 8`),
+    rows<Count>(`SELECT coalesce(v.view, '?') AS key, count(*)::int AS visits, count(DISTINCT v.visitor)::int AS people FROM visits v WHERE ${W} GROUP BY 1 ORDER BY people DESC LIMIT 12`),
+  ]);
+  return { campaigns, firstTouch, landing, vitals, vitalPages, errors, taps, rage, cards, seen, fields, stopped, hours, nets, views };
 }
 
 /* ---- the visitor's own record ---- */
@@ -404,7 +521,7 @@ export type Funnel = { people: number; visits: number; returning: number; shirt:
 export async function funnelBetween(from: number, to: number): Promise<Funnel> {
   const r = await row<Funnel>(
     `WITH v AS (SELECT id, visitor, started_at FROM visits WHERE kind = 'person' AND started_at >= $1::timestamptz AND started_at < $2::timestamptz),
-       s AS (SELECT v.visitor, array_agg(DISTINCT coalesce(e.step, CASE WHEN e.design IS NOT NULL THEN 'shirt' END)) AS got
+       s AS (SELECT v.visitor, array_agg(DISTINCT coalesce(e.step, CASE WHEN e.design IS NOT NULL AND e.type = 'step' THEN 'shirt' END)) AS got
              FROM v LEFT JOIN visit_events e ON e.visit = v.id GROUP BY v.visitor)
      SELECT (SELECT count(DISTINCT visitor) FROM v)::int AS people, (SELECT count(*) FROM v)::int AS visits,
        (SELECT count(DISTINCT v.visitor) FROM v WHERE EXISTS (SELECT 1 FROM visits o WHERE o.visitor = v.visitor AND o.started_at < v.started_at))::int AS returning,

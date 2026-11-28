@@ -164,15 +164,21 @@ export const POLICIES: Record<PolicySlug, Policy> = {
   privacy: {
     slug: "privacy",
     title: "privacy",
-    summary: "what we know about you, why, and who else sees it. no ads, no trackers.",
+    summary: "what we know about you, why, and who else sees it. our own visit log, no outside trackers, never sold.",
     sections: [
       {
         heading: "what we collect",
         body: [
           "when you order: your name, email, phone number, delivery address, what you bought and what you paid. you give these at checkout, and we need them to make and send your shirt.",
-          "when you just look: nothing that names you. no ad trackers, no analytics cookies, no third-party pixels.",
-          "the site keeps its own visit log, and nobody else sees it: the pages you open, how long each is on screen and how far down you read, whether you came from a link, a search or a post (the site, never who), the kind of device and browser, your rough city from the connection, and the shop steps you take (a size picked, a shirt put in the bag, checkout opened, paid). while you're signed in to your profile, your visits are kept with it, so we can see what you looked at and help with an order; signed out, it isn't tied to your name, your email or your orders. visits from one browser are tied together by a random code that browser makes for itself and keeps in its own storage; it's made from nothing about you, and no cookie and no IP address are kept.",
-          "the full log is kept for 90 days, then only daily totals stay. do not track or global privacy control turns it off, and so does the switch at the end of this page, where you can also see everything kept about your browser and delete it at once.",
+          "when you just look: no ad trackers, no analytics cookies, no third-party pixels. nothing about your visit goes to meta, google or any other company.",
+          "the site keeps its own visit log, in detail, so we can see what works and fix what doesn't. it stays with us: we never sell it, share it, or hand it to an ad network. what it holds:",
+          "where you came from: the site that sent you (instagram, a search, never the post or the person), the tags on a campaign link we made (which ad or which post), and whether the link came through instagram or facebook, or a google ad. the ad network's click code in the link is never kept.",
+          "what you do here: the pages you open, in order, how long each is on screen and how far down you read; the buttons and links you tap (by their label, like \"add to bag\"); which parts of a page were really on your screen, like a shirt's card or the size chart; the shop steps you take (a size picked, a shirt bagged, checkout opened, paid, and what you paid); and the links you take to other sites.",
+          "at checkout and in your profile, which boxes you were in, for how long, and whether you left each filled or empty, so we can see where a form gets in the way. never what you type in them: your details reach us only when you press the button, and only to make your order or your profile.",
+          "how the site worked for you: how fast each page showed and answered your taps, whether it jumped about as it loaded, and any error that broke something on your screen (the error's own message, never anything you typed). also the kind of device and browser, its window size and language, the connection it reports (4g, 3g, data saver), and your rough city from the connection.",
+          "what it never holds: your IP address, what you type, recordings of your screen, your mouse's path, or a fingerprint of your device. any email address or phone number that happens to be in a button or an error is blanked before it's sent.",
+          "visits from one browser are tied together by a random code that browser makes for itself and keeps in its own storage; it's made from nothing about you, and no cookie is set for it. signed out, your visits aren't tied to your name, your email or your orders. while you're signed in to your profile, they are kept with it, so we can see what you looked at and help with an order.",
+          "the full log is kept for 180 days, then only daily totals stay. do not track or global privacy control turns it off, and so does the switch at the end of this page, where you can also see everything kept about your browser and delete it at once.",
           "the bag is kept in your own browser (which shirts, which sizes, how many) until you pay or empty it. no cookies are set for it.",
           "if you make a profile (by a code we email you, a password you choose, or google), we keep your name, phone and up to five delivery addresses so checkout fills itself in; a password only as an argon2id hash, never the password; from google only your email and name. a cookie keeps you signed in while you keep coming back, and 90 days away signs you out; we also keep your size and the shirts you save, if you set them, and emails about new drops if you leave that box ticked at checkout or when you make a profile (it starts ticked: untick it, or turn it off in your profile or with one tap from any of them). we note each device that's signed in (its kind and rough city, no ip address) and what you do with your profile, and show you all of it there. your profile shows every order placed with your email, including ones placed before it existed. you can sign out one device or all of them, download everything we keep about you, and delete the profile yourself: your orders stay on their way and in our records, the profile, addresses, password, devices and activity go.",
           "to show the nearest show, the site uses the rough city your connection comes from (the hosting service adds it to every request). it's rounded to about 10 km and used once for the distance; only the city's name goes in the visit log.",
@@ -183,7 +189,8 @@ export const POLICIES: Record<PolicySlug, Policy> = {
         body: [
           "Razorpay processes your payment; your UPI, card or bank details go only to it, never to us. your order is kept in our order store (Neon, on servers in Singapore, reached only over encrypted connections), and our order emails are sent through Resend.",
           "our production partner, who prints, packs and sends your shirt, and the courier who delivers it get your name, address and phone number, only to do that.",
-          "we don't sell, rent or share your details with anyone else, or use them for ads.",
+          "nobody else sees the visit log: it's ours, kept in the same order store.",
+          "we don't sell, rent or share your details or your visits with anyone else, or give them to an ad network.",
         ],
       },
       {
@@ -196,7 +203,7 @@ export const POLICIES: Record<PolicySlug, Policy> = {
       {
         heading: "how long we keep it",
         body: [
-          "the visit log: 90 days in full, then daily totals with nothing about any one visit.",
+          "the visit log: 180 days in full, then daily totals with nothing about any one visit.",
           "order records are kept for as long as GST law requires (about 6 years), then deleted. emails you send us are kept while we're helping you and for a year after.",
         ],
       },
