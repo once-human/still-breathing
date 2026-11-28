@@ -7,6 +7,7 @@ import { accountsOpen, shopSecret } from "./config";
 import { sendEmail } from "./email";
 import { ShopError } from "./errors";
 import { ensure, kv, query } from "./kv";
+import { DESIGNS, SIZE_ORDER, type Design, type Size } from "@/content/tee";
 import type { Details } from "./india";
 
 /**
@@ -103,6 +104,11 @@ const SCHEMA = [
   // which browsers' visits belong to whom: written while someone is signed in, so the admin sees a name, not a code
   "CREATE TABLE IF NOT EXISTS visitor_people (visitor text PRIMARY KEY, email text NOT NULL, at timestamptz NOT NULL DEFAULT now())",
   "CREATE INDEX IF NOT EXISTS visitor_people_email ON visitor_people (email)",
+  // what the person likes to have set: their size, and whether new drops may be emailed (off until they turn it on, with when)
+  `CREATE TABLE IF NOT EXISTS user_prefs (email text PRIMARY KEY, size text, drops boolean NOT NULL DEFAULT false, drops_at timestamptz,
+     updated_at timestamptz NOT NULL DEFAULT now())`,
+  // shirts they saved for later
+  "CREATE TABLE IF NOT EXISTS user_saved (email text NOT NULL, design text NOT NULL, at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (email, design))",
 ];
 /**
  * Accounts kept before these tables (JSON rows in kv) moved across, in one statement each, the first time a server
@@ -227,6 +233,39 @@ export async function deviceCounts(email?: string) {
   const m = new Map<string, number>();
   for (const [e, n] of r) if (e) m.set(e, (m.get(e) ?? 0) + Number(n));
   return m;
+}
+
+/* ---------- size, saved shirts, drop emails ---------- */
+
+export type Prefs = { size: Size | null; drops: boolean; dropsAt: string | null; saved: Design[] };
+
+export async function prefs(email: string): Promise<Prefs> {
+  const [p, sv] = await Promise.all([
+    db("SELECT size, drops::text, drops_at::text FROM user_prefs WHERE email = $1", [email]).catch(() => []),
+    db("SELECT design FROM user_saved WHERE email = $1 ORDER BY at DESC", [email]).catch(() => []),
+  ]);
+  const size = p[0]?.[0];
+  return {
+    size: size && (SIZE_ORDER as readonly string[]).includes(size) ? (size as Size) : null,
+    drops: p[0]?.[1] === "true", dropsAt: p[0]?.[2] ?? null,
+    saved: sv.map((r) => r[0] as Design).filter((d) => d in DESIGNS),
+  };
+}
+export const setSize = (email: string, size: Size | null) =>
+  db("INSERT INTO user_prefs (email, size) VALUES ($1, $2) ON CONFLICT (email) DO UPDATE SET size = $2, updated_at = now()", [email, size]);
+export const setDrops = (email: string, on: boolean) =>
+  db("INSERT INTO user_prefs (email, drops, drops_at) VALUES ($1, $2::boolean, now()) ON CONFLICT (email) DO UPDATE SET drops = $2::boolean, drops_at = now(), updated_at = now()", [email, String(on)]);
+export const saveShirt = (email: string, d: Design, on: boolean) =>
+  on ? db("INSERT INTO user_saved (email, design) VALUES ($1, $2) ON CONFLICT DO NOTHING", [email, d]) : db("DELETE FROM user_saved WHERE email = $1 AND design = $2", [email, d]);
+
+/** the shirts this person looked at lately, from their browsers' visits while signed in, newest first */
+export async function lookedAt(email: string, limit = 6): Promise<Design[]> {
+  const r = await db(
+    `SELECT e.design FROM visitor_people vp JOIN visits v ON v.visitor = vp.visitor JOIN visit_events e ON e.visit = v.id
+     WHERE vp.email = $1 AND e.design IS NOT NULL GROUP BY e.design ORDER BY max(e.at) DESC LIMIT $2::int`,
+    [email, limit],
+  ).catch(() => []);
+  return r.map((x) => x[0] as Design).filter((d) => d in DESIGNS);
 }
 
 /* ---------- visits, by person ---------- */
@@ -375,6 +414,8 @@ export async function deleteAccount(email: string) {
   await db("DELETE FROM user_events WHERE email = $1", [email]);
   await db("DELETE FROM user_codes WHERE email = $1", [email]);
   await db("DELETE FROM visitor_people WHERE email = $1", [email]);
+  await db("DELETE FROM user_prefs WHERE email = $1", [email]);
+  await db("DELETE FROM user_saved WHERE email = $1", [email]);
   return { sessions };
 }
 

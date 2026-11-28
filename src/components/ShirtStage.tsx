@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
+import { pickedSize, toggleSaved, useMe } from "@/lib/shop/me";
 import { useEffect, useRef, useState } from "react";
 import { setFocusCity } from "@/lib/city";
 import { Viewer, warmDesign } from "@/components/Viewer";
@@ -30,6 +31,11 @@ export function ShirtStage() {
   const design = lineup ? shirtBySlug(lineup, params.shirt) : undefined;
 
   const [size, setSize] = useState<Size>("M");
+  // their size: from the profile, or the last one picked in this browser; a size picked here wins
+  const path = usePathname();
+  const me = useMe(path);
+  const touched = useRef(false);
+  useEffect(() => { if (me.size && !touched.current) setSize(me.size); }, [me.size]);
   const shotSeen = useRef<string | null>(null);
   const [variant, setVariant] = useState<Variant>(SHOP);
   const [wearer, setWearer] = useState<Wearer>("him");
@@ -105,7 +111,7 @@ export function ShirtStage() {
             </div>
             <div className="mt-3 grid grid-cols-6 gap-1.5" role="radiogroup" aria-label="Size">
               {SIZE_ORDER.map((x) => (
-                <button key={x} role="radio" aria-checked={x === size} onClick={() => { if (x !== size) track("size", design, x); setSize(x); }}
+                <button key={x} role="radio" aria-checked={x === size} onClick={() => { if (x !== size) track("size", design, x); touched.current = true; pickedSize(x); setSize(x); }}
                   className={`h-11 border text-[14px] transition-colors duration-200 ${x === size ? "border-ink bg-ink text-paper" : "border-line hover:border-quiet"}`}>{x}</button>
               ))}
             </div>
@@ -118,6 +124,20 @@ export function ShirtStage() {
           </div>
 
           <div ref={buyRef} className="mt-6"><AddToBagSlot design={design} size={size} /></div>
+          {pay?.accounts ? (
+            me.signedIn ? (
+              <button type="button" onClick={() => toggleSaved(design)} aria-pressed={me.saved.includes(design)}
+                className="hit mt-3 flex items-center gap-2 text-[13px] text-quiet hover:text-ink">
+                <svg viewBox="0 0 24 24" aria-hidden className="h-4 w-4" fill={me.saved.includes(design) ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.6"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2z" /></svg>
+                {me.saved.includes(design) ? <span className="text-ink">saved to your profile</span> : "save for later"}
+              </button>
+            ) : (
+              <Link href={`/profile?next=${encodeURIComponent(path)}`} className="hit mt-3 inline-flex items-center gap-2 text-[13px] text-quiet hover:text-ink">
+                <svg viewBox="0 0 24 24" aria-hidden className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M12 20.5s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.6a4.3 4.3 0 0 1 7.5 2.7c0 5.6-7.5 10.2-7.5 10.2z" /></svg>
+                save for later: sign in
+              </Link>
+            )
+          ) : null}
           <BuyFacts />
 
           <Fit size={size} shop={WEARERS[wearer]} onVariant={setVariant} />

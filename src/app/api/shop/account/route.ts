@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
+import { DESIGNS, SIZE_ORDER, type Design } from "@/content/tee";
 import {
-  accountOrders, activity, checkPassword, deleteAccount, devices, did, endDevice, loadAccount, openSession, passwordSetAt, removePassword,
+  accountOrders, activity, lookedAt, prefs, saveShirt, setDrops, setSize, checkPassword, deleteAccount, devices, did, endDevice, loadAccount, openSession, passwordSetAt, removePassword,
   saveAccount, sendCode, sessionAge, sessionEmail, setPassword, signOut, signOutEverywhere, validEmail, verifyCode, weakPassword,
 } from "@/lib/shop/account";
 import { accountsOpen, googleKeys } from "@/lib/shop/config";
@@ -23,15 +24,21 @@ export async function GET(req: Request) {
   const me = await sessionEmail().catch(() => null);
   if (!me) return json({ signedIn: false });
   const a = await loadAccount(me);
-  if (new URL(req.url).searchParams.get("export") !== "1") return json({ signedIn: true, name: a?.name.split(" ")[0] ?? "" });
+  if (new URL(req.url).searchParams.get("export") !== "1") {
+    const p = await prefs(me);
+    return json({ signedIn: true, name: a?.name.split(" ")[0] ?? "", size: p.size, saved: p.saved });
+  }
   const ids = await accountOrders(me).catch(() => []);
   const orders = (await Promise.all(ids.map((id) => loadOrder(id).catch(() => null)))).filter((o) => o && o.contact.email === me).map((o) => view(o!, true));
-  const [list, events, pw] = await Promise.all([devices(me), activity(me, 1000), passwordSetAt(me)]);
+  const [list, events, pw, p, looked] = await Promise.all([devices(me), activity(me, 1000), passwordSetAt(me), prefs(me), lookedAt(me, 50)]);
   await did(me, "downloaded your data");
   const file = {
     exported: new Date().toISOString(),
     account: a,
     signIn: { emailCode: true, password: pw ? { setAt: pw } : null, google: a?.googleOff ? "off" : a?.google ? { firstUsed: a.google } : "not used yet" },
+    preferences: { size: p.size, newDropEmails: p.drops, changed: p.dropsAt },
+    savedShirts: p.saved,
+    shirtsLookedAt: looked,
     devices: list.map(({ current: _c, ...d }) => d),
     orders,
     activity: events,
@@ -51,6 +58,7 @@ export async function GET(req: Request) {
  *   profile {name, phone}; add-address {details}, remove-address {id}, default-address {id}
  *   set-password {password, current?}, remove-password {current?}
  *   google {on}                  allow or stop Google sign-in for this account
+ *   size {size|null}, drops {on}, save {design, on}
  *   end-device {id}, signout-all, delete
  */
 export async function POST(req: Request) {
@@ -160,6 +168,26 @@ export async function POST(req: Request) {
         await saveAccount({ ...a, googleOff: !on });
         await did(me, on ? "turned google sign-in on" : "turned google sign-in off");
         return json({ ok: true, ready: !!googleKeys() });
+      }
+      case "size": {
+        const z = b.size === null ? null : SIZE_ORDER.find((x) => x === b.size);
+        if (z === undefined) return json({ error: "a size from the guide" }, 400);
+        await setSize(me, z);
+        await did(me, z ? `set your size to ${z}` : "cleared your size");
+        return json({ ok: true });
+      }
+      case "drops": {
+        const on = b.on === true;
+        await setDrops(me, on);
+        await did(me, on ? "asked to hear about new drops" : "stopped emails about new drops");
+        return json({ ok: true });
+      }
+      case "save": {
+        const d = typeof b.design === "string" && b.design in DESIGNS ? (b.design as Design) : null;
+        if (!d) return json({ error: "no such shirt" }, 400);
+        await saveShirt(me, d, b.on === true);
+        await did(me, b.on === true ? "saved a shirt" : "unsaved a shirt", DESIGNS[d].name + (DESIGNS[d].city ? `, ${DESIGNS[d].city}` : ""));
+        return json({ ok: true });
       }
       case "end-device": {
         const id = typeof b.id === "string" ? b.id : "";

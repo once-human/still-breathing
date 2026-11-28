@@ -3,7 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AddressFields, EMPTY, addressLine, input, post } from "@/components/shop/AddressFields";
+import { SIZE_ORDER, type Design, type Size } from "@/content/tee";
 import type { Address } from "@/lib/shop/account";
+import { pickedSize, refreshMe } from "@/lib/shop/me";
 import type { Details } from "@/lib/shop/india";
 
 const button = "flex h-12 w-full items-center justify-between bg-ink px-4 text-[15px] font-semibold text-paper hover:bg-ink/90 disabled:opacity-60";
@@ -265,7 +267,7 @@ export function Hello({ next }: { next: string | null }) {
 
 /* ---------- the tabs ---------- */
 
-const TABS = ["orders", "addresses", "details", "sign-in", "privacy", "activity"] as const;
+const TABS = ["orders", "saved", "addresses", "details", "sign-in", "privacy", "activity"] as const;
 type Tab = (typeof TABS)[number];
 
 /** one pane at a time, kept in the address (#sign-in) so back and a reload land on it; on a phone the tabs scroll sideways */
@@ -348,6 +350,67 @@ export function Profile({ name: n0, phone: p0, email }: { name: string; phone: s
         <span>{busy ? "saving.." : saved ? "saved" : "save"}</span><span aria-hidden>{saved ? "✓" : "→"}</span>
       </button>
     </form>
+  );
+}
+
+/** their size: every shirt opens on it */
+export function SizePick({ size }: { size: Size | null }) {
+  const router = useRouter();
+  const [z, setZ] = useState<Size | null>(size);
+  const pick = async (x: Size | null) => {
+    setZ(x);
+    if (x) pickedSize(x);
+    await post("/api/shop/account", { action: "size", size: x }).catch(() => setZ(size));
+    refreshMe();
+    router.refresh();
+  };
+  return (
+    <section>
+      <h2 className={H2}>your size</h2>
+      <p className="mt-3 text-[14px] text-quiet">every shirt opens on it. not sure? the <a href="/size-guide" className="draw text-ink">size guide</a> has each one in cm.</p>
+      <div className="mt-4 grid grid-cols-6 gap-1.5" role="radiogroup" aria-label="your size">
+        {SIZE_ORDER.map((x) => (
+          <button key={x} type="button" role="radio" aria-checked={x === z} onClick={() => pick(x === z ? null : x)}
+            className={`h-11 border text-[14px] transition-colors duration-200 ${x === z ? "border-ink bg-ink text-paper" : "border-line hover:border-quiet"}`}>{x}</button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** emails about new drops: off until they turn it on */
+export function Drops({ on }: { on: boolean }) {
+  const router = useRouter();
+  const [v, setV] = useState(on);
+  const [busy, setBusy] = useState(false);
+  return (
+    <section>
+      <h2 className={H2}>emails</h2>
+      <ul className="mt-2 text-[14px]">
+        <li className="flex items-start justify-between gap-4 border-b border-line py-3">
+          <span><span className="text-ink">your orders</span><span className="block text-quiet">confirmed, sent to print, on its way, delivered. always on: they&apos;re about something you bought.</span></span>
+          <span className="shrink-0 text-[13px] text-quiet">on</span>
+        </li>
+        <li className="flex items-start justify-between gap-4 border-b border-line py-3">
+          <span><span className="text-ink">new drops</span><span className="block text-quiet">one email when a new lineup or shirt comes out. nothing else, and off whenever you like.</span></span>
+          <button type="button" role="switch" aria-checked={v} aria-label="emails about new drops" disabled={busy}
+            onClick={async () => { setBusy(true); setV(!v); await post("/api/shop/account", { action: "drops", on: !v }).catch(() => setV(v)); router.refresh(); setBusy(false); }}
+            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-60 ${v ? "bg-ink" : "bg-line"}`}>
+            <span className={`absolute top-1 h-5 w-5 rounded-full transition-[left] duration-150 ${v ? "left-6 bg-paper" : "left-1 bg-quiet"}`} />
+          </button>
+        </li>
+      </ul>
+    </section>
+  );
+}
+
+/** take a shirt off the saved list */
+export function Unsave({ design }: { design: Design }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  return (
+    <button type="button" disabled={busy} onClick={async () => { setBusy(true); await post("/api/shop/account", { action: "save", design, on: false }).catch(() => {}); refreshMe(); router.refresh(); }}
+      className="hit mt-2 text-[13px] text-quiet hover:text-ink">{busy ? "one moment.." : "remove"}</button>
   );
 }
 

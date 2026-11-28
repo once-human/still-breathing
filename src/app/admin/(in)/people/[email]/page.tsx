@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/admin/auth";
 import { allOrders, isPaid, shirtName } from "@/lib/admin/data";
 import { notesFor } from "@/lib/admin/log";
-import { deviceCounts, linkedPeople, loadAccount, passwordSetAt, validEmail } from "@/lib/shop/account";
+import { deviceCounts, linkedPeople, loadAccount, passwordSetAt, prefs, validEmail } from "@/lib/shop/account";
 import { refunded } from "@/lib/shop/orders";
 import { Act, NoteForm } from "../../../ui/client";
 import { Empty, Group, KV, Page, Row, Section, StageBadge, Tile, ago, dateOnly, dt, inr } from "../../../ui/ui";
@@ -15,9 +15,9 @@ export default async function Person({ params }: { params: Promise<{ email: stri
   await requireAdmin();
   const email = decodeURIComponent((await params).email).toLowerCase();
   if (!validEmail(email)) notFound();
-  const [account, orders, notes, sess, browsers, pw] = await Promise.all([
+  const [account, orders, notes, sess, browsers, pw, my] = await Promise.all([
     loadAccount(email).catch(() => null), allOrders(), notesFor(`customer:${email}`),
-    deviceCounts(email), linkedPeople(email), passwordSetAt(email).catch(() => null),
+    deviceCounts(email), linkedPeople(email), passwordSetAt(email).catch(() => null), prefs(email).catch(() => null),
   ]);
   const mine = orders.filter((o) => o.contact.email === email);
   if (!account && !mine.length) notFound();
@@ -58,6 +58,7 @@ export default async function Person({ params }: { params: Promise<{ email: stri
             ["phone", phone ? <a key="p" href={`tel:+91${phone}`} className="underline decoration-ink/25 underline-offset-4 hover:decoration-ink">+91 {phone}</a> : "–"],
             ["account", account ? `since ${dateOnly(account.createdAt)}` : "none"],
             ...(account ? [["signed in on", devices ? `${devices} device${devices === 1 ? "" : "s"}` : "no device now"] as [string, string]] : []),
+            ...(account && my ? [["size", my.size ?? "not set"] as [string, string], ["new drop emails", my.drops ? "yes, asked for them" : "no"] as [string, string], ["saved shirts", my.saved.length ? my.saved.map(shirtName).join(", ") : "none"] as [string, string]] : []),
             ...(account ? [["signs in with", ["email code", pw ? "password" : "", account.google && !account.googleOff ? "google" : ""].filter(Boolean).join(", ")] as [string, string]] : []),
           ]} />
           {browsers.size ? (

@@ -3,12 +3,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Reorder } from "@/components/shop/Reorder";
 import { paperStill, shirtHref } from "@/content/lineups";
-import { WAY_WORD, accountOrders, activity, devices, loadAccount, passwordSetAt, sessionEmail } from "@/lib/shop/account";
+import { ShirtCard } from "@/components/ShirtCard";
+import { OPERATOR } from "@/content/policies";
+import { WAY_WORD, accountOrders, activity, devices, loadAccount, lookedAt, passwordSetAt, prefs, sessionEmail } from "@/lib/shop/account";
 import { accountsOpen, googleKeys } from "@/lib/shop/config";
 import { rupees } from "@/lib/shop/money";
 import { loadOrder, view, type OrderView, type Stage } from "@/lib/shop/orders";
 import { EVENT_WORD, STAGE_WORD, dayYear, when } from "@/lib/shop/words";
-import { Addresses, Devices, GoogleSwitch, Hello, Leave, Password, Profile, ProfileTabs, SignIn } from "./parts";
+import { Addresses, Devices, Drops, GoogleSwitch, Hello, Leave, Password, Profile, ProfileTabs, SignIn, SizePick, Unsave } from "./parts";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "profile", robots: { index: false, follow: false } };
@@ -37,7 +39,7 @@ const SHOWN = new Set(["placed", "paid", "address", "shipped", "delivered", "can
 
 /**
  * The profile. Signed out: one sign-in that also makes the profile, by Google, an email code or a password.
- * Signed in: the person, then six tabs: orders, addresses, details, sign-in (ways in, password, devices), privacy
+ * Signed in: the person, then tabs: orders, saved (and looked at), addresses, details (with size and drop emails), sign-in (ways in, password, devices), privacy
  * (visit counting, their data, deleting) and activity (everything they and their orders did).
  */
 export default async function ProfilePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -71,9 +73,11 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
     );
   }
 
-  const [a, ids, list, pwAt, events] = await Promise.all([
+  const [a, ids, list, pwAt, events, my, looked] = await Promise.all([
     loadAccount(email), accountOrders(email).catch(() => [] as string[]), devices(email).catch(() => []), passwordSetAt(email), activity(email).catch(() => []),
+    prefs(email), lookedAt(email).catch(() => []),
   ]);
+  const lately = looked.filter((d) => !my.saved.includes(d));
   if (one(sp.hello) === "1" && !a?.name) return <div className="px-4 pt-6 pb-24"><div className="mx-auto max-w-[420px] pt-10"><Hello next={next} /></div></div>;
 
   const orders = (await Promise.all(ids.slice(0, 50).map((id) => loadOrder(id).catch(() => null))))
@@ -129,11 +133,37 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
       {!name ? <p className="page-in-2 mt-6 max-w-[560px] text-[14px] text-quiet">add your name in <a href="#details" className="draw text-ink">details</a>, so we know what to call you and checkout fills it in.</p> : null}
 
       <div className="page-in-3 mt-12">
-        <ProfileTabs counts={{ orders: orders.length, addresses: a?.addresses.length ?? 0, "sign-in": list.length }}
+        <ProfileTabs counts={{ orders: orders.length, saved: my.saved.length, addresses: a?.addresses.length ?? 0, "sign-in": list.length }}
           panes={{
             orders: orderList,
+            saved: (
+              <div className="grid gap-14">
+                {my.saved.length ? (
+                  <section>
+                    <h2 className="border-t border-line pt-1.5 text-[13px] text-quiet">saved for later · {my.saved.length}</h2>
+                    <ul className="mt-4 grid grid-cols-2 gap-x-3 gap-y-8 md:grid-cols-4">
+                      {my.saved.map((d) => <li key={d}><ShirtCard d={d} /><Unsave design={d} /></li>)}
+                    </ul>
+                  </section>
+                ) : <Blank title="nothing saved yet." sub="tap save for later on any shirt and it waits here, in your size." ><Link href="/shop" className="mt-6 inline-flex h-12 items-center gap-6 bg-ink px-4 text-[15px] font-semibold text-paper hover:bg-ink/90">see the shirts <span aria-hidden>→</span></Link></Blank>}
+                {lately.length ? (
+                  <section>
+                    <h2 className="border-t border-line pt-1.5 text-[13px] text-quiet">you looked at</h2>
+                    <ul className="mt-4 grid grid-cols-2 gap-x-3 gap-y-8 md:grid-cols-4">
+                      {lately.slice(0, 4).map((d) => <li key={d}><ShirtCard d={d} /></li>)}
+                    </ul>
+                  </section>
+                ) : null}
+              </div>
+            ),
             addresses: <Addresses list={a?.addresses ?? []} />,
-            details: <div className="max-w-[560px]"><Profile name={name} phone={a?.phone ?? ""} email={email} /></div>,
+            details: (
+              <div className="grid max-w-[560px] gap-14">
+                <Profile name={name} phone={a?.phone ?? ""} email={email} />
+                <SizePick size={my.size} />
+                <Drops on={my.drops} />
+              </div>
+            ),
             "sign-in": (
               <div className="grid max-w-[720px] gap-14">
                 <section>
@@ -248,6 +278,7 @@ function OrderCard({ o }: { o: OrderView }) {
         {o.tracking?.url && <a href={o.tracking.url} target="_blank" rel="noreferrer noopener" className="hit hover:text-ink">track ↗</a>}
         <Link href={`/order/${o.id}/receipt`} className="hit hover:text-ink">receipt</Link>
         <Reorder lines={o.lines} />
+        {OPERATOR.email ? <a href={`mailto:${OPERATOR.email}?subject=${encodeURIComponent(`order #${o.id}`)}`} className="hit hover:text-ink">get help</a> : null}
       </div>
     </li>
   );
