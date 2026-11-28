@@ -84,7 +84,7 @@ type Item = [href: string, label: string, icon: IconName];
 const HOME: Item = ["/admin", "overview", "home"];
 const SECTIONS: { name: string; icon: IconName; items: Item[] }[] = [
   { name: "sales", icon: "orders", items: [["/admin/orders", "orders", "orders"], ["/admin/money", "money", "money"]] },
-  { name: "customers", icon: "people", items: [["/admin/people", "people", "people"], ["/admin/accounts", "accounts", "user"]] },
+  { name: "customers", icon: "people", items: [["/admin/people", "people", "people"], ["/admin/accounts", "accounts", "user"], ["/admin/mail", "email", "mail"]] },
   { name: "shop", icon: "shirt", items: [["/admin/products", "shirts", "shirt"], ["/admin/prices", "prices", "card"], ["/admin/words", "site words", "note"]] },
   { name: "visitors", icon: "visitors", items: [["/admin/live", "live now", "live"], ["/admin/visitors", "visits", "visitors"], ["/admin/insights", "insights", "chart"]] },
   { name: "system", icon: "settings", items: [["/admin/status", "health", "shield"], ["/admin/settings", "settings", "settings"], ["/admin/audit", "audit log", "list"]] },
