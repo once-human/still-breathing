@@ -15,7 +15,7 @@ export const BOXES = {
   security: { name: "sahn security", use: "sign-in codes, a password or device changed, admin alerts" },
   privacy: { name: "sahn privacy", use: "your data: a copy, a fix, or erasing it" },
   direct: { name: "sahn", use: "straight to the top, for what nothing else has put right" },
-  onkar: { name: "Onkar Yaglewad – sahn", use: "your own address: a reply from your gmail goes out from here" },
+  onkar: { name: "Onkar from sahn", use: "your own address: a reply from your gmail goes out from here" },
 } as const;
 
 /** the owner's own box: a reply written in gmail to an inbox copy goes to the customer from here */
