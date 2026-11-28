@@ -1,7 +1,9 @@
 import "server-only";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { OWNER_BOX } from "@/content/mail";
 import { adminEmail } from "@/lib/admin/auth";
 import { SITE_URL } from "@/lib/site";
-import { mailKeys, ownerEmail } from "./config";
+import { mailKeys, ownerEmail, shopSecret } from "./config";
 import { esc, sender } from "./email";
 import { ShopError } from "./errors";
 import { ensure, query } from "./kv";
@@ -11,6 +13,10 @@ import { ensure, query } from "./kv";
  * tells us by webhook; we fetch it by its id with our own key (so a forged webhook can only point at a real email),
  * keep it in a thread, and send a copy to the admin's own inbox so nothing is missed. Replies go out from the admin,
  * from the address it was written to, and are kept in the same thread. Notes from the contact page land here too.
+ *
+ * Replying from gmail: each copy's Reply-To is reply+<thread>.<code>@sahn.in, the code signed with SHOP_SECRET, so only
+ * someone who got the copy knows it. A reply to it from the owner's own address (and not failing its sender checks)
+ * goes to the customer from onkar@, quoted part trimmed, in the same thread; anything else is kept as ordinary mail.
  */
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS mail_threads (id bigserial PRIMARY KEY, box text NOT NULL, email text NOT NULL, name text NOT NULL DEFAULT '',
@@ -55,7 +61,7 @@ const snip = (t: string) => t.replace(/\s+/g, " ").trim().slice(0, 160);
 function boxOf(addrs: string[], domain: string) {
   for (const a of addrs) {
     const e = parseAddress(a).email;
-    if (e.endsWith(`@${domain}`)) return e.split("@")[0];
+    if (e.endsWith(`@${domain}`) && !e.startsWith("reply+")) return e.split("@")[0];
   }
   return "hello";
 }
@@ -65,8 +71,57 @@ async function findThread(box: string, email: string, subject: string, refs: str
     const r = await db(`SELECT thread_id::text FROM mail_messages WHERE message_id = ANY($1::text[]) ORDER BY at DESC LIMIT 1`, [arr(refs)]);
     if (r[0]?.[0]) return r[0][0];
   }
-  const r = await db(`SELECT t.id::text, t.subject FROM mail_threads t WHERE t.email = $1 AND t.box = $2 AND t.last_at > now() - interval '60 days' ORDER BY t.last_at DESC LIMIT 10`, [email, box]);
-  return r.find((x) => bare(x[1] ?? "") === bare(subject))?.[0] ?? null;
+  const r = await db(`SELECT t.id::text, t.subject, t.box FROM mail_threads t WHERE t.email = $1 AND t.last_at > now() - interval '60 days' ORDER BY t.last_at DESC LIMIT 20`, [email]);
+  const same = r.filter((x) => bare(x[1] ?? "") === bare(subject));
+  // the same box first; then any box, but only for a "Re:" (an answer to something we sent from another address)
+  return same.find((x) => x[2] === box)?.[0] ?? (/^\s*re\s*:/i.test(subject) ? same[0]?.[0] ?? null : null);
+}
+
+/* ---------- replying from gmail ---------- */
+
+const replyCode = (thread: string) => {
+  const s = shopSecret();
+  return s ? createHmac("sha256", s).update(`gmail-reply:${thread}`).digest("hex").slice(0, 20) : null;
+};
+/** where a gmail reply to this thread's copy goes */
+const replyAddress = (thread: string, domain: string) => {
+  const c = replyCode(thread);
+  return c ? `reply+${thread}.${c}@${domain}` : null;
+};
+/** the thread a reply+ address names, if its code is right */
+function replyThread(addrs: string[], domain: string) {
+  for (const a of addrs) {
+    const m = parseAddress(a).email.match(/^reply\+(\d{1,18})\.([0-9a-f]{20})@(.+)$/);
+    if (!m || m[3] !== domain) continue;
+    const want = replyCode(m[1]);
+    if (want && timingSafeEqual(Buffer.from(want), Buffer.from(m[2]))) return m[1];
+  }
+  return null;
+}
+/** a reply's own words: everything above gmail's "On … wrote:" and the quoted lines */
+export function freshPart(text: string, html: string | null) {
+  let t = text.replace(/\r\n/g, "\n");
+  if (!t.trim() && html) t = textOf(html.replace(/<div[^>]*class="?gmail_quote[\s\S]*$/i, "").replace(/<blockquote[\s\S]*$/i, ""));
+  const cuts = [
+    t.search(/\n[ \t]*On [^\n]*(\n[^\n]*)?wrote:[ \t]*\n/),
+    t.search(/\n[ \t]*-{2,}[ \t]*Original Message[ \t]*-{2,}/i),
+    t.search(/^>/m),
+    t.search(/\n[ \t]*From: [^\n]*\n[ \t]*(Sent|Date): /),
+  ].filter((i) => i >= 0);
+  if (cuts.length) t = t.slice(0, Math.min(...cuts));
+  return t.replace(/\n-- \n[\s\S]*$/, "").replace(/\n{3,}/g, "\n\n").trim();
+}
+/** the owner is told when a gmail reply couldn't go out, since the copy-to-owner skips their own mail */
+async function replyBounced(to: string, thread: string, why: string) {
+  const s = sender("inbox", "sahn inbox");
+  const link = `${site()}/admin/mail/${thread}`;
+  await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${s.k.key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from: s.from, to: [to], subject: "your reply wasn't sent", text: `${why}\n\nanswer it in the admin instead: ${link}`, headers: { "Auto-Submitted": "auto-generated" } }),
+    cache: "no-store",
+    signal: AbortSignal.timeout(10000),
+  }).catch((e) => console.error("reply bounce:", e));
 }
 
 type In = { resendId: string | null; messageId: string | null; refs: string[]; box: string; from: { name: string; email: string }; to: string[]; cc: string[];
@@ -102,13 +157,13 @@ async function tellAdmin(thread: string, m: In, auto: boolean) {
   const s = sender("inbox", "sahn inbox");
   const subject = direct ? `straight to you: ${m.from.name || m.from.email}${m.order ? ` · order #${m.order}` : ""}` : `${m.box}@ · ${m.subject || "(no subject)"} · ${m.from.name || m.from.email}`;
   const link = `${site()}/admin/mail/${thread}`;
-  const text = `${who} wrote to ${m.box}@${s.address.split("@")[1]}${m.subject ? `: ${m.subject}` : ""}\n\n${m.text.slice(0, 6000)}\n\n—\nanswer it in the admin: ${link}`;
+  const text = `${who} wrote to ${m.box}@${s.address.split("@")[1]}${m.subject ? `: ${m.subject}` : ""}\n\n${m.text.slice(0, 6000)}\n\n—\nreply to this email and it goes to them from ${OWNER_BOX}@, or answer it in the admin: ${link}`;
   await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${s.k.key}`, "Content-Type": "application/json", "Idempotency-Key": `inbox-copy-${m.resendId ?? `${thread}-${m.at}`}`.slice(0, 256) },
     body: JSON.stringify({
-      from: s.from, to: [to], subject, text, reply_to: m.from.email,
-      html: `<div style="font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#111;max-width:560px"><p style="color:#666">${esc(who)} wrote to ${esc(m.box)}@</p>${esc(m.text.slice(0, 6000)).split("\n\n").map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`).join("")}<p><a href="${esc(link)}" style="display:inline-block;background:#111;color:#fff;padding:10px 16px;text-decoration:none;font-weight:600">answer it in the admin →</a></p></div>`,
+      from: s.from, to: [to], subject, text, reply_to: replyAddress(thread, s.address.split("@")[1]!) ?? m.from.email,
+      html: `<div style="font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#111;max-width:560px"><p style="color:#666">${esc(who)} wrote to ${esc(m.box)}@</p>${esc(m.text.slice(0, 6000)).split("\n\n").map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`).join("")}<p style="color:#666;font-size:13px">reply to this email and it goes to them from ${esc(OWNER_BOX)}@, or</p><p><a href="${esc(link)}" style="display:inline-block;background:#111;color:#fff;padding:10px 16px;text-decoration:none;font-weight:600">answer it in the admin →</a></p></div>`,
       headers: { "Auto-Submitted": "auto-generated" },
     }),
     cache: "no-store",
@@ -141,6 +196,24 @@ export async function receive(emailId: string) {
     attachments: (e.attachments ?? []).map((a) => ({ id: a.id, filename: a.filename, type: a.content_type, size: a.size ?? null, inline: a.content_disposition === "inline" })),
     auth: e.authentication ?? null, at: e.created_at ?? new Date().toISOString(),
   };
+  const target = replyThread([...(e.received_for ?? []), ...(e.to ?? []), ...(e.cc ?? [])], k.domain);
+  const me = (adminEmail() ?? ownerEmail())?.toLowerCase();
+  if (target && me && from.email === me && !auto) {
+    const failing = /\b(spf|dkim|dmarc)\s*[=:]\s*"?(fail|softfail|permerror)/i.test(`${JSON.stringify(e.authentication ?? "")} ${h["authentication-results"] ?? ""}`)
+      || /"(spf|dkim|dmarc)"\s*:\s*"(fail|softfail|permerror)"/i.test(JSON.stringify(e.authentication ?? ""));
+    const body = freshPart(text, html);
+    if (failing) await replyBounced(me, target, "it didn't pass gmail's sender checks, so it might not have been you.");
+    else if (!body) await replyBounced(me, target, "it came through empty once the quoted part was trimmed.");
+    else {
+      try {
+        await reply(target, body, `gmail (${me})`, OWNER_BOX, `gmail-${e.id}`);
+      } catch (err) {
+        console.error("gmail reply:", err);
+        await replyBounced(me, target, "sending it failed on our side.");
+      }
+    }
+    return true;
+  }
   const thread = await keep(m);
   if (thread) await tellAdmin(thread, m, auto);
   return true;
@@ -206,7 +279,7 @@ export const markRead = (id: string, read = true) => db(`UPDATE mail_threads SET
 export const archive = (id: string, on: boolean) => db("UPDATE mail_threads SET archived = $2::boolean WHERE id = $1::bigint", [id, String(on)]);
 
 /** a reply from the admin, from the address the thread was written to, threaded on the last email in it */
-export async function reply(id: string, body: string, who: string, local?: string) {
+export async function reply(id: string, body: string, who: string, local?: string, key?: string) {
   const t = await thread(id);
   if (!t) throw new ShopError("no such conversation", 404);
   const last = [...t.messages].reverse().find((m) => m.dir === "in");
@@ -219,9 +292,10 @@ export async function reply(id: string, body: string, who: string, local?: strin
   const html = `<div style="font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#111;max-width:560px">${esc(body).split("\n\n").map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`).join("")}${last ? `<blockquote style="margin:16px 0 0;padding-left:12px;border-left:2px solid #ddd;color:#666">${esc(last.text.slice(0, 4000)).replace(/\n/g, "<br>")}</blockquote>` : ""}</div>`;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
-    headers: { Authorization: `Bearer ${s.k.key}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${s.k.key}`, "Content-Type": "application/json", ...(key ? { "Idempotency-Key": key.slice(0, 256) } : {}) },
     body: JSON.stringify({
       from: s.from, to: [t.thread.email], subject, text, html, reply_to: s.address,
+      // their answer carries these References, so it finds this thread whichever address it goes to
       ...(last?.messageId ? { headers: { "In-Reply-To": last.messageId, References: refs.join(" ") } } : {}),
     }),
     cache: "no-store",
@@ -229,9 +303,10 @@ export async function reply(id: string, body: string, who: string, local?: strin
   }).catch(() => null);
   if (!res?.ok) throw new ShopError(`email ${res?.status ?? "unreachable"}: ${(await res?.text().catch(() => "")) ?? ""}`.slice(0, 300));
   const sent = (await res.json().catch(() => ({}))) as { id?: string };
-  await db(`INSERT INTO mail_messages (thread_id, dir, resend_id, from_addr, from_name, to_addrs, subject, text_body, html, who) VALUES ($1::bigint, 'out', $2, $3, $4, $5::text[], $6, $7, $8, $9)`,
+  const added = await db(`INSERT INTO mail_messages (thread_id, dir, resend_id, from_addr, from_name, to_addrs, subject, text_body, html, who)
+    VALUES ($1::bigint, 'out', $2, $3, $4, $5::text[], $6, $7, $8, $9) ON CONFLICT (resend_id) DO NOTHING RETURNING 1`,
     [id, sent.id ?? null, s.address, s.from.split(" <")[0], arr([t.thread.email]), subject, body, html, who]);
-  await db("UPDATE mail_threads SET last_at = now(), unread = 0, count = count + 1, snippet = $2 WHERE id = $1::bigint", [id, snip(`you: ${body}`)]);
+  if (added.length) await db("UPDATE mail_threads SET last_at = now(), unread = 0, count = count + 1, snippet = $2 WHERE id = $1::bigint", [id, snip(`you: ${body}`)]);
   return s.address;
 }
 
