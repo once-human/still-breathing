@@ -138,6 +138,8 @@ const db = async (text: string, params: (string | number | null)[] = []) => {
   await (ready ??= setUp().catch((e) => { ready = null; throw e; }));
   return query(text, params);
 };
+/** read-only questions across profiles (the admin's email groups) */
+export const accountsRead = db;
 
 /**
  * A new session for `email` on this device: a random token in an httpOnly cookie (the database keeps its SHA-256,

@@ -1,6 +1,7 @@
 import { BOXES, MAIL_DOMAIN } from "@/content/mail";
 import { adminEmail, requireAdmin } from "@/lib/admin/auth";
 import { mailKeys, ownerEmail } from "@/lib/shop/config";
+import { DAYS, GROUPS } from "@/lib/shop/audience";
 import { listStats } from "@/lib/shop/drops";
 import { makerNotes } from "@/lib/shop/maker";
 import { Badge, Card, Empty, Group, Missing, Page, Row, Section, Tabs, ago, dt } from "../../ui/ui";
@@ -23,12 +24,13 @@ export default async function Mail({ searchParams }: { searchParams: Promise<Rec
 
   return (
     <>
-      <Page title="email" sub={`write from any address @${domain}, or tell the ${s.on} on the drop list about something new. replies to every address come to your inbox.`} />
+      <Page title="email" sub={`write from any address @${domain} to anyone, a group of customers, or the ${s.on} on the drop list. replies to every address come to your inbox.`} />
       {!keys ? <Missing>email isn&apos;t set up: add RESEND_API_KEY and SHOP_EMAIL_FROM in vercel.</Missing> : null}
       <Tabs active={tab} items={[{ key: "letter", label: "write", href: "?k=letter" }, { key: "drop", label: "new drop", href: "?k=drop", count: s.on }]} />
 
       <Section title={tab === "drop" ? "a new drop" : "write an email"}>
-        <Card><Compose kind={tab} domain={domain} presets={presets} listSize={s.on} me={adminEmail() ?? ownerEmail()} /></Card>
+        <Card><Compose kind={tab} domain={domain} presets={presets} listSize={s.on} me={adminEmail() ?? ownerEmail()}
+          groups={Object.entries(GROUPS).map(([key, x]) => ({ key, ...x }))} days={[...DAYS]} /></Card>
       </Section>
 
       <Section title="for the maker" aside="notes from the contact page, also emailed to you">

@@ -4,6 +4,7 @@ import { adminEmail, audit } from "@/lib/admin/auth";
 import { adminWrite, failedAction, ok, str } from "@/lib/admin/guard";
 import { validEmail } from "@/lib/shop/account";
 import { ownerEmail } from "@/lib/shop/config";
+import { GROUPS, audience, type Group } from "@/lib/shop/audience";
 import { everyone, logSend, sendDrop, sendLetter } from "@/lib/shop/drops";
 
 export const dynamic = "force-dynamic";
@@ -12,13 +13,22 @@ export const maxDuration = 60;
 /**
  * Email from the admin, by `action`:
  *   drop {subject, body, link?, test?}                       a new drop to everyone on the list (test: only to you), from drops@
- *   letter {local, name, to, subject, body, link?, signoff, test?}   an email of your own from name@, to up to 50 people
+ *   letter {local, name, group, days, to, subject, body, link?, signoff, test?}   an email of your own from name@, to a group
+ *                                                (worked out now, from the tables) and/or the addresses typed in `to`
+ *   count {group, days, to}                      how many that would reach, a few of them, and who's left out
  * `to` is addresses split by commas, spaces or lines. Each person gets their own copy: nobody sees anyone else.
  */
 export async function POST(req: Request) {
   const g = await adminWrite(req, 60_000);
   if ("fail" in g) return g.fail;
   const b = g.body;
+  const group = (typeof b.group === "string" && b.group in GROUPS ? b.group : "typed") as Group;
+  const days = Number(b.days) || 30;
+  if (b.action === "count") {
+    const a = await audience(group, days, str(b.to, 6000)).catch(() => null);
+    if (!a) return ok({ error: "couldn't count: the database didn't answer" }, 502);
+    return ok({ count: a.list.length, sample: a.list.slice(0, 4), leftOut: a.leftOut, bad: a.bad.slice(0, 3) });
+  }
   const subject = str(b.subject, 150), body = typeof b.body === "string" ? b.body.replace(/\r\n/g, "\n").trim().slice(0, 20_000) : "";
   const rawLink = str(b.link, 500);
   const link = rawLink ? (/^https:\/\/[^\s"<>]+$/.test(rawLink) ? rawLink : null) : null;
@@ -46,16 +56,17 @@ export async function POST(req: Request) {
       if (!/^[a-z0-9](?:[a-z0-9._-]{0,38}[a-z0-9])?$/.test(local)) return ok({ error: "the part before @: letters, numbers, dots, dashes", field: "local" }, 400);
       const name = str(b.name, 60).replace(/["<>\r\n]/g, "") || "sahn";
       const signoff = (typeof b.signoff === "string" ? b.signoff.trim().slice(0, 200) : "") || name;
-      const to = [...new Set(str(b.to, 6000).toLowerCase().split(/[\s,;]+/).filter(Boolean))];
-      const bad = to.filter((e) => !validEmail(e));
-      if (!test && !to.length) return ok({ error: "who it goes to", field: "to" }, 400);
-      if (bad.length) return ok({ error: `not an email: ${bad.slice(0, 3).join(", ")}`, field: "to" }, 400);
-      if (to.length > 50) return ok({ error: "50 people at most: for everyone, send a drop", field: "to" }, 400);
+      const a = await audience(group, days, str(b.to, 6000));
+      const to = a.list;
+      if (a.bad.length) return ok({ error: `not an email: ${a.bad.slice(0, 3).join(", ")}`, field: "to" }, 400);
+      if (!test && !to.length) return ok({ error: group === "typed" ? "who it goes to" : "nobody is in that group right now", field: "to" }, 400);
+      if (group === "typed" && to.length > 50) return ok({ error: "50 typed addresses at most: pick a group for more", field: "to" }, 400);
+      if (to.length > 5000) return ok({ error: "more than 5,000 people: send a drop instead" }, 400);
       const list = test ? [me!] : to;
-      const r = await sendLetter(local, name, list, test ? `[test] ${subject}` : subject, body, link, signoff, idem);
+      const r = await sendLetter(local, name, list, test ? `[test] ${subject}` : subject, body, link, signoff, idem, a.bulk);
       if (!test) {
         await logSend("letter", r.from, to, subject, body, link, r.sent, r.failed, g.admin.email);
-        await audit(g.admin.email, "mail.letter", null, { from: r.from, to: to.length, subject, sent: r.sent, failed: r.failed }, g.ip);
+        await audit(g.admin.email, "mail.letter", null, { from: r.from, group, days: GROUPS[group].days ? a.days : null, to: to.length, subject, sent: r.sent, failed: r.failed }, g.ip);
       }
       if (!r.sent) return ok({ error: "resend didn't take it: see the logs in vercel" }, 502);
       return ok({ message: test ? `test sent to ${me}` : `sent to ${r.sent}${r.failed ? `, ${r.failed} failed` : ""}` });

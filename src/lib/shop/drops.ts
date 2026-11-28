@@ -26,6 +26,8 @@ const db = async (text: string, params: (string | number | null)[] = []) => {
   await (ready ??= ensure(SCHEMA).catch((e) => { ready = null; throw e; }));
   return query(text, params);
 };
+/** who turned drop emails off (they're left out of every group email but news about their own order) */
+export const turnedOff = async () => new Set((await db("SELECT email FROM subscribers WHERE unsubscribed_at IS NOT NULL")).map((r) => r[0] ?? ""));
 const site = () => (process.env.SHOP_SITE_URL?.trim() || SITE_URL).replace(/\/$/, "");
 
 /**
@@ -71,13 +73,13 @@ export async function listStats() {
 }
 
 /** the body as paragraphs, the optional button, the sign-off and, for a drop, the way off */
-function render(body: string, link: string | null, signoff: string, off: string | null) {
-  const text = `${body}\n\n${link ? `${link}\n\n` : ""}${signoff}${off ? `\n\n—\nyou asked to hear about new drops. off with one tap: ${off}` : ""}`;
+function render(body: string, link: string | null, signoff: string, off: string | null, why = "you asked to hear about new drops.") {
+  const text = `${body}\n\n${link ? `${link}\n\n` : ""}${signoff}${off ? `\n\n—\n${why} off with one tap: ${off}` : ""}`;
   const html = `<div style="font-family:Helvetica,Arial,sans-serif;font-size:16px;line-height:1.5;color:#111;max-width:520px">
     ${body.split("\n\n").map((p) => `<p>${esc(p).replace(/\n/g, "<br>")}</p>`).join("")}
     ${link ? `<p><a href="${esc(link)}" style="display:inline-block;background:#111;color:#fff;padding:12px 18px;text-decoration:none;font-weight:600">see it →</a></p>` : ""}
     <p style="font-weight:700;letter-spacing:-0.02em">${esc(signoff).replace(/\n/g, "<br>")}</p>
-    ${off ? `<p style="font-size:12px;color:#777;border-top:1px solid #ddd;padding-top:10px">you asked to hear about new drops. <a href="${esc(off)}" style="color:#777">stop these emails</a>.</p>` : ""}</div>`;
+    ${off ? `<p style="font-size:12px;color:#777;border-top:1px solid #ddd;padding-top:10px">${esc(why)} <a href="${esc(off)}" style="color:#777">stop these emails</a>.</p>` : ""}</div>`;
   return { text, html };
 }
 
@@ -109,9 +111,15 @@ export async function sendDrop(emails: string[], subject: string, body: string, 
 }
 
 /** an email the admin wrote, from any name@ on the domain, to each person on its own (nobody sees the others) */
-export async function sendLetter(local: string, name: string, emails: string[], subject: string, body: string, link: string | null, signoff: string, key: string) {
+export async function sendLetter(local: string, name: string, emails: string[], subject: string, body: string, link: string | null, signoff: string, key: string, bulk = false) {
   const s = sender(local, name);
-  return { ...(await batch(s.k.key, emails.map((to) => ({ from: s.from, to: [to], subject, reply_to: s.address, ...render(body, link, signoff, null) })), key)), from: s.from };
+  return {
+    ...(await batch(s.k.key, emails.map((to) => ({
+      from: s.from, to: [to], subject, reply_to: s.address, ...render(body, link, signoff, bulk ? offLink(to) : null, bulk ? "you're getting this as a sahn customer." : undefined),
+      ...(bulk ? { headers: { "List-Unsubscribe": `<${oneTap(to)}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } } : {}),
+    })), key)),
+    from: s.from,
+  };
 }
 
 /** everyone on the list now */

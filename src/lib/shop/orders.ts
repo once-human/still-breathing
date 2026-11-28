@@ -108,6 +108,8 @@ const db = async (text: string, params: (string | number | null)[] = []) => {
   })().catch((e) => { ready = null; throw e; }));
   return query(text, params);
 };
+/** read-only questions across orders (the admin's email groups) */
+export const ordersRead = (text: string, params: (string | number | null)[] = []) => db(text, params);
 /** the sync job keeps watching an order while it's open */
 const watch = (id: string, on: boolean) => db("UPDATE orders SET open = $2::boolean WHERE id = $1", [id, String(on)]);
 
