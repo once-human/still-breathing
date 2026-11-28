@@ -40,7 +40,8 @@ export const mailKeys = () => {
   const key = env("RESEND_API_KEY"), from = env("SHOP_EMAIL_FROM");
   if (!key || !from) return null;
   const domain = (from.match(/<([^>]+)>/)?.[1] ?? from).split("@")[1]?.trim().toLowerCase() || "sahn.in";
-  return { key, from, domain };
+  // reading mail that came in needs a full-access key; the sending key stays sending-only when RESEND_INBOX_KEY is set
+  return { key, from, domain, readKey: env("RESEND_INBOX_KEY") ?? key };
 };
 
 /** signs order links and authorises the sync job; at least 32 characters */

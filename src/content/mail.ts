@@ -3,8 +3,8 @@
  * the new-drop emails (kept apart from order mail, so a spam mark on one never hurts the other), security for sign-in
  * codes and anything about a profile's safety, privacy because the DPDP Act wants a named place for data requests,
  * and direct, straight to the top (the person who started sahn, however many people work on it), for what nobody
- * else has put right. Every address goes to the same inbox: sahn.in's mail is forwarded by Cloudflare Email Routing (a catch-all),
- * and sent through Resend from the domain it has verified.
+ * else has put right. Mail to any of them comes in through Resend (sahn.in's MX), lands in the admin's email inbox and
+ * is copied to the owner; it goes out through Resend from the domain it has verified.
  */
 export const MAIL_DOMAIN = "sahn.in";
 

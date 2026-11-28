@@ -121,7 +121,7 @@ export async function receive(emailId: string) {
   const k = mailKeys();
   if (!k) throw new ShopError("email not set up", 503);
   if (!/^[0-9a-f-]{20,64}$/i.test(emailId)) return false;
-  const res = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, { headers: { Authorization: `Bearer ${k.key}` }, cache: "no-store", signal: AbortSignal.timeout(15000) });
+  const res = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, { headers: { Authorization: `Bearer ${k.readKey}` }, cache: "no-store", signal: AbortSignal.timeout(15000) });
   if (res.status === 404 || res.status === 422) return false;
   if (!res.ok) throw new ShopError(`resend receiving ${res.status}: ${(await res.text().catch(() => "")).slice(0, 200)}`);
   const e = (await res.json()) as {
@@ -239,7 +239,7 @@ export async function reply(id: string, body: string, who: string, local?: strin
 export async function attachmentLink(resendId: string, attachmentId: string) {
   const k = mailKeys();
   if (!k) return null;
-  const res = await fetch(`https://api.resend.com/emails/receiving/${resendId}/attachments/${attachmentId}`, { headers: { Authorization: `Bearer ${k.key}` }, cache: "no-store" }).catch(() => null);
+  const res = await fetch(`https://api.resend.com/emails/receiving/${resendId}/attachments/${attachmentId}`, { headers: { Authorization: `Bearer ${k.readKey}` }, cache: "no-store" }).catch(() => null);
   if (!res?.ok) return null;
   const j = (await res.json().catch(() => ({}))) as { download_url?: string };
   return j.download_url ?? null;
