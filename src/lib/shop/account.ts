@@ -1,5 +1,7 @@
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { after } from "next/server";
+import { cache } from "react";
 import { accountsOpen, shopSecret } from "./config";
 import { sendEmail } from "./email";
 import { ShopError } from "./errors";
@@ -8,11 +10,14 @@ import type { Details } from "./india";
 
 /**
  * Accounts with no password: an email gets a 6-digit code (10 minutes, 5 tries, at most 3 codes per 15 minutes),
- * the code opens a 30-day session. The session is a random token in an httpOnly cookie; the store keeps only its
+ * the code opens a session that lasts as long as the buyer keeps coming back (90 days away ends it). The session is a random token in an httpOnly cookie; the store keeps only its
  * hash. An account is its email: every order placed with that email is in it, whenever it was placed.
  */
 const COOKIE = process.env.NODE_ENV === "production" ? "__Host-sahn_session" : "sahn_session";
-const SESSION_DAYS = 30;
+/** days away before a session ends; each visit starts the count again (at most one write a day) */
+const SESSION_DAYS = 90;
+/** the cookie outlives any gap; the store decides when the session is over */
+const COOKIE_DAYS = 400;
 
 export type Address = Omit<Details, "email"> & { id: string };
 export type Account = { email: string; name: string; phone: string; addresses: Address[]; createdAt: string };
@@ -33,8 +38,8 @@ export async function sendCode(email: string, from = "") {
   await sendEmail(email, `${code} is your sahn sign-in code`, `your code is ${code}\n\nasked at ${new Date().toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}${from ? ` from ${from}` : ""}. it works for 10 minutes. if you didn't ask for it, ignore this email: nothing happens without it.\n\nsahn`, `otp-${email}-${sha(code).slice(0, 12)}`);
 }
 
-/** the code checked in constant time; right → a new session cookie */
-export async function verifyCode(email: string, code: string) {
+/** the code checked in constant time; right → a new session cookie, and whether the account is new (no name yet) */
+export async function verifyCode(email: string, code: string): Promise<false | { fresh: boolean }> {
   if (!accountsOpen()) throw new ShopError("accounts not set up", 503);
   const rec = await getJson<{ hash: string; tries: number }>(`otp:${email}`);
   if (!rec || rec.tries >= 5 || !/^\d{6}$/.test(code)) return false;
@@ -48,18 +53,25 @@ export async function verifyCode(email: string, code: string) {
   await kv("DEL", `otp:${email}`);
   const token = randomBytes(32).toString("base64url");
   await kv("SET", `sess:${sha(token)}`, email, "EX", SESSION_DAYS * 86400);
-  if (!(await getJson<Account>(`user:${email}`))) await setJson(`user:${email}`, { email, name: "", phone: "", addresses: [], createdAt: new Date().toISOString() } satisfies Account, 3650);
-  (await cookies()).set(COOKIE, token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: SESSION_DAYS * 86400 });
-  return true;
+  const had = await getJson<Account>(`user:${email}`);
+  if (!had) await setJson(`user:${email}`, { email, name: "", phone: "", addresses: [], createdAt: new Date().toISOString() } satisfies Account, 3650);
+  (await cookies()).set(COOKIE, token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: COOKIE_DAYS * 86400 });
+  return { fresh: !had?.name };
 }
 
-/** the signed-in email, or null */
-export async function sessionEmail(): Promise<string | null> {
+/** the signed-in email, or null (once per request) */
+export const sessionEmail = cache(async function sessionEmail(): Promise<string | null> {
   if (!accountsOpen()) return null;
   const t = (await cookies()).get(COOKIE)?.value;
   if (!t || t.length > 100) return null;
-  return (await kv<string | null>("GET", `sess:${sha(t)}`).catch(() => null)) ?? null;
-}
+  const key = `sess:${sha(t)}`;
+  const r = await query(`SELECT value, (expires_at < now() + interval '${SESSION_DAYS - 1} days')::text FROM kv WHERE key = $1 AND (expires_at IS NULL OR expires_at > now())`, [key]).catch(() => null);
+  const email = r?.[0]?.[0];
+  if (!email) return null;
+  // back again: the 90 days start over (once a day at most, and never holding the page up)
+  if (r[0][1] === "true") after(() => query(`UPDATE kv SET expires_at = now() + interval '${SESSION_DAYS} days' WHERE key = $1`, [key]).catch(() => {}));
+  return email;
+});
 
 export async function signOut() {
   const jar = await cookies();

@@ -1,4 +1,4 @@
-import { accountOrders, loadAccount, saveAccount, sendCode, sessionEmail, signOut, validEmail, verifyCode } from "@/lib/shop/account";
+import { accountOrders, deleteAccount, loadAccount, saveAccount, sendCode, sessionEmail, signOut, signOutEverywhere, validEmail, verifyCode } from "@/lib/shop/account";
 import { askedFrom } from "@/lib/visits/ua";
 import { accountsOpen } from "@/lib/shop/config";
 import { failed, guardWrite, json, limited } from "@/lib/shop/guard";
@@ -10,10 +10,11 @@ export const dynamic = "force-dynamic";
 /**
  * The account, one route, by `action`:
  *   code {email}           email a 6-digit sign-in code (always "sent", so it can't tell which emails have accounts)
- *   verify {email, code}   the code → a 30-day session cookie
+ *   verify {email, code}   the code → a session cookie (kept while they keep coming back); {fresh} if it has no name yet
  *   signout
  *   profile {name, phone}  (signed in)
- *   add-address {details}, remove-address {id}  (signed in)
+ *   add-address {details}, remove-address {id}, default-address {id}  (signed in)
+ *   signout-all, delete  (signed in)
  */
 export async function POST(req: Request) {
   if (!accountsOpen()) return json({ error: "accounts aren't open right now" }, 503);
@@ -32,8 +33,9 @@ export async function POST(req: Request) {
       case "verify": {
         const code = typeof b.code === "string" ? b.code.replace(/\D/g, "") : "";
         if (!validEmail(email)) return json({ error: "put your email in again" }, 400);
-        if (!(await verifyCode(email, code))) return json({ error: "that code isn't right, or it's run out. ask for a new one", field: "code" }, 400);
-        return json({ ok: true });
+        const v = await verifyCode(email, code);
+        if (!v) return json({ error: "that code isn't right, or it's run out. ask for a new one", field: "code" }, 400);
+        return json({ ok: true, fresh: v.fresh });
       }
       case "signout":
         await signOut();
@@ -63,6 +65,21 @@ export async function POST(req: Request) {
       }
       case "remove-address":
         await saveAccount({ ...a, addresses: a.addresses.filter((x) => x.id !== b.id) });
+        return json({ ok: true });
+      case "default-address": {
+        const x = a.addresses.find((y) => y.id === b.id);
+        if (!x) return json({ error: "that address is gone: refresh the page" }, 400);
+        await saveAccount({ ...a, addresses: [x, ...a.addresses.filter((y) => y.id !== x.id)] });
+        return json({ ok: true });
+      }
+      case "signout-all":
+        await signOutEverywhere(me);
+        await signOut();
+        return json({ ok: true });
+      case "delete":
+        // the orders themselves stay (they're still on their way, and the shop has to keep its records); the account goes
+        await deleteAccount(me);
+        await signOut();
         return json({ ok: true });
       case "orders":
         return json({ ids: await accountOrders(me) });
