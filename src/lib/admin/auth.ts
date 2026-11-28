@@ -55,14 +55,19 @@ const clock = () => new Date().toLocaleString("en-IN", { hour: "numeric", minute
 
 /**
  * Wrong keys, counted (only wrong ones: signing in right never uses one up). Any one connection gets 3 in 15 minutes
- * and 5 a day; every connection together gets 10 a day, and past that the sign-in is shut for everyone until 5:30 am
- * (the day's turn in UTC), with an email to ADMIN_EMAIL. The key is 16+ random characters, so even with no limit at all it
- * couldn't be guessed; the limits are so nobody gets to try.
+ * and 10 a day; every connection together gets 25 a day, and past that the sign-in is shut for everyone until 5:30 am
+ * (the day's turn in UTC), with an email to ADMIN_EMAIL. The key is 16+ random characters, so even with no limit at
+ * all it couldn't be guessed; the limits are so nobody gets to try.
+ *
+ * Locked out yourself? Two ways to clear every count at once: set ADMIN_UNLOCK in Vercel to anything new and redeploy,
+ * or have UNLOCK below bumped by one and pushed. Either changes the counters' names, so they all start from zero.
  */
+const UNLOCK = 1;
+const lock = () => `${UNLOCK}${env("ADMIN_UNLOCK") ? `.${sha(env("ADMIN_UNLOCK")!).slice(0, 8)}` : ""}`;
 const WRONG: [scope: (ip: string) => string, max: number, windowMs: number][] = [
-  [(ip) => `admin-wrong:${ip}:15m`, 3, 900_000],
-  [(ip) => `admin-wrong:${ip}:day`, 5, 86_400_000],
-  [() => "admin-wrong:all:day", 10, 86_400_000],
+  [(ip) => `admin-wrong:${lock()}:${ip}:15m`, 3, 900_000],
+  [(ip) => `admin-wrong:${lock()}:${ip}:day`, 10, 86_400_000],
+  [() => `admin-wrong:${lock()}:all:day`, 25, 86_400_000],
 ];
 /** the same counter keys guard.ts's limited() writes, read without adding to them */
 const used = async (key: string, windowMs: number) => Number((await kv<string | null>("GET", `rl:${key}:${Math.floor(Date.now() / windowMs)}`).catch(() => null)) ?? 0);
