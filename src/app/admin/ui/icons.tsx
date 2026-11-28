@@ -45,6 +45,8 @@ const P: Record<string, React.ReactNode> = {
   chart: <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />,
   bot: <><rect x="5" y="8" width="14" height="11" rx="3" /><path d="M12 4v4M9.5 13v.1M14.5 13v.1" /></>,
   return: <><path d="M9 5 4.5 9.5 9 14" /><path d="M4.5 9.5H15a5 5 0 0 1 0 10h-3" /></>,
+  eye: <><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></>,
+  eyeOff: <><path d="M10.6 5.1A9.8 9.8 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-2.7 3.6M6.6 6.6C3.7 8.4 2 12 2 12s3.6 7 10 7a9.6 9.6 0 0 0 5.4-1.6" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2M3.5 3.5l17 17" /></>,
   dot: <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />,
 };
 

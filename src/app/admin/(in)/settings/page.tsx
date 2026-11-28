@@ -43,7 +43,7 @@ export default async function SettingsPage() {
       <div className="grid gap-x-6 lg:grid-cols-2">
         <Section title="emails" aside="set in vercel">
           <Group>
-            <Field label="admin sign-in goes to"><Fixed>{adminEmail() ?? "–"}</Fixed></Field>
+            <Field label="each admin sign-in is emailed to"><Fixed>{adminEmail() ?? "nobody (add ADMIN_EMAIL)"}</Fixed></Field>
             <Field label="orders are sent from"><Fixed>{process.env.SHOP_EMAIL_FROM?.trim() || "not set"}</Fixed></Field>
             <Field label="new orders and alerts go to"><Fixed>{process.env.SHOP_OWNER_EMAIL?.trim() || "not set"}</Fixed></Field>
             <Field label="buyers reply to"><Fixed>{OPERATOR.email ?? "–"}</Fixed></Field>

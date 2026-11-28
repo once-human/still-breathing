@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 /** each action in plain words, with its mark */
 const SAY: Record<string, [string, IconName]> = {
-  login: ["signed in", "key"], "login.link": ["asked for a sign-in link", "mail"], "login.refused": ["a sign-in link was refused", "shield"],
+  login: ["signed in", "key"], "login.link": ["asked for a sign-in link", "mail"], "login.refused": ["a sign-in was refused", "shield"],
   logout: ["signed out", "signout"], "logout.all": ["signed out everywhere", "signout"],
   "order.note": ["noted on an order", "note"], "order.sync": ["asked qikink about an order", "refresh"], "order.fees": ["fetched an order's fee", "card"],
   "order.send-to-print": ["sent an order to print", "print"], "order.cancel": ["cancelled an order", "x"], "order.refund": ["refunded an order", "return"],
