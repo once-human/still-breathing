@@ -190,7 +190,7 @@ export const POLICIES: Record<PolicySlug, Policy> = {
         heading: "what we use it for",
         body: [
           "making and sending your order, emailing you about it (confirmation, dispatch, tracking, delivery) and the sign-in codes you ask for, answering you, and keeping the records indian tax law requires.",
-          `we email you about your orders (from ${box("orders")}), sign-in codes (from ${box("signin")}) and changes to your profile's safety (from ${box("security")}). emails about new drops come from ${box("drops")}, unless you untick the box at checkout or when you make a profile, and each one has a one-tap way off.`,
+          `we email you about your orders (from ${box("orders")}), and sign-in codes and changes to your profile's safety (from ${box("security")}). emails about new drops come from ${box("drops")}, unless you untick the box at checkout or when you make a profile, and each one has a one-tap way off.`,
         ],
       },
       {
@@ -218,11 +218,11 @@ export const POLICIES: Record<PolicySlug, Policy> = {
       {
         heading: "write to us",
         body: [
-          `${mail()}: a size, a question, anything. we answer within 2 working days, usually sooner.`,
+          `${mail()}: a size, a question, press or stockists, anything. we answer within 2 working days, usually sooner.`,
           `${box("orders")}: about an order (put its number in), a delivery, a fault or a return.`,
           `${box("privacy")}: what we keep about you, a copy of it, or erasing it.`,
-          `${box("collab")}: press, stockists, working together.`,
           `${box("security")}: something about your profile that wasn't you.`,
+          `${box("maker")}: if writing to us hasn't put something right, or it can't wait, this goes straight to the person who makes sahn. there's a form for it on the contact page too.`,
           ...(OPERATOR.phone ? [`phone: ${OPERATOR.phone}, 11 am – 7 pm, monday to saturday.`] : []),
         ],
       },

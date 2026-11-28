@@ -63,7 +63,7 @@ export async function sendCode(email: string, from = "") {
     [email, codeHash(email, code)],
   );
   if (Number(r[0]?.[0] ?? 9) > 3) return;
-  await sendEmail(email, `${code} is your sahn sign-in code`, `your code is ${code}\n\nasked at ${new Date().toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}${from ? ` from ${from}` : ""}. it works for 10 minutes. if you didn't ask for it, ignore this email: nothing happens without it.\n\nsahn`, `otp-${email}-${sha(code).slice(0, 12)}`, "signin");
+  await sendEmail(email, `${code} is your sahn sign-in code`, `your code is ${code}\n\nasked at ${new Date().toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}${from ? ` from ${from}` : ""}. it works for 10 minutes. if you didn't ask for it, ignore this email: nothing happens without it.\n\nsahn`, `otp-${email}-${sha(code).slice(0, 12)}`, "security");
 }
 
 /** the code checked in constant time (5 tries); right → a new session cookie, and whether the account is new (no name yet) */

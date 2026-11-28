@@ -2,6 +2,7 @@ import { BOXES, MAIL_DOMAIN } from "@/content/mail";
 import { adminEmail, requireAdmin } from "@/lib/admin/auth";
 import { mailKeys, ownerEmail } from "@/lib/shop/config";
 import { listStats } from "@/lib/shop/drops";
+import { makerNotes } from "@/lib/shop/maker";
 import { Badge, Card, Empty, Group, Missing, Page, Row, Section, Tabs, ago, dt } from "../../ui/ui";
 import { Compose } from "./Compose";
 
@@ -17,8 +18,8 @@ export default async function Mail({ searchParams }: { searchParams: Promise<Rec
   const tab = sp.k === "drop" ? "drop" : "letter";
   const keys = mailKeys();
   const domain = keys?.domain ?? MAIL_DOMAIN;
-  const s = await listStats().catch(() => ({ on: 0, off: 0, recent: [], sends: [] }));
-  const presets = Object.entries(BOXES).filter(([k]) => k !== "signin").map(([local, b]) => ({ local, name: b.name, use: b.use }));
+  const [s, notes] = await Promise.all([listStats().catch(() => ({ on: 0, off: 0, recent: [], sends: [] })), makerNotes(30)]);
+  const presets = Object.entries(BOXES).map(([local, b]) => ({ local, name: b.name, use: b.use }));
 
   return (
     <>
@@ -28,6 +29,22 @@ export default async function Mail({ searchParams }: { searchParams: Promise<Rec
 
       <Section title={tab === "drop" ? "a new drop" : "write an email"}>
         <Card><Compose kind={tab} domain={domain} presets={presets} listSize={s.on} me={adminEmail() ?? ownerEmail()} /></Card>
+      </Section>
+
+      <Section title="for the maker" aside="notes from the contact page, also emailed to you">
+        {notes.length ? (
+          <Group>
+            {notes.map((n) => (
+              <Row key={n.id} icon="note" tone={n.mailed ? "quiet" : "warn"} href={`/admin/people/${encodeURIComponent(n.email)}`}
+                title={<span>{n.name}{n.order ? <span className="text-quiet"> · #{n.order}</span> : null}</span>}
+                sub={<span className="line-clamp-3 whitespace-pre-line">{n.body}</span>}
+                right={<span className="grid justify-items-end gap-1 text-[13px] text-quiet">
+                  <span>{n.email}</span>
+                  <span title={dt(n.at)}>{ago(n.at)}{n.mailed ? "" : " · email didn't go"}</span>
+                </span>} />
+            ))}
+          </Group>
+        ) : <Empty icon="note" title="no notes to the maker" sub="the form at /contact sends them here and to your inbox, under “for the maker: …”." />}
       </Section>
 
       <Section title="sent" aside={s.sends.length ? `the last ${s.sends.length}` : undefined}>

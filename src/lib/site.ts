@@ -32,7 +32,7 @@ export const HELP_LINKS = [
   { href: "/help#orders", label: "orders" },
   { href: "/help#shipping", label: "shipping" },
   { href: "/help#care", label: "care" },
-  ...(POLICIES_READY ? [{ href: "/help#contact", label: "contact" }] : []),
+  { href: "/contact", label: "contact" },
 ];
 
 /** Open Graph pictures, made from the studio renders by scripts/og.mjs */

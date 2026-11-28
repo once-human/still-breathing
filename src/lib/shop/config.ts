@@ -33,7 +33,7 @@ export const kvKeys = () => {
 };
 
 /**
- * Resend's key and the address SHOP_EMAIL_FROM names; every other sender (orders@, signin@, drops@, …) is on that
+ * Resend's key and the address SHOP_EMAIL_FROM names; every other sender (orders@, security@, drops@, …) is on that
  * address's domain, the one Resend has verified.
  */
 export const mailKeys = () => {

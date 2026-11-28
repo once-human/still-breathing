@@ -1,20 +1,19 @@
 /**
- * The shop's addresses on sahn.in, one for each kind of email, so a reader knows from the sender what an email is
- * before opening it, and a reply lands where it belongs. The ones people write to (hello, orders, drops) read like a
- * small label talking; the ones that guard things (signin, security, privacy) read like a shop that takes care of
- * them. Every address goes to the same inbox: sahn.in's mail is forwarded by Cloudflare Email Routing (a catch-all),
+ * The shop's addresses on sahn.in, each one there for a reason: hello for anything, orders for order mail, drops for
+ * the new-drop emails (kept apart from order mail, so a spam mark on one never hurts the other), security for sign-in
+ * codes and anything about a profile's safety, privacy because the DPDP Act wants a named place for data requests,
+ * and maker, the one person who makes sahn, for what nobody else has put right. Every address goes to the same inbox: sahn.in's mail is forwarded by Cloudflare Email Routing (a catch-all),
  * and sent through Resend from the domain it has verified.
  */
 export const MAIL_DOMAIN = "sahn.in";
 
 export const BOXES = {
-  hello: { name: "sahn", use: "anything: a size, a question, a hello" },
+  hello: { name: "sahn", use: "anything: a size, a question, press, stockists" },
   orders: { name: "sahn orders", use: "order emails, and help with an order" },
   drops: { name: "sahn drops", use: "new drop emails, for those who asked" },
-  signin: { name: "sahn sign-in", use: "sign-in codes" },
-  security: { name: "sahn security", use: "a sign-in, a password or a device changed; admin alerts" },
+  security: { name: "sahn security", use: "sign-in codes, a password or device changed, admin alerts" },
   privacy: { name: "sahn privacy", use: "your data: a copy, a fix, or erasing it" },
-  collab: { name: "sahn collab", use: "press, stockists, working together" },
+  maker: { name: "sahn, the maker", use: "straight to the person who makes sahn" },
 } as const;
 
 export type Box = keyof typeof BOXES;

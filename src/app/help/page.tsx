@@ -4,6 +4,7 @@ import { Label } from "@/components/Label";
 import { THE_TEE } from "@/content/tee";
 import { CURRENT } from "@/content/lineups";
 import { SHOP } from "@/content/shop";
+import { box } from "@/content/mail";
 import { OPERATOR, POLICIES_READY } from "@/content/policies";
 import { priceLine } from "@/lib/live";
 import { shopOpen } from "@/lib/shop/config";
@@ -43,7 +44,7 @@ const parts = (each: string): Part[] => [
     id: "contact", title: "contact",
     body: (
       <>
-        <p>write to <a href={`mailto:${OPERATOR.email}`}>{OPERATOR.email}</a>{OPERATOR.phone ? <>, or call {OPERATOR.phone}</> : null}. more on the <Link href="/policies/contact">contact page</Link>.</p>
+        <p>write to <a href={`mailto:${OPERATOR.email}`}>{OPERATOR.email}</a>, or about an order to <a href={`mailto:${box("orders")}`}>{box("orders")}</a>{OPERATOR.phone ? <>, or call {OPERATOR.phone}</> : null}. every address, and a way to write straight to the maker when nothing else has worked, on the <Link href="/contact">contact page</Link>.</p>
         <p>returns and refunds: <Link href="/policies/refunds">how they work</Link>.</p>
       </>
     ),

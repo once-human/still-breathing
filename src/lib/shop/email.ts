@@ -11,8 +11,8 @@ export function sender(local: Box | string, name?: string) {
 }
 
 /**
- * One email through Resend, from the box it belongs to (orders@ for an order, signin@ for a code, security@ for a
- * notice). A reply goes back to that box, which lands in the shop's inbox like every sahn.in address. Each send carries
+ * One email through Resend, from the box it belongs to (orders@ for an order, security@ for a code
+ * or a notice). A reply goes back to that box, which lands in the shop's inbox like every sahn.in address. Each send carries
  * an idempotency key, so a retried job can't send the same email twice.
  */
 export async function sendEmail(to: string, subject: string, text: string, idempotencyKey: string, from: Box = "orders", replyTo?: string | null) {

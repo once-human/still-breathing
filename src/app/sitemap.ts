@@ -14,6 +14,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     at("/size-guide", 0.5),
     at("/made", 0.5),
     at("/help", 0.4),
+    at("/contact", 0.4),
     ...POLICY_LINKS.map((p) => at(p.href, 0.2)),
   ];
 }
