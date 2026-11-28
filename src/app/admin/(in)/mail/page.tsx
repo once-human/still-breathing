@@ -53,7 +53,7 @@ export default async function Mail({ searchParams }: { searchParams: Promise<Rec
               <Row key={r.email} href={`/admin/people/${encodeURIComponent(r.email)}`} title={r.email} sub={`joined ${SOURCE[r.source] ?? r.source}`} right={<span className="text-[13px] text-quiet" title={dt(r.at)}>{ago(r.at)}</span>} />
             ))}
           </Group>
-        ) : <Empty icon="people" title="nobody yet" sub="people join with the box at checkout, when they make a profile, or in their profile. it's off until they tick it." />}
+        ) : <Empty icon="people" title="nobody yet" sub="people join with the box at checkout, when they make a profile, or in their profile. the box starts ticked; anyone can untick it, or leave with one tap from any email." />}
       </Section>
 
       <Section title="the addresses" aside="every one forwards to your inbox">

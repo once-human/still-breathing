@@ -229,7 +229,7 @@ function Code({ busy, bad, onCode }: { busy: boolean; bad: boolean; onCode: (cod
 /** a new profile's one question: what to call you, and a mobile for the courier (both can wait) */
 export function Hello({ next }: { next: string | null }) {
   const router = useRouter();
-  const [drops, setDrops] = useState(false);
+  const [drops, setDrops] = useState(true);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
@@ -382,7 +382,7 @@ export function SizePick({ size }: { size: Size | null }) {
   );
 }
 
-/** emails about new drops: off until they turn it on */
+/** emails about new drops: on when they left the box ticked at checkout or on joining; off whenever they like */
 export function Drops({ on }: { on: boolean }) {
   const router = useRouter();
   const [v, setV] = useState(on);

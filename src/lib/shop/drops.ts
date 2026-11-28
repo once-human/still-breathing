@@ -28,9 +28,15 @@ const db = async (text: string, params: (string | number | null)[] = []) => {
 };
 const site = () => (process.env.SHOP_SITE_URL?.trim() || SITE_URL).replace(/\/$/, "");
 
-/** on the list (again), from `source`: "checkout", "welcome", "profile" */
+/**
+ * On the list, from `source`: "checkout", "welcome", "profile", "back on". The checkout and welcome boxes start
+ * ticked, so they only add someone who was never on it: a person who once took themselves off stays off until they
+ * turn it back on themselves (the profile switch, or "back on" from the unsubscribe page).
+ */
 export const subscribe = (email: string, source: string) =>
-  db(`INSERT INTO subscribers (email, source) VALUES ($1, $2)
+  source === "checkout" || source === "welcome"
+    ? db("INSERT INTO subscribers (email, source) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING", [email.toLowerCase(), source])
+    : db(`INSERT INTO subscribers (email, source) VALUES ($1, $2)
       ON CONFLICT (email) DO UPDATE SET source = $2, subscribed_at = now(), unsubscribed_at = NULL WHERE subscribers.unsubscribed_at IS NOT NULL`, [email.toLowerCase(), source]);
 export const unsubscribe = (email: string) => db("UPDATE subscribers SET unsubscribed_at = now() WHERE email = $1 AND unsubscribed_at IS NULL", [email.toLowerCase()]);
 export async function subscribed(email: string) {
