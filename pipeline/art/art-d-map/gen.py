@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Still Breathing / lineup 01 "again.." -- BENGALURU, design 04 "map"
+sahn / lineup 01 "again.." -- BENGALURU, design 04 "map"
 "the ground you stood on": a printmaker's top-down map of the NICE grounds at
 the Bangalore International Exhibition Centre, Madavara, on Tumakuru Road,
 drawn from real OpenStreetMap geometry (osm-site.json, cached Overpass extract).

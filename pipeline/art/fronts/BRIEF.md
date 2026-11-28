@@ -81,7 +81,7 @@ No Workflow tool, no second critic.
 
 ## Where things go
 
-Work in your own worktree of `once-human/still-breathing`. Everything goes in `pipeline/art/fronts/<shirt>/`:
+Work in your own worktree of `once-human/sahn`. Everything goes in `pipeline/art/fronts/<shirt>/`:
 
 - `BRAINSTORM.md`: write it first. At least 14 ideas, then the eight you picked and why.
 - `<NN>-<slug>/` per version:

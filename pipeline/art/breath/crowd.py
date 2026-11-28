@@ -45,7 +45,7 @@ OUT = A[0]; W = int(A[1]) if len(A) > 1 else 900; H = int(A[2]) if len(A) > 2 el
 SPP = int(A[3]) if len(A) > 3 else 24
 UNIQUE = int(A[4]) if len(A) > 4 else 70
 os.makedirs(OUT, exist_ok=True)
-ASSETS = os.environ.get("SB_ASSETS", os.path.expanduser("~/Documents/Projects/still-breathing-assets"))
+ASSETS = os.environ.get("SB_ASSETS", os.path.expanduser("~/Documents/Projects/sahn-assets"))
 CMU, PK = os.path.join(ASSETS, "cmu"), os.path.join(ASSETS, "mh-system", "pack")
 rng = random.Random(int(os.environ.get("SEED", 1213)))
 T_AIR, T_SKY, T_GROUND = 16.0, -24.0, 17.5
