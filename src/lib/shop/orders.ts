@@ -3,11 +3,11 @@ import { OPERATOR } from "@/content/policies";
 import { SHOP } from "@/content/shop";
 import { DESIGNS, type Design, type Size } from "@/content/tee";
 import { SITE_URL } from "@/lib/site";
-import { linkOrder, rememberAddress } from "./account";
+import { linkOrder, rememberAddress, unlinkOrder } from "./account";
 import { ownerEmail, shopSecret } from "./config";
 import { sendEmail } from "./email";
 import { ShopError } from "./errors";
-import { getJson, kv, once, query, setJson, withLock } from "./kv";
+import { ensure, kv, once, query, withLock } from "./kv";
 import { partnerStatus, sendToPrint, type ShipTo } from "./partner";
 import { prices } from "./products";
 import { createPayment, fetchPayment, fetchPayments, fetchRefund, refundPayment, type RzpPayment } from "./razorpay";
@@ -77,8 +77,39 @@ const released = (o: Order) => !!o.paidAt && Date.now() - Date.parse(o.paidAt) >
 export const refunded = (o: Order) => (o.refunds ?? []).filter((r) => r.status !== "failed").reduce((t, r) => t + r.amount, 0);
 const pendingRefund = (o: Order) => (o.refunds ?? []).some((r) => r.status === "pending");
 
-const OPEN = "orders:open";
-const key = (id: string) => `order:${id}`;
+/**
+ * Orders live in their own table in Neon. The columns anything is looked up or sorted by (email, stage, the Razorpay
+ * order, when it was placed and paid, whether the sync job still watches it) are real indexed columns; the whole
+ * order, with its lines, events, refunds and partner details, is a JSONB document beside them, so a new field never
+ * needs a migration. Saving writes both in one statement, so they can't disagree.
+ */
+const SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS orders (id text PRIMARY KEY, email text NOT NULL, stage text NOT NULL, total int NOT NULL,
+     rzp_order_id text UNIQUE, created_at timestamptz NOT NULL, paid_at timestamptz, updated_at timestamptz NOT NULL DEFAULT now(),
+     open boolean NOT NULL DEFAULT true, data jsonb NOT NULL)`,
+  "CREATE INDEX IF NOT EXISTS orders_email ON orders (email, created_at DESC)",
+  "CREATE INDEX IF NOT EXISTS orders_created ON orders (created_at DESC)",
+  "CREATE INDEX IF NOT EXISTS orders_stage ON orders (stage)",
+  "CREATE INDEX IF NOT EXISTS orders_open ON orders (created_at) WHERE open",
+];
+/** test orders kept before the table (JSON rows in kv) moved across once, each kv row deleted as it's written */
+const MOVE = `WITH moved AS (DELETE FROM kv WHERE key LIKE 'order:%' RETURNING value::jsonb AS v)
+  INSERT INTO orders (id, email, stage, total, rzp_order_id, created_at, paid_at, open, data)
+  SELECT v->>'id', lower(v->'contact'->>'email'), v->>'stage', (v->>'total')::int, v->>'rzpOrderId', (v->>'createdAt')::timestamptz, (v->>'paidAt')::timestamptz,
+    EXISTS (SELECT 1 FROM zset z WHERE z.key = 'orders:open' AND z.member = v->>'id'), v
+  FROM moved WHERE v->>'id' IS NOT NULL ON CONFLICT (id) DO NOTHING`;
+let ready: Promise<void> | null = null;
+const db = async (text: string, params: (string | number | null)[] = []) => {
+  await (ready ??= (async () => {
+    await ensure(SCHEMA);
+    await query(MOVE);
+    await query("DELETE FROM zset WHERE key = 'orders:open'").catch(() => {});
+    await query("DELETE FROM kv WHERE key LIKE 'rzp:%' AND key NOT LIKE 'rzp-%'").catch(() => {});
+  })().catch((e) => { ready = null; throw e; }));
+  return query(text, params);
+};
+/** the sync job keeps watching an order while it's open */
+const watch = (id: string, on: boolean) => db("UPDATE orders SET open = $2::boolean WHERE id = $1", [id, String(on)]);
 
 /** order numbers: S + yymmdd + 4 letters/digits (11 characters, the partner takes at most 15, letters and digits only) */
 const ALPHA = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -100,8 +131,17 @@ export const keyMatches = (id: string, k: string) => {
 };
 export const orderPath = (id: string) => `/order/${id}?k=${linkKey(id)}`;
 
-export const loadOrder = (id: string) => getJson<Order>(key(id));
-const save = (o: Order) => setJson(key(o.id), o, o.stage === "paying" ? 3 : 400);
+export async function loadOrder(id: string): Promise<Order | null> {
+  if (!validId(id)) return null;
+  const r = await db("SELECT data::text FROM orders WHERE id = $1", [id]);
+  return r[0]?.[0] ? (JSON.parse(r[0][0]) as Order) : null;
+}
+const save = (o: Order) =>
+  db(
+    `INSERT INTO orders (id, email, stage, total, rzp_order_id, created_at, paid_at, data) VALUES ($1, $2, $3, $4::int, $5, $6::timestamptz, $7::timestamptz, $8::jsonb)
+     ON CONFLICT (id) DO UPDATE SET email = $2, stage = $3, total = $4::int, rzp_order_id = $5, paid_at = $7::timestamptz, data = $8::jsonb, updated_at = now()`,
+    [o.id, o.contact.email.toLowerCase(), o.stage, o.total, o.rzpOrderId ?? null, o.createdAt, o.paidAt ?? null, JSON.stringify(o)],
+  );
 
 /** The buyer is about to pay: price the bag here (products.ts, the one price rule) and fix that amount on a Razorpay order. */
 export async function startOrder(bag: { design: Design; size: Size; quantity: number }[], contact: Order["contact"], ship: ShipTo) {
@@ -116,12 +156,13 @@ export async function startOrder(bag: { design: Design; size: Size; quantity: nu
   note(o, "placed", undefined, o.createdAt);
   await save(o);
   await linkOrder(contact.email, id);
-  await kv("SET", `rzp:${rzp.id}`, id, "EX", 400 * 86400);
-  await kv("ZADD", OPEN, Date.now(), id);
   return o;
 }
 
-export const orderForPayment = (rzpOrderId: string) => kv<string | null>("GET", `rzp:${rzpOrderId}`);
+export async function orderForPayment(rzpOrderId: string): Promise<string | null> {
+  const r = await db("SELECT id FROM orders WHERE rzp_order_id = $1", [rzpOrderId]);
+  return r[0]?.[0] ?? null;
+}
 
 const site = () => process.env.SHOP_SITE_URL?.replace(/\/$/, "") ?? SITE_URL;
 const shirt = (d: Design) => `${DESIGNS[d].no} ${DESIGNS[d].name}${DESIGNS[d].city ? ` ${DESIGNS[d].city}` : ""}`;
@@ -322,7 +363,7 @@ async function refundNow(o: Order, rupees: number, receipt: string, reason?: str
   const r: Refund = { id: ref.id, amount: ref.amount / 100, status: ref.status, at: now(), ...(ref.status === "processed" ? { doneAt: now() } : {}), ...(reason ? { reason } : {}) };
   (o.refunds ??= []).push(r);
   if (r.status === "processed") note(o, "refunded", rs(r.amount));
-  if (r.status === "pending") await kv("ZADD", OPEN, Date.now(), o.id);
+  if (r.status === "pending") await watch(o.id, true);
   return r;
 }
 
@@ -337,7 +378,7 @@ async function cancelNow(o: Order, who: "you" | "sahn", refund: boolean) {
   delete o.problem;
   note(o, "cancelled", who === "you" ? "by you" : "by sahn");
   await save(o);
-  if (!pendingRefund(o)) await kv("ZREM", OPEN, o.id);
+  if (!pendingRefund(o)) await watch(o.id, false);
   await emailOnce(o, "cancelled").catch(quietly("cancel"));
   return o;
 }
@@ -427,14 +468,12 @@ export async function emailsSent(id: string): Promise<Record<string, string>> {
 export async function listOrders(opts: { limit?: number; offset?: number; stage?: Stage; email?: string; q?: string } = {}): Promise<Order[]> {
   const limit = Math.min(Math.max(1, opts.limit ?? 50), 200), offset = Math.max(0, opts.offset ?? 0);
   const q = opts.q?.trim() ? `%${opts.q.trim().slice(0, 80).replace(/[\\%_]/g, (c) => `\\${c}`)}%` : null;
-  const rows = await query(
-    `SELECT value FROM kv
-     WHERE key LIKE 'order:%' AND (expires_at IS NULL OR expires_at > now())
-       AND ($1::text IS NULL OR value::jsonb->>'stage' = $1)
-       AND ($2::text IS NULL OR value::jsonb->'contact'->>'email' = $2)
-       AND ($3::text IS NULL OR value::jsonb->>'id' ILIKE $3 OR value::jsonb->'contact'->>'name' ILIKE $3 OR value::jsonb->'contact'->>'email' ILIKE $3
-            OR value::jsonb->'contact'->>'phone' ILIKE $3 OR value::jsonb->'ship'->>'city' ILIKE $3 OR value::jsonb->'ship'->>'pin' ILIKE $3)
-     ORDER BY value::jsonb->>'createdAt' DESC OFFSET $4::int LIMIT $5::int`,
+  const rows = await db(
+    `SELECT data::text FROM orders
+     WHERE ($1::text IS NULL OR stage = $1) AND ($2::text IS NULL OR email = $2)
+       AND ($3::text IS NULL OR id ILIKE $3 OR email ILIKE $3 OR data->'contact'->>'name' ILIKE $3 OR data->'contact'->>'phone' ILIKE $3
+            OR data->'ship'->>'city' ILIKE $3 OR data->'ship'->>'pin' ILIKE $3)
+     ORDER BY created_at DESC OFFSET $4::int LIMIT $5::int`,
     [opts.stage ?? null, opts.email?.toLowerCase() ?? null, q, offset, limit],
   );
   return rows.map((r) => JSON.parse(r[0] ?? "null") as Order).filter(Boolean);
@@ -449,16 +488,14 @@ export async function deleteOrder(id: string) {
   if (!o) throw new ShopError("no such order", 404);
   const done = o.stage === "paying" || (o.stage === "cancelled" && !pendingRefund(o));
   if (!done) throw new ShopError(o.stage === "cancelled" ? "its refund is still pending: wait for it to finish" : "a paid order that's still going: cancel it first (that refunds it)", 409);
-  await kv("DEL", key(id));
-  await kv("ZREM", OPEN, id);
-  await kv("ZREM", `uorders:${o.contact.email}`, id);
-  await kv("DEL", `rzp:${o.rzpOrderId}`);
+  await db("DELETE FROM orders WHERE id = $1", [id]);
+  await unlinkOrder(o.contact.email, id);
   return o;
 }
 
 /** how many orders are at each stage */
 export async function countOrders(): Promise<Partial<Record<Stage, number>>> {
-  const rows = await query("SELECT value::jsonb->>'stage', count(*)::text FROM kv WHERE key LIKE 'order:%' AND (expires_at IS NULL OR expires_at > now()) GROUP BY 1");
+  const rows = await db("SELECT stage, count(*)::text FROM orders GROUP BY 1");
   return Object.fromEntries(rows.map(([s, n]) => [s ?? "?", Number(n)]));
 }
 
@@ -520,7 +557,7 @@ export async function sync(id: string): Promise<Order | null> {
     if (o.stage === "out") await emailOnce(o, "out").catch(quietly("out"));
     if (o.stage === "delivered") {
       await emailOnce(o, "delivered").catch(quietly("delivered"));
-      if (!pendingRefund(o)) await kv("ZREM", OPEN, o.id);
+      if (!pendingRefund(o)) await watch(o.id, false);
     }
     return o;
   });
@@ -529,24 +566,26 @@ export async function sync(id: string): Promise<Order | null> {
 
 /** the sync job: every open order a step further; unpaid ones dropped after two days */
 export async function syncAll() {
-  const ids = await kv<string[]>("ZRANGE", OPEN, 0, 199);
+  // payment windows nobody finished, a week on, go for good (they were never orders)
+  await db("WITH gone AS (DELETE FROM orders WHERE stage = 'paying' AND created_at < now() - interval '7 days' RETURNING id, email) DELETE FROM user_orders u USING gone WHERE u.order_id = gone.id AND u.email = gone.email").catch(() => {});
+  const ids = (await db("SELECT id FROM orders WHERE open ORDER BY created_at LIMIT 200")).map((r) => r[0] ?? "").filter(Boolean);
   const out: Record<string, string> = {};
   for (const id of ids) {
     try {
       let o = await loadOrder(id);
       if (!o) {
-        await kv("ZREM", OPEN, id);
+        await watch(id, false);
         continue;
       }
       if (pendingRefund(o)) o = await syncRefund(id);
       if (o && (o.stage === "cancelled" || o.stage === "delivered")) {
-        if (!pendingRefund(o)) await kv("ZREM", OPEN, id);
+        if (!pendingRefund(o)) await watch(id, false);
         out[id] = o.stage;
         continue;
       }
       if (o && (o.stage === "paying" || o.stage === "paid" || (o.stage === "attention" && !o.partnerId))) o = await advance(id);
       if (o && o.stage === "paying" && Date.now() - Date.parse(o.createdAt) > 2 * 86400_000) {
-        await kv("ZREM", OPEN, id);
+        await watch(id, false);
         out[id] = "dropped unpaid";
         continue;
       }

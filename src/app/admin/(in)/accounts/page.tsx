@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/admin/auth";
-import { rows } from "@/lib/admin/db";
 import { allAccounts } from "@/lib/admin/data";
+import { deviceCounts } from "@/lib/shop/account";
 import { FIELD } from "../../ui/client";
 import { Icon } from "../../ui/icons";
 import { Avatar, Empty, Group, Page, Row, Tabs, ago, dateOnly } from "../../ui/ui";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 
-/** accounts: everyone who signed up at /account, newest first, with how many devices they're signed in on now */
+/** accounts: everyone who signed up at /profile, newest first, with how many devices they're signed in on now */
 export default async function Accounts({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireAdmin();
   const sp = await searchParams;
@@ -18,9 +18,9 @@ export default async function Accounts({ searchParams }: { searchParams: Promise
   const who = one(sp.who);
   const [all, sess] = await Promise.all([
     allAccounts(),
-    rows<{ email: string; n: string }>("SELECT value AS email, count(*)::text AS n FROM kv WHERE key LIKE 'sess:%' AND (expires_at IS NULL OR expires_at > now()) GROUP BY value").catch(() => []),
+    deviceCounts(),
   ]);
-  const on = new Map(sess.map((r) => [r.email, Number(r.n)]));
+  const on = sess;
   const found = all.filter((a) => !q || `${a.email} ${a.name} ${a.phone}`.toLowerCase().includes(q));
   const VIEWS = [
     { key: "", label: "all", has: () => true },

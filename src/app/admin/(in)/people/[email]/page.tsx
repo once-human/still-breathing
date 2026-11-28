@@ -1,9 +1,8 @@
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/admin/auth";
-import { rows } from "@/lib/admin/db";
 import { allOrders, isPaid, shirtName } from "@/lib/admin/data";
 import { notesFor } from "@/lib/admin/log";
-import { loadAccount, validEmail } from "@/lib/shop/account";
+import { deviceCounts, loadAccount, validEmail } from "@/lib/shop/account";
 import { refunded } from "@/lib/shop/orders";
 import { Act, NoteForm } from "../../../ui/client";
 import { Empty, Group, KV, Page, Row, Section, StageBadge, Tile, ago, dateOnly, dt, inr } from "../../../ui/ui";
@@ -18,7 +17,7 @@ export default async function Person({ params }: { params: Promise<{ email: stri
   if (!validEmail(email)) notFound();
   const [account, orders, notes, sess] = await Promise.all([
     loadAccount(email).catch(() => null), allOrders(), notesFor(`customer:${email}`),
-    rows<{ n: string }>("SELECT count(*)::text AS n FROM kv WHERE key LIKE 'sess:%' AND value = $1 AND (expires_at IS NULL OR expires_at > now())", [email]).catch(() => [{ n: "0" }]),
+    deviceCounts(email),
   ]);
   const mine = orders.filter((o) => o.contact.email === email);
   if (!account && !mine.length) notFound();
@@ -26,7 +25,7 @@ export default async function Person({ params }: { params: Promise<{ email: stri
   const spend = paid.reduce((t, o) => t + o.total - refunded(o), 0);
   const name = account?.name || mine[0]?.contact.name || email.split("@")[0];
   const phone = account?.phone || mine[0]?.contact.phone;
-  const devices = Number(sess[0]?.n ?? 0);
+  const devices = sess.get(email) ?? 0;
   const shirts = paid.filter((o) => o.stage !== "cancelled").reduce((t, o) => t + o.lines.reduce((u, l) => u + l.quantity, 0), 0);
 
   return (

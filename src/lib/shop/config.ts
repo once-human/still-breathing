@@ -50,3 +50,9 @@ export const ownerEmail = () => env("SHOP_OWNER_EMAIL") ?? null;
 export const accountsOpen = () => !!(kvKeys() && mailKeys() && shopSecret());
 
 export const shopOpen = () => !!(razorpayKeys() && partnerKeys() && kvKeys() && mailKeys() && shopSecret());
+
+/** Google sign-in: an OAuth client from Google Cloud (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET); the button shows only with both */
+export const googleKeys = () => {
+  const id = env("GOOGLE_CLIENT_ID"), secret = env("GOOGLE_CLIENT_SECRET");
+  return id && secret ? { id, secret } : null;
+};

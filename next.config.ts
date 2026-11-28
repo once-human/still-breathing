@@ -4,11 +4,15 @@ const nextConfig: NextConfig = {
   // a page opened in the last 20 seconds shows again at once from the browser's copy (the admin refreshes it after any change)
   experimental: { staleTimes: { dynamic: 20 } },
   // the old addresses (lineup 01, the lineups index) go to where those pages are now
+  // argon2's native binding loads from node_modules at run time, never bundled
+  serverExternalPackages: ["@node-rs/argon2"],
   async redirects() {
     return [
       { source: "/lineups", destination: "/shop", permanent: true },
       { source: "/lineup-01", destination: "/fred-again-india", permanent: true },
       { source: "/lineup-01/:shirt", destination: "/fred-again-india/:shirt", permanent: true },
+      // the profile was the account
+      { source: "/account", destination: "/profile", permanent: false },
       // the admin's old page names
       { source: "/admin/customers", destination: "/admin/people", permanent: false },
       { source: "/admin/customers/:email", destination: "/admin/people/:email", permanent: false },
