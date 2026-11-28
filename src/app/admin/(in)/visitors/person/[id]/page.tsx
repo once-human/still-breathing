@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/admin/auth";
+import { linkedPeople } from "@/lib/shop/account";
 import { listVisits } from "@/lib/visits/server";
 import { span } from "@/lib/visits/shared";
 import { Act } from "../../../../ui/client";
@@ -14,14 +15,17 @@ export default async function Person({ params }: { params: Promise<{ id: string 
   await requireAdmin();
   const id = (await params).id;
   if (!/^[a-f0-9]{12}$/.test(id)) notFound();
-  const visits = await listVisits({ from: 0, to: Date.now() }, { kind: "person", person: id }, 200).catch(() => []);
+  const [visits, names] = await Promise.all([listVisits({ from: 0, to: Date.now() }, { kind: "person", person: id }, 200).catch(() => []), linkedPeople().catch(() => new Map<string, { email: string; name: string }>())]);
+  const who = names.get(id);
   if (!visits.length) notFound();
   const first = visits[visits.length - 1], last = visits[0];
   const ms = visits.reduce((t, v) => t + v.activeMs, 0), pages = visits.reduce((t, v) => t + v.pages, 0);
   const devices = [...new Set(visits.map((v) => v.device))];
   return (
     <>
-      <Page title={`visitor ${id.slice(0, 6)}`} back={["/admin/visitors?tab=people", "people"]} sub={`first seen ${time(first.startedAt)}, last ${time(last.lastAt)}. one browser's own random code: no name, no address`} />
+      <Page title={who ? (who.name || who.email).toLowerCase() : `visitor ${id.slice(0, 6)}`} back={["/admin/visitors?tab=people", "people"]}
+        sub={who ? `${who.email}: first seen ${time(first.startedAt)}, last ${time(last.lastAt)}. their browser, linked while they were signed in` : `first seen ${time(first.startedAt)}, last ${time(last.lastAt)}. one browser's own random code: no name, no address`}
+        actions={who ? <a href={`/admin/people/${encodeURIComponent(who.email)}`} className="text-[15px] text-quiet hover:text-ink">their profile →</a> : undefined} />
       <div className="mb-10 grid grid-cols-2 gap-3 md:mb-12 lg:grid-cols-4">
         <Tile label="visits" icon="return" value={visits.length} />
         <Tile label="pages" icon="list" value={pages} />

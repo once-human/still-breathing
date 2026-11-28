@@ -53,7 +53,7 @@ export const deviceIcon = (v: Pick<VisitRow, "kind" | "device">): IconName =>
   v.kind === "bot" ? "bot" : /iphone|android|phone|mobile|ipad|tablet/i.test(v.device ?? "") ? "phone" : "desktop";
 
 /** visits as rows on one card: where and on what, the pages they went through, when, and how far they got */
-export function VisitTable({ visits, empty }: { visits: VisitRow[]; empty?: string }) {
+export function VisitTable({ visits, empty, names }: { visits: VisitRow[]; empty?: string; names?: Map<string, { email: string; name: string }> }) {
   if (!visits.length) return <p className="rounded-[14px] bg-s1 px-5 py-10 text-center text-[15px] text-quiet">{empty ?? "nobody yet"}</p>;
   return (
     <div className="divide-y divide-line/50 overflow-hidden rounded-[14px] bg-s1">
@@ -62,7 +62,7 @@ export function VisitTable({ visits, empty }: { visits: VisitRow[]; empty?: stri
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-s2 text-ink/75"><Icon name={deviceIcon(v)} className="h-[19px] w-[19px]" /></span>
           <span className="min-w-0 flex-1">
             <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[15px] leading-snug">
-              {v.kind === "bot" ? <span>{v.device}<span className="text-quiet"> · {v.reason}</span></span> : <span>{where(v)}<span className="text-quiet"> · {v.nth && v.nth > 1 ? `visit ${v.nth}` : "first visit"}{v.referrer ? ` · from ${v.referrer}` : ""}</span></span>}
+              {v.kind === "bot" ? <span>{v.device}<span className="text-quiet"> · {v.reason}</span></span> : <span>{(() => { const n = v.person ? names?.get(v.person) : null; return n ? <span className="font-medium">{(n.name || n.email).toLowerCase()}<span className="font-normal text-quiet"> · {where(v)}</span></span> : where(v); })()}<span className="text-quiet"> · {v.nth && v.nth > 1 ? `visit ${v.nth}` : "first visit"}{v.referrer ? ` · from ${v.referrer}` : ""}</span></span>}
               <Reached steps={v.reached} />
             </span>
             <span className="mt-0.5 block truncate text-[13px]"><Trail trail={v.trail} /></span>

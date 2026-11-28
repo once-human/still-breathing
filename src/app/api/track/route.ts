@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { linkVisitor, sessionEmail } from "@/lib/shop/account";
 import { limited } from "@/lib/shop/guard";
 import { kvKeys } from "@/lib/shop/config";
 import { notOurPage } from "@/lib/visits/bots";
@@ -34,6 +36,12 @@ export async function POST(req: Request) {
   // A busy visit sends a batch every few seconds at most, and one browser doesn't make hundreds of visits an hour.
   if ((await limited(`track:${b.s}`, 400, 3600_000)) || (await limited(`track-v:${b.v}`, 900, 3600_000))) return new Response(null, { status: 429 });
   const ok = await record(req, b).catch(() => false);
+  // signed in: this browser's visits are kept with the person (after the answer, and only when the hint cookie says so)
+  if (ok && /(?:^|;\s*)sahn_in=1/.test(req.headers.get("cookie") ?? ""))
+    after(async () => {
+      const email = await sessionEmail().catch(() => null);
+      if (email) await linkVisitor(b.v, email).catch(() => {});
+    });
   return new Response(null, { status: ok ? 204 : 409, headers });
 }
 

@@ -100,6 +100,9 @@ const SCHEMA = [
   // everything the buyer did with their account, for their own activity list
   `CREATE TABLE IF NOT EXISTS user_events (id bigserial PRIMARY KEY, email text NOT NULL, at timestamptz NOT NULL DEFAULT now(), what text NOT NULL, detail text)`,
   "CREATE INDEX IF NOT EXISTS user_events_email ON user_events (email, at DESC)",
+  // which browsers' visits belong to whom: written while someone is signed in, so the admin sees a name, not a code
+  "CREATE TABLE IF NOT EXISTS visitor_people (visitor text PRIMARY KEY, email text NOT NULL, at timestamptz NOT NULL DEFAULT now())",
+  "CREATE INDEX IF NOT EXISTS visitor_people_email ON visitor_people (email)",
 ];
 /**
  * Accounts kept before these tables (JSON rows in kv) moved across, in one statement each, the first time a server
@@ -224,6 +227,22 @@ export async function deviceCounts(email?: string) {
   const m = new Map<string, number>();
   for (const [e, n] of r) if (e) m.set(e, (m.get(e) ?? 0) + Number(n));
   return m;
+}
+
+/* ---------- visits, by person ---------- */
+
+/** this browser's visit code belongs to `email` (the last person signed in on it wins) */
+export const linkVisitor = (visitor: string, email: string) =>
+  db("INSERT INTO visitor_people (visitor, email) VALUES ($1, $2) ON CONFLICT (visitor) DO UPDATE SET email = $2, at = now()", [visitor, email]);
+
+/** for the admin: each linked browser by the visits log's person id (the first 12 hex of its code's SHA-256), with the person's email and name */
+export async function linkedPeople(email?: string) {
+  const r = await db(
+    `SELECT left(encode(sha256(convert_to(vp.visitor, 'UTF8')), 'hex'), 12), vp.email, coalesce(u.name, '') FROM visitor_people vp LEFT JOIN users u ON u.email = vp.email
+     WHERE $1::text IS NULL OR vp.email = $1`,
+    [email ?? null],
+  ).catch(() => []);
+  return new Map(r.map(([id, e, n]) => [id ?? "", { email: e ?? "", name: n ?? "" }]));
 }
 
 /* ---------- what the buyer did ---------- */
@@ -355,6 +374,7 @@ export async function deleteAccount(email: string) {
   await db("DELETE FROM user_passwords WHERE email = $1", [email]);
   await db("DELETE FROM user_events WHERE email = $1", [email]);
   await db("DELETE FROM user_codes WHERE email = $1", [email]);
+  await db("DELETE FROM visitor_people WHERE email = $1", [email]);
   return { sessions };
 }
 

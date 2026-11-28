@@ -2,7 +2,7 @@ import "server-only";
 import { IDLE_DAYS, adminEmail, adminReady } from "@/lib/admin/auth";
 import { rows } from "@/lib/admin/db";
 import { lastSync } from "@/lib/admin/sync";
-import { kvKeys, mailKeys, ownerEmail, partnerKeys, razorpayKeys, shopSecret } from "@/lib/shop/config";
+import { kvKeys, mailKeys, ownerEmail, partnerKeys, razorpayKeys, shopSecret, googleKeys } from "@/lib/shop/config";
 import { kv } from "@/lib/shop/kv";
 import { partnerCheck } from "@/lib/shop/partner";
 import { rzpGet } from "@/lib/shop/razorpay";
@@ -80,6 +80,7 @@ export async function health(fresh = false, quick = false): Promise<Check[]> {
       detail: ownerEmail() ? `new orders and problems are emailed to ${ownerEmail()}` : "you won't be emailed about new orders or a refused print", fix: ownerEmail() ? undefined : "add SHOP_OWNER_EMAIL in vercel",
     },
     { key: "secret", name: "link secret", tone: shopSecret() ? "ok" : "bad", state: shopSecret() ? "set" : "missing", detail: "signs order links and the sync job", fix: shopSecret() ? undefined : "add SHOP_SECRET (32+ characters) in vercel" },
+    { key: "google", name: "google sign-in", tone: googleKeys() ? "ok" : "warn", state: googleKeys() ? "on" : "off", detail: googleKeys() ? "buyers can continue with google" : "buyers sign in by email code or password only", fix: googleKeys() ? undefined : "add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in vercel" },
     { key: "admin", name: "admin sign-in", tone: adminReady() ? "ok" : "bad", state: adminReady() ? "set" : "missing", detail: adminReady() ? `by the site key; ${IDLE_DAYS} days away signs a browser out${adminEmail() ? `, and each sign-in is emailed to ${adminEmail()}` : ""}` : "nobody can sign in", fix: adminReady() ? undefined : "add ADMIN_SECRET (16+ characters) in vercel" },
   ];
   if (!quick) cache = { at: Date.now(), v };

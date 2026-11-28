@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { DESIGNS } from "@/content/tee";
 import { requireAdmin } from "@/lib/admin/auth";
+import { linkedPeople } from "@/lib/shop/account";
 import { listPeople, listVisits, type VisitFilter } from "@/lib/visits/server";
 import { span } from "@/lib/visits/shared";
 import { BTN, FIELD } from "../../ui/client";
@@ -25,9 +26,10 @@ export default async function Visitors({ searchParams }: { searchParams: Promise
   const p = await pickPeriod(sp.p);
   const f: VisitFilter = { kind: tab === "bots" ? "bot" : "person", referrer: sp.referrer, device: sp.device, place: sp.place, shirt: sp.shirt, reached: sp.reached, person: sp.person };
   const link = (patch: Partial<SP>) => `?${new URLSearchParams(Object.entries({ ...sp, ...patch }).filter(([, v]) => v) as [string, string][])}`;
-  const [visits, people] = await Promise.all([
+  const [visits, people, names] = await Promise.all([
     tab === "people" ? Promise.resolve([]) : listVisits(p, f, 500).catch(() => []),
     tab === "people" ? listPeople(p).catch(() => []) : Promise.resolve([]),
+    linkedPeople().catch(() => new Map<string, { email: string; name: string }>()),
   ]);
   const filters = (["referrer", "device", "place", "shirt", "reached", "person"] as const).filter((k) => sp[k]);
   const range = p.label;
@@ -69,7 +71,7 @@ export default async function Visitors({ searchParams }: { searchParams: Promise
             <Group>
               {people.map((p) => (
                 <Row key={p.id} icon={p.visits > 1 ? "return" : "user"} href={`/admin/visitors/person/${p.id}`}
-                  title={<span className="flex flex-wrap items-center gap-2">{p.places.join(" · ") || "somewhere"}<Reached steps={p.reached} /></span>}
+                  title={<span className="flex flex-wrap items-center gap-2">{names.get(p.id) ? <span className="font-medium">{(names.get(p.id)!.name || names.get(p.id)!.email).toLowerCase()}<span className="font-normal text-quiet"> · {p.places.join(" · ") || "somewhere"}</span></span> : p.places.join(" · ") || "somewhere"}<Reached steps={p.reached} /></span>}
                   sub={`${p.devices.join(", ")} · ${p.visits} visit${p.visits === 1 ? "" : "s"}, ${p.pages} page${p.pages === 1 ? "" : "s"}, ${span(p.activeMs)} on screen`}
                   right={<span className="text-[13px] text-quiet">{time(p.lastAt)}</span>} />
               ))}
@@ -78,7 +80,7 @@ export default async function Visitors({ searchParams }: { searchParams: Promise
         </Section>
       ) : (
         <Section title={`${visits.length} ${tab === "bots" ? "program visits" : `visit${visits.length === 1 ? "" : "s"}`}`} aside={filters.length ? `filtered by ${filters.join(", ")}` : range === "all time" ? "the kept 90 days" : range}>
-          <VisitTable visits={visits} empty={tab === "bots" ? "no programs in this time" : "no visits in this time"} />
+          <VisitTable visits={visits} names={names} empty={tab === "bots" ? "no programs in this time" : "no visits in this time"} />
         </Section>
       )}
     </>
