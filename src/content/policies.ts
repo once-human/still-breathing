@@ -222,7 +222,7 @@ export const POLICIES: Record<PolicySlug, Policy> = {
           `${box("orders")}: about an order (put its number in), a delivery, a fault or a return.`,
           `${box("privacy")}: what we keep about you, a copy of it, or erasing it.`,
           `${box("security")}: something about your profile that wasn't you.`,
-          `${box("maker")}: if writing to us hasn't put something right, or it can't wait, this goes straight to the person who makes sahn. there's a form for it on the contact page too.`,
+          `${box("direct")}: if writing to us hasn't put something right, or it can't wait, this goes straight to the top: the person who started sahn reads it and writes back. there's a form for it on the contact page too.`,
           ...(OPERATOR.phone ? [`phone: ${OPERATOR.phone}, 11 am – 7 pm, monday to saturday.`] : []),
         ],
       },

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { startTransition, useEffect, useState } from "react";
-import { BTN, FIELD, Modal, useAdminPost, useToast } from "../../ui/client";
+import { BTN, FIELD, Modal, Picker, useAdminPost, useToast } from "../../ui/client";
 
 type Preset = { local: string; name: string; use: string };
 export type GroupOpt = { key: string; label: string; hint: string; days: boolean; service: boolean };
@@ -90,13 +90,13 @@ export function Compose({ kind, domain, presets, listSize, me, groups = [], days
     <form className="grid gap-4" onSubmit={(e) => { e.preventDefault(); if (ready) setAsk(true); }}>
       {kind === "letter" ? (
         <>
-          <label className="grid gap-1.5 text-[13px] text-quiet">from
-            <select value={chosen} onChange={(e) => pick(e.target.value)} className={FIELD}>
-              {presets.map((p) => <option key={p.local} value={p.local}>{p.local}@{domain} · {p.use}</option>)}
-              {mine && !presets.some((p) => p.local === mine.local) ? <option value="__mine">{mine.local}@{domain} · {mine.name}</option> : null}
-              <option value="__new">another address…</option>
-            </select>
-          </label>
+          <div className="grid gap-1.5 text-[13px] text-quiet">from
+            <Picker value={chosen} onChange={pick} label="from" options={[
+              ...presets.map((p) => ({ value: p.local, label: `${p.local}@${domain}`, sub: p.use })),
+              ...(mine && !presets.some((p) => p.local === mine.local) ? [{ value: "__mine", label: `${mine.local}@${domain}`, sub: mine.name }] : []),
+              { value: "__new", label: "another address…", sub: "any name@ you like" },
+            ]} />
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="grid gap-1.5 text-[13px] text-quiet">address
               <span className="flex items-center gap-2">

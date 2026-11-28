@@ -1,13 +1,13 @@
 import { sessionEmail, validEmail } from "@/lib/shop/account";
 import { failed, guardWrite, json, limited } from "@/lib/shop/guard";
-import { noteToMaker } from "@/lib/shop/maker";
+import { noteDirect } from "@/lib/shop/inbox";
 import { askedFrom } from "@/lib/visits/ua";
 
 export const dynamic = "force-dynamic";
 
-/** a note to the maker: {name, email, order?, body}; 3 an hour from one connection, 5 a day from one email */
+/** a note straight to the top: {name, email, order?, body}; 3 an hour from one connection, 5 a day from one email */
 export async function POST(req: Request) {
-  const g = await guardWrite(req, "maker", 3, 3_600_000, 8000);
+  const g = await guardWrite(req, "direct", 3, 3_600_000, 8000);
   if ("fail" in g) return g.fail;
   const b = (g.body ?? {}) as Record<string, unknown>;
   if (typeof b.website === "string" && b.website) return json({ ok: true }); // the box only bots fill in
@@ -18,10 +18,10 @@ export async function POST(req: Request) {
   if (!validEmail(email)) return json({ error: "an email to write back to", field: "email" }, 400);
   if (order && !/^S\d{6}[A-Z0-9]{4}$/.test(order)) return json({ error: "the order number from your order email, like S2611281A2B", field: "order" }, 400);
   if (body.length < 10) return json({ error: "what's happened, in a few words", field: "body" }, 400);
-  if (await limited(`maker-email:${email}`, 5, 86_400_000)) return json({ error: "your notes have reached the maker: you'll hear back soon" }, 429);
+  if (await limited(`direct-email:${email}`, 5, 86_400_000)) return json({ error: "your notes have arrived: you'll hear back soon" }, 429);
   try {
     const me = await sessionEmail().catch(() => null);
-    await noteToMaker({ name, email, order, body, device: askedFrom(req), signedIn: me === email });
+    await noteDirect({ name, email, order, body, device: askedFrom(req), signedIn: me === email });
     return json({ ok: true });
   } catch (e) {
     return failed(e);

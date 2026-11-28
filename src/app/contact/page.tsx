@@ -6,7 +6,7 @@ import { OPERATOR } from "@/content/policies";
 import { loadAccount, sessionEmail } from "@/lib/shop/account";
 import { shopOpen } from "@/lib/shop/config";
 import { pageMeta } from "@/lib/site";
-import { MakerForm } from "./MakerForm";
+import { DirectForm } from "./DirectForm";
 
 export const metadata: Metadata = pageMeta({
   title: "contact",
@@ -54,12 +54,12 @@ export default async function Contact() {
 
         <section className="grid grid-cols-1 gap-x-4 md:grid-cols-12">
           <div className="md:col-span-8 lg:col-span-6 lg:col-start-2">
-            <Label id="maker" note="one person makes sahn">write to the maker</Label>
+            <Label id="direct" note="when nothing else has worked">straight to the top</Label>
             <div className="prose-sb mb-8 text-[15px] leading-relaxed">
-              <p>if something&apos;s gone wrong and writing to us hasn&apos;t put it right, or it can&apos;t wait, write here. it goes straight to the person who draws, makes and sends every sahn shirt, nobody else reads it, and they write back themselves.</p>
-              <p className="text-quiet">or email <a href={`mailto:${box("maker")}`}>{box("maker")}</a>.</p>
+              <p>if something&apos;s gone wrong and writing to us hasn&apos;t put it right, or it can&apos;t wait, write here. it skips the queue and goes to the person who started sahn, who reads it and writes back themselves.</p>
+              <p className="text-quiet">or email <a href={`mailto:${box("direct")}`}>{box("direct")}</a>.</p>
             </div>
-            <MakerForm name={a?.name ?? ""} email={me ?? ""} />
+            <DirectForm name={a?.name ?? ""} email={me ?? ""} />
           </div>
         </section>
       </div>

@@ -2,7 +2,8 @@
  * The shop's addresses on sahn.in, each one there for a reason: hello for anything, orders for order mail, drops for
  * the new-drop emails (kept apart from order mail, so a spam mark on one never hurts the other), security for sign-in
  * codes and anything about a profile's safety, privacy because the DPDP Act wants a named place for data requests,
- * and maker, the one person who makes sahn, for what nobody else has put right. Every address goes to the same inbox: sahn.in's mail is forwarded by Cloudflare Email Routing (a catch-all),
+ * and direct, straight to the top (the person who started sahn, however many people work on it), for what nobody
+ * else has put right. Every address goes to the same inbox: sahn.in's mail is forwarded by Cloudflare Email Routing (a catch-all),
  * and sent through Resend from the domain it has verified.
  */
 export const MAIL_DOMAIN = "sahn.in";
@@ -13,7 +14,7 @@ export const BOXES = {
   drops: { name: "sahn drops", use: "new drop emails, for those who asked" },
   security: { name: "sahn security", use: "sign-in codes, a password or device changed, admin alerts" },
   privacy: { name: "sahn privacy", use: "your data: a copy, a fix, or erasing it" },
-  maker: { name: "sahn, the maker", use: "straight to the person who makes sahn" },
+  direct: { name: "sahn", use: "straight to the top, for what nothing else has put right" },
 } as const;
 
 export type Box = keyof typeof BOXES;

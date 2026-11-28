@@ -4,7 +4,7 @@ import { requireAdmin } from "@/lib/admin/auth";
 import { linkedPeople } from "@/lib/shop/account";
 import { listPeople, listVisits, type VisitFilter } from "@/lib/visits/server";
 import { span } from "@/lib/visits/shared";
-import { BTN, FIELD } from "../../ui/client";
+import { BTN, FIELD, Picker } from "../../ui/client";
 import { Icon } from "../../ui/icons";
 import { Group, Page, Row, Section, Tabs } from "../../ui/ui";
 import { Reached, VisitTable, shirtLabel, time } from "../../ui/visits";
@@ -52,10 +52,10 @@ export default async function Visitors({ searchParams }: { searchParams: Promise
             <label className="grid gap-1.5 text-[13px] text-quiet">came from<input name="referrer" defaultValue={sp.referrer} placeholder="instagram.com, direct" className={FIELD} /></label>
             <label className="grid gap-1.5 text-[13px] text-quiet">city or country<input name="place" defaultValue={sp.place} placeholder="Pune, IN" className={FIELD} /></label>
             <label className="grid gap-1.5 text-[13px] text-quiet">shirt
-              <select name="shirt" defaultValue={sp.shirt ?? ""} className={FIELD}><option value="">any</option>{Object.keys(DESIGNS).map((d) => <option key={d} value={d}>{shirtLabel(d)}</option>)}</select>
+              <Picker name="shirt" value={sp.shirt ?? ""} label="shirt" options={[{ value: "", label: "any" }, ...Object.keys(DESIGNS).map((d) => ({ value: d, label: shirtLabel(d) }))]} />
             </label>
             <label className="grid gap-1.5 text-[13px] text-quiet">got to
-              <select name="reached" defaultValue={sp.reached ?? ""} className={FIELD}>{REACH.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
+              <Picker name="reached" value={sp.reached ?? ""} label="got to" options={REACH.map(([v, l]) => ({ value: v, label: l }))} />
             </label>
             <div className="flex gap-2 sm:col-span-2 lg:col-span-4">
               <button className={BTN.main}>apply</button>

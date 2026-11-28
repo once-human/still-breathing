@@ -361,9 +361,7 @@ export function Act({ label, confirm, url, body, danger, typeToConfirm, done, go
             {fields.map((f) => (
               <label key={f.name} className="grid gap-1.5 text-[13px] text-quiet">{f.label}
                 {f.options ? (
-                  <select value={values[f.name]} onChange={(e) => setValues({ ...values, [f.name]: e.target.value })} className={FIELD}>
-                    {f.options.map((o) => <option key={o}>{o}</option>)}
-                  </select>
+                  <Picker value={values[f.name]} onChange={(x) => setValues({ ...values, [f.name]: x })} options={f.options.map((o) => ({ value: o, label: o }))} label={f.label} />
                 ) : (
                   <input type={f.type ?? "text"} value={values[f.name]} onChange={(e) => setValues({ ...values, [f.name]: e.target.value })} placeholder={f.placeholder} className={FIELD} />
                 )}
@@ -602,5 +600,61 @@ export function Tabs({ items, active }: { items: { href: string; label: string; 
         ))}
       </div>
     </nav>
+  );
+}
+
+export type PickOption = { value: string; label: React.ReactNode; sub?: React.ReactNode };
+
+/**
+ * The admin's own picker, in place of the browser's: a field-shaped button that opens a list on the same surface as
+ * everything else (arrow keys, enter, escape, a click outside closes it). With `name` it also works in a plain GET
+ * form, through a hidden input.
+ */
+export function Picker({ value, options, onChange, name, label, small, className = "" }: {
+  value: string; options: PickOption[]; onChange?: (v: string) => void; name?: string; label?: string; small?: boolean; className?: string;
+}) {
+  const [v, setV] = useState(value);
+  const [open, setOpen] = useState(false);
+  const [hi, setHi] = useState(0);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => setV(value), [value]);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", away);
+    return () => document.removeEventListener("mousedown", away);
+  }, [open]);
+  const at = Math.max(0, options.findIndex((o) => o.value === v));
+  const pick = (x: string) => { setV(x); setOpen(false); onChange?.(x); };
+  const key = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") { if (open) { e.preventDefault(); setOpen(false); } return; }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (!open) { setOpen(true); setHi(at); return; }
+      setHi((h) => (h + (e.key === "ArrowDown" ? 1 : -1) + options.length) % options.length);
+    }
+    if ((e.key === "Enter" || e.key === " ") && open) { e.preventDefault(); const o = options[hi]; if (o) pick(o.value); }
+  };
+  const cur = options[at];
+  return (
+    <div ref={box} className={`relative ${className}`} onKeyDown={key}>
+      {name ? <input type="hidden" name={name} value={v} /> : null}
+      <button type="button" aria-haspopup="listbox" aria-expanded={open} aria-label={label} onClick={() => { setOpen(!open); setHi(at); }}
+        className={`${FIELD} flex items-center justify-between gap-3 text-left ${small ? "!h-9 !rounded-[8px] !px-3 !text-[14px]" : ""}`}>
+        <span className="min-w-0 truncate">{cur?.label ?? "–"}</span>
+        <Icon name="down" className={`h-4 w-4 shrink-0 text-quiet transition ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open ? (
+        <div role="listbox" className="a-pop absolute left-0 right-0 top-[calc(100%+6px)] z-40 max-h-[320px] min-w-[220px] overflow-y-auto rounded-[12px] bg-s3 p-1 shadow-[0_12px_40px_rgba(0,0,0,0.5)]">
+          {options.map((o, i) => (
+            <button key={o.value} type="button" role="option" aria-selected={o.value === v} onMouseEnter={() => setHi(i)} onClick={() => pick(o.value)}
+              className={`flex w-full items-start gap-3 rounded-[8px] px-3 py-2.5 text-left text-[14px] ${i === hi ? "bg-s2" : ""}`}>
+              <span className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center text-ink">{o.value === v ? <Icon name="check" className="h-4 w-4" /> : null}</span>
+              <span className="min-w-0"><span className="block truncate text-ink">{o.label}</span>{o.sub ? <span className="mt-0.5 block text-[13px] leading-snug text-quiet">{o.sub}</span> : null}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }

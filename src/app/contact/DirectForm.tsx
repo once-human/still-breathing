@@ -5,8 +5,8 @@ import { input, post } from "@/components/shop/AddressFields";
 
 type Bad = { field?: string; error: string };
 
-/** the note to the maker: name, email, the order if there is one, and what's happened */
-export function MakerForm({ name: n0, email: e0 }: { name: string; email: string }) {
+/** a note straight to the top: name, email, the order if there is one, and what's happened */
+export function DirectForm({ name: n0, email: e0 }: { name: string; email: string }) {
   const [name, setName] = useState(n0);
   const [email, setEmail] = useState(e0);
   const [order, setOrder] = useState("");
@@ -19,8 +19,8 @@ export function MakerForm({ name: n0, email: e0 }: { name: string; email: string
   if (sent)
     return (
       <div role="status" className="border-t border-ink pt-4 text-[15px] leading-relaxed">
-        <p className="font-semibold">it&apos;s with the maker.</p>
-        <p className="mt-1 text-quiet">they read it themselves and write back to {email}. if you think of something else, reply to that email.</p>
+        <p className="font-semibold">it&apos;s gone straight to the top.</p>
+        <p className="mt-1 text-quiet">you&apos;ll get an answer at {email}, from the person who started sahn. if you think of something else, write to direct@sahn.in.</p>
       </div>
     );
 
@@ -29,7 +29,7 @@ export function MakerForm({ name: n0, email: e0 }: { name: string; email: string
     setBusy(true);
     setBad(null);
     try {
-      await post("/api/shop/maker", { name, email, order, body, website: trap });
+      await post("/api/shop/direct", { name, email, order, body, website: trap });
       setSent(true);
     } catch (x) {
       setBad({ field: (x as { field?: string }).field, error: (x as Error).message });
@@ -56,7 +56,7 @@ export function MakerForm({ name: n0, email: e0 }: { name: string; email: string
       </label>
       {bad ? <p role="alert" className="col-span-2 text-[14px]">{bad.error}</p> : null}
       <button disabled={busy} className="col-span-2 flex h-12 w-full items-center justify-between bg-ink px-4 text-[15px] font-semibold text-paper hover:bg-ink/90 disabled:opacity-60">
-        <span>{busy ? "one moment.." : "send it to the maker"}</span><span aria-hidden>→</span>
+        <span>{busy ? "one moment.." : "send it straight to the top"}</span><span aria-hidden>→</span>
       </button>
     </form>
   );

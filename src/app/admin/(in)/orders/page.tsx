@@ -3,7 +3,7 @@ import { DESIGNS, SIZE_ORDER, type Design } from "@/content/tee";
 import { requireAdmin } from "@/lib/admin/auth";
 import { allOrders, istDay, shirtName } from "@/lib/admin/data";
 import { refunded, type Order, type Stage } from "@/lib/shop/orders";
-import { BTN, FIELD } from "../../ui/client";
+import { BTN, FIELD, Picker } from "../../ui/client";
 import { Icon } from "../../ui/icons";
 import { Avatar, Empty, Group, Page, Row, StageBadge, Tabs, ago, inr } from "../../ui/ui";
 
@@ -73,10 +73,10 @@ export default async function Orders({ searchParams }: { searchParams: Promise<R
           </summary>
           <div className="a-pop mt-3 grid gap-3 rounded-[14px] bg-s1 p-4 sm:grid-cols-2 lg:grid-cols-4">
             <label className="grid gap-1.5 text-[13px] text-quiet">shirt
-              <select name="shirt" defaultValue={f.shirt} className={FIELD}><option value="">any shirt</option>{(Object.keys(DESIGNS) as Design[]).map((d) => <option key={d} value={d}>{shirtName(d)}</option>)}</select>
+              <Picker name="shirt" value={f.shirt ?? ""} label="shirt" options={[{ value: "", label: "any shirt" }, ...(Object.keys(DESIGNS) as Design[]).map((d) => ({ value: d, label: shirtName(d) }))]} />
             </label>
             <label className="grid gap-1.5 text-[13px] text-quiet">size
-              <select name="size" defaultValue={f.size} className={FIELD}><option value="">any size</option>{SIZE_ORDER.map((s) => <option key={s}>{s}</option>)}</select>
+              <Picker name="size" value={f.size ?? ""} label="size" options={[{ value: "", label: "any size" }, ...SIZE_ORDER.map((s) => ({ value: s, label: s }))]} />
             </label>
             <label className="grid gap-1.5 text-[13px] text-quiet">from<input type="date" name="from" defaultValue={f.from} className={FIELD} /></label>
             <label className="grid gap-1.5 text-[13px] text-quiet">to<input type="date" name="to" defaultValue={f.to} className={FIELD} /></label>
