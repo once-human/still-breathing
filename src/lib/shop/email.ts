@@ -1,6 +1,7 @@
-import { BOXES, type Box } from "@/content/mail";
+import { BOXES, OWNER_BOX, type Box } from "@/content/mail";
 import { mailKeys } from "./config";
 import { ShopError } from "./errors";
+import { signature } from "./mailmark";
 
 /** "sahn orders <orders@sahn.in>": a named sender on the verified domain; any name@ works, the shop's boxes have their own names */
 export function sender(local: Box | string, name?: string) {
@@ -17,10 +18,13 @@ export function sender(local: Box | string, name?: string) {
  */
 export async function sendEmail(to: string, subject: string, text: string, idempotencyKey: string, from: Box = "orders", replyTo?: string | null) {
   const s = sender(from);
-  const html = `<div style="font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#111;max-width:520px">${text
+  const sig = signature(from, OWNER_BOX);
+  const body = text.trim();
+  const html = `<div style="font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#111;max-width:520px">${body
     .split("\n\n")
     .map((p) => `<p>${esc(p).replace(/\n/g, "<br>").replace(/(https:\/\/[^\s<]+)/g, '<a href="$1">$1</a>')}</p>`)
-    .join("")}</div>`;
+    .join("")}${sig.html}</div>`;
+  text = `${body}\n\n${sig.text}`;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${s.k.key}`, "Content-Type": "application/json", "Idempotency-Key": idempotencyKey.slice(0, 256) },

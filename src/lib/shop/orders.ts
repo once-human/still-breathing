@@ -5,7 +5,6 @@ import { SITE_URL } from "@/lib/site";
 import { linkOrder, rememberAddress, unlinkOrder } from "./account";
 import { ownerEmail, shopSecret } from "./config";
 import { sendEmail } from "./email";
-import { box } from "@/content/mail";
 import { ShopError } from "./errors";
 import { ensure, kv, once, query, withLock } from "./kv";
 import { partnerStatus, sendToPrint, type ShipTo } from "./partner";
@@ -170,7 +169,6 @@ const site = () => process.env.SHOP_SITE_URL?.replace(/\/$/, "") ?? SITE_URL;
 const shirt = (d: Design) => `${DESIGNS[d].no} ${DESIGNS[d].name}${DESIGNS[d].city ? ` ${DESIGNS[d].city}` : ""}`;
 const rs = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 const itemsText = (o: Order) => o.lines.map((l) => `${shirt(l.design)}, size ${l.size} × ${l.quantity}  ${rs(l.unitPrice * l.quantity)}`).join("\n");
-const sign = () => `${SHOP.merchant}\n${box("orders")}`;
 const istTime = (iso: string) => new Date(iso).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 
 /** the emails a buyer gets; refund:<refund id> is a refund that isn't a cancel */
@@ -193,7 +191,6 @@ function emailFor(o: Order, kind: MailKind): [string, string] | null {
         `going to: ${o.ship.name}, ${o.ship.address1}${o.ship.address2 ? `, ${o.ship.address2}` : ""}, ${o.ship.city}, ${o.ship.state} ${o.ship.pin}`,
         ...(changeable(o) && Date.now() < Date.parse(until) ? [`changed your mind, or the address is wrong? until ${istTime(until)} you can cancel (refunded in full) or fix the address yourself on your order's page. after that it goes to print.`] : []),
         `your order, any time: ${link}`,
-        sign(),
       ].join("\n\n")];
     }
     case "printing":
@@ -202,14 +199,12 @@ function emailFor(o: Order, kind: MailKind): [string, string] | null {
         `your order #${o.id} has gone to print. from here it's printed, checked and packed just for you: about ${SHOP.make[0]}–${SHOP.make[1]} days, then ${SHOP.road[0]}–${SHOP.road[1]} days on the road to ${o.ship.city.toLowerCase()}.`,
         `the address can't be changed from your order's page any more. if something's wrong with it, write back today.`,
         `your order: ${link}`,
-        sign(),
       ].join("\n\n")];
     case "out":
       if (!o.events?.some((e) => e.kind === "out")) return null;
       return [`sahn: order #${o.id} is out for delivery`, [
         `your order #${o.id} is out for delivery to ${o.ship.city.toLowerCase()} today.`,
         `keep your phone on: the courier calls before coming.${o.tracking?.url ? ` track it: ${o.tracking.url}` : ""}`,
-        sign(),
       ].join("\n\n")];
     case "shipped":
       if (!o.shippedAt || !o.tracking) return null;
@@ -217,7 +212,6 @@ function emailFor(o: Order, kind: MailKind): [string, string] | null {
         `it's left. your order #${o.id} is with the courier${o.tracking.courier ? ` (${o.tracking.courier.toLowerCase()})` : ""}, on its way to ${to}. most parcels get there in ${SHOP.road[0]}–${SHOP.road[1]} days.`,
         o.tracking.url ? `track it: ${o.tracking.url}` : `tracking number: ${o.tracking.awb}`,
         `keep your phone on: the courier calls before delivering. your order: ${link}`,
-        sign(),
       ].join("\n\n")];
     case "delivered":
       if (o.stage !== "delivered") return null;
@@ -226,7 +220,6 @@ function emailFor(o: Order, kind: MailKind): [string, string] | null {
         `if anything's wrong with it, write back within 7 days with an unboxing video and photos and we'll put it right.`,
         `wash it cold, inside out, and dry it in the shade. iron on the back, never on the print.`,
         `your order: ${link}`,
-        sign(),
       ].join("\n\n")];
     case "cancelled": {
       if (o.stage !== "cancelled" || !o.paidAt) return null;
@@ -235,7 +228,6 @@ function emailFor(o: Order, kind: MailKind): [string, string] | null {
         `your order #${o.id} is cancelled, and nothing will be made or sent.`,
         r ? back(r) : "we'll write to you about your payment.",
         `your order: ${link}`,
-        sign(),
       ].join("\n\n")];
     }
     default: {
@@ -245,7 +237,6 @@ function emailFor(o: Order, kind: MailKind): [string, string] | null {
           `the address on your order #${o.id} is now:\n${o.ship.name}, ${o.ship.phone}\n${o.ship.address1}${o.ship.address2 ? `, ${o.ship.address2}` : ""}\n${to}`,
           `if this isn't right, write back straight away: it hasn't gone to print yet, so it can still be fixed.`,
           `your order: ${link}`,
-          sign(),
         ].join("\n\n")];
       }
       const r = o.refunds?.find((x) => `refund:${x.id}` === kind);
@@ -254,7 +245,6 @@ function emailFor(o: Order, kind: MailKind): [string, string] | null {
         `we've refunded part of your order #${o.id}${r.reason ? `: ${r.reason}` : ""}.`,
         back(r),
         `your order: ${link}`,
-        sign(),
       ].join("\n\n")];
     }
   }

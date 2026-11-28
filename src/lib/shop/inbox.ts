@@ -5,6 +5,7 @@ import { adminEmail } from "@/lib/admin/auth";
 import { SITE_URL } from "@/lib/site";
 import { mailKeys, ownerEmail, shopSecret } from "./config";
 import { esc, sender } from "./email";
+import { signature } from "./mailmark";
 import { ShopError } from "./errors";
 import { ensure, query } from "./kv";
 
@@ -288,8 +289,9 @@ export async function reply(id: string, body: string, who: string, local?: strin
   const subject = /^re:/i.test(t.thread.subject) ? t.thread.subject : `Re: ${t.thread.subject}`;
   const refs = t.messages.map((m) => m.messageId).filter(Boolean).slice(-10) as string[];
   const quote = last ? `\n\n—\non ${new Date(last.at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }).toLowerCase()}, ${last.fromName || last.from} wrote:\n${last.text.split("\n").slice(0, 40).map((l) => `> ${l}`).join("\n")}` : "";
-  const text = `${body}${quote}`;
-  const html = `<div style="font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#111;max-width:560px">${esc(body).split("\n\n").map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`).join("")}${last ? `<blockquote style="margin:16px 0 0;padding-left:12px;border-left:2px solid #ddd;color:#666">${esc(last.text.slice(0, 4000)).replace(/\n/g, "<br>")}</blockquote>` : ""}</div>`;
+  const sig = signature(box, OWNER_BOX);
+  const text = `${body}\n\n${sig.text}${quote}`;
+  const html = `<div style="font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#111;max-width:560px">${esc(body).split("\n\n").map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`).join("")}${sig.html}${last ? `<blockquote style="margin:16px 0 0;padding-left:12px;border-left:2px solid #ddd;color:#666">${esc(last.text.slice(0, 4000)).replace(/\n/g, "<br>")}</blockquote>` : ""}</div>`;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${s.k.key}`, "Content-Type": "application/json", ...(key ? { "Idempotency-Key": key.slice(0, 256) } : {}) },

@@ -1,8 +1,10 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { OWNER_BOX } from "@/content/mail";
 import { SITE_URL } from "@/lib/site";
 import { shopSecret } from "./config";
 import { esc, sender } from "./email";
+import { signature } from "./mailmark";
 import { ensure, query } from "./kv";
 
 /**
@@ -72,14 +74,19 @@ export async function listStats() {
   };
 }
 
-/** the body as paragraphs, the optional button, the sign-off and, for a drop, the way off */
-function render(body: string, link: string | null, signoff: string, off: string | null, why = "you asked to hear about new drops.") {
-  const text = `${body}\n\n${link ? `${link}\n\n` : ""}${signoff}${off ? `\n\n—\n${why} off with one tap: ${off}` : ""}`;
+/**
+ * The body as paragraphs, the optional button, the sign-off, then the ending (mailmark.ts): the shop's footer, with the
+ * way off for bulk mail, or the owner's own signature when it's from his address (his name replaces the sign-off).
+ */
+function render(local: string, body: string, link: string | null, signoff: string, off: string | null, why = "you asked to hear about new drops.") {
+  const own = local === OWNER_BOX;
+  const sig = signature(local, OWNER_BOX, off ? { url: off, why } : null);
+  const sign = own || !signoff.trim() ? "" : signoff.trim();
+  const text = `${body}\n\n${link ? `${link}\n\n` : ""}${sign ? `${sign}\n\n` : ""}${sig.text}`;
   const html = `<div style="font-family:Helvetica,Arial,sans-serif;font-size:16px;line-height:1.5;color:#111;max-width:520px">
     ${body.split("\n\n").map((p) => `<p>${esc(p).replace(/\n/g, "<br>")}</p>`).join("")}
     ${link ? `<p><a href="${esc(link)}" style="display:inline-block;background:#111;color:#fff;padding:12px 18px;text-decoration:none;font-weight:600">see it →</a></p>` : ""}
-    <p style="font-weight:700;letter-spacing:-0.02em">${esc(signoff).replace(/\n/g, "<br>")}</p>
-    ${off ? `<p style="font-size:12px;color:#777;border-top:1px solid #ddd;padding-top:10px">${esc(why)} <a href="${esc(off)}" style="color:#777">stop these emails</a>.</p>` : ""}</div>`;
+    ${sign ? `<p style="font-weight:700;letter-spacing:-0.02em">${esc(sign).replace(/\n/g, "<br>")}</p>` : ""}${sig.html}</div>`;
   return { text, html };
 }
 
@@ -105,7 +112,7 @@ async function batch(key: string, items: object[], idem: string) {
 export async function sendDrop(emails: string[], subject: string, body: string, link: string | null, key: string) {
   const s = sender("drops");
   return batch(s.k.key, emails.map((to) => ({
-    from: s.from, to: [to], subject, reply_to: s.address, ...render(body, link, "sahn", offLink(to)),
+    from: s.from, to: [to], subject, reply_to: s.address, ...render("drops", body, link, "", offLink(to)),
     headers: { "List-Unsubscribe": `<${oneTap(to)}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" },
   })), key);
 }
@@ -115,7 +122,7 @@ export async function sendLetter(local: string, name: string, emails: string[], 
   const s = sender(local, name);
   return {
     ...(await batch(s.k.key, emails.map((to) => ({
-      from: s.from, to: [to], subject, reply_to: s.address, ...render(body, link, signoff, bulk ? offLink(to) : null, bulk ? "you're getting this as a sahn customer." : undefined),
+      from: s.from, to: [to], subject, reply_to: s.address, ...render(local, body, link, signoff, bulk ? offLink(to) : null, bulk ? "you're getting this as a sahn customer." : undefined),
       ...(bulk ? { headers: { "List-Unsubscribe": `<${oneTap(to)}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } } : {}),
     })), key)),
     from: s.from,

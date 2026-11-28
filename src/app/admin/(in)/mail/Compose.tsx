@@ -152,7 +152,7 @@ export function Compose({ kind, domain, presets, listSize, me, groups = [], days
         </label>
         {kind === "letter" ? (
           <label className="grid gap-1.5 text-[13px] text-quiet">signed <span className="text-quiet/80">(optional, under the email)</span>
-            <input value={signoff} onChange={(e) => setSignoff(e.target.value)} placeholder={name || "sahn"} maxLength={200} className={FIELD} />
+            <input value={signoff} onChange={(e) => setSignoff(e.target.value)} placeholder={local === "onkar" ? "your name signs it" : "optional: the sahn mark ends every email"} maxLength={200} className={FIELD} />
           </label>
         ) : null}
       </div>

@@ -55,7 +55,7 @@ export async function POST(req: Request) {
       const local = str(b.local, 40).toLowerCase();
       if (!/^[a-z0-9](?:[a-z0-9._-]{0,38}[a-z0-9])?$/.test(local)) return ok({ error: "the part before @: letters, numbers, dots, dashes", field: "local" }, 400);
       const name = str(b.name, 60).replace(/["<>\r\n]/g, "") || "sahn";
-      const signoff = (typeof b.signoff === "string" ? b.signoff.trim().slice(0, 200) : "") || name;
+      const signoff = typeof b.signoff === "string" ? b.signoff.trim().slice(0, 200) : ""; // blank: the footer's mark ends it
       const a = await audience(group, days, str(b.to, 6000));
       const to = a.list;
       if (a.bad.length) return ok({ error: `not an email: ${a.bad.slice(0, 3).join(", ")}`, field: "to" }, 400);
