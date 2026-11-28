@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { kvKeys, mailKeys } from "@/lib/shop/config";
 import { sendEmail } from "@/lib/shop/email";
 import { clientIp, limited } from "@/lib/shop/guard";
+import { kv } from "@/lib/shop/kv";
 import { exec, row } from "./db";
 
 /**
@@ -53,15 +54,32 @@ export type Admin = { email: string; csrf: string };
 const clock = () => new Date().toLocaleString("en-IN", { hour: "numeric", minute: "2-digit", day: "numeric", month: "short", timeZone: "Asia/Kolkata" }).toLowerCase();
 
 /**
- * The key, checked in constant time; right → a session cookie. Wrong tries are limited to 8 per IP in 15 minutes
- * and 40 an hour in all, and every one is in the audit log.
+ * Wrong keys, counted (only wrong ones: signing in right never uses one up). Any one connection gets 3 in 15 minutes
+ * and 5 a day; every connection together gets 10 a day, and past that the sign-in is shut for everyone until 5:30 am
+ * (the day's turn in UTC), with an email to ADMIN_EMAIL. The key is 16+ random characters, so even with no limit at all it
+ * couldn't be guessed; the limits are so nobody gets to try.
  */
+const WRONG: [scope: (ip: string) => string, max: number, windowMs: number][] = [
+  [(ip) => `admin-wrong:${ip}:15m`, 3, 900_000],
+  [(ip) => `admin-wrong:${ip}:day`, 5, 86_400_000],
+  [() => "admin-wrong:all:day", 10, 86_400_000],
+];
+/** the same counter keys guard.ts's limited() writes, read without adding to them */
+const used = async (key: string, windowMs: number) => Number((await kv<string | null>("GET", `rl:${key}:${Math.floor(Date.now() / windowMs)}`).catch(() => null)) ?? 0);
+const shut = async (ip: string) => (await Promise.all(WRONG.map(([k, max, w]) => used(k(ip), w).then((n) => n >= max)))).some(Boolean);
+
+/** the key, checked in constant time; right → a session cookie */
 export async function signInWithKey(key: string, ip: string, ua: string, from = "") {
   const want = siteKey();
   if (!adminReady() || !want) return "closed" as const;
-  if ((await limited(`admin-key:${ip}`, 8, 900_000)) || (await limited("admin-key:hour", 40, 3_600_000))) return "slow" as const;
+  if (await shut(ip)) return "slow" as const;
   if (!key || key.length > 200 || !sameText(key, want)) {
+    await Promise.all(WRONG.map(([k, max, w]) => limited(k(ip), max, w)));
     await audit("?", "login.refused", null, { why: "wrong key" }, ip);
+    const all = await used(WRONG[2][0](ip), WRONG[2][2]);
+    const to = adminEmail();
+    if (all === WRONG[2][1] && to && mailKeys())
+      await sendEmail(to, "sahn admin: sign-in shut for today", `${all} wrong keys were tried at the sahn admin today, the last at ${clock()} from ${from || "a device we couldn't name"}${ip !== "?" ? ` (ip ${ip})` : ""}. the sign-in is shut for everyone until 5:30 am. if it wasn't you, change ADMIN_SECRET in vercel and redeploy.`, `admin-shut-${Math.floor(Date.now() / 86_400_000)}`).catch(() => {});
     return "wrong" as const;
   }
   const session = randomBytes(32).toString("base64url"), csrf = randomBytes(24).toString("base64url");

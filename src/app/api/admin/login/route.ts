@@ -9,7 +9,7 @@ const answer = (body: unknown, status = 200) => NextResponse.json(body, { status
 
 const SAY = {
   closed: ["the admin isn't set up on this deployment yet", 503],
-  slow: ["too many tries: wait a few minutes", 429],
+  slow: ["too many wrong keys: sign-in is paused. try again later", 429],
   wrong: ["that isn't the key", 401],
 } as const;
 
