@@ -90,7 +90,7 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
       <div className="md:col-span-7">
         <p className="page-in flex justify-between border-t border-line pt-1.5 text-[13px] text-quiet tnum">
           <span>order #{v.id} · placed {day(v.placed)}</span>
-          {found.full ? <Link href="/account" className="draw hover:text-ink">all your orders</Link> : accountsOpen() ? <Link href="/account" className="draw hover:text-ink">sign in</Link> : null}
+          {found.full ? <Link href="/profile" className="draw hover:text-ink">all your orders</Link> : accountsOpen() ? <Link href="/profile" className="draw hover:text-ink">sign in</Link> : null}
         </p>
         <h1 className="page-in mt-5 text-[46px] leading-[0.9] font-extrabold tracking-[-0.045em] lg:text-[72px]">{title}</h1>
         <p className="page-in-2 mt-5 max-w-[46ch] text-[clamp(17px,1.6vw,22px)] leading-[1.3] text-ink/85">{sub}</p>

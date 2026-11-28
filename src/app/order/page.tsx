@@ -21,7 +21,7 @@ export default function OrderFind() {
       <h1 className="page-in bigword text-[20vw] md:text-[13vw]">your order</h1>
       <p className="page-in-2 mt-6 max-w-[44ch] text-[clamp(18px,1.8vw,24px)] leading-[1.25] text-ink/85">
         every email we send about your order has a link straight to it. or put in its number and your email here.
-        {accountsOpen() ? <> or <Link href="/account" className="draw">sign in</Link> to see all your orders.</> : null}
+        {accountsOpen() ? <> or <Link href="/profile" className="draw">sign in</Link> to see all your orders.</> : null}
       </p>
       <div className="page-in-3 mt-12"><Find /></div>
     </div>

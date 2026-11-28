@@ -99,7 +99,7 @@ export function Checkout({ saved = null }: { saved?: Account | null }) {
   return (
     <div className="grid grid-cols-1 gap-x-4 gap-y-12 md:grid-cols-12">
       <form onSubmit={pay} noValidate className="md:col-span-6 lg:col-span-5">
-        <p className="flex justify-between border-t border-line pt-1.5 text-[13px] text-quiet"><span>where it goes</span>{saved ? <span>signed in as {saved.email}</span> : payView?.accounts ? <Link href="/account?next=/checkout" className="draw hover:text-ink">sign in to fill this in</Link> : null}</p>
+        <p className="flex justify-between border-t border-line pt-1.5 text-[13px] text-quiet"><span>where it goes</span>{saved ? <span>signed in as {saved.email}</span> : payView?.accounts ? <Link href="/profile?next=/checkout" className="draw hover:text-ink">sign in to fill this in</Link> : null}</p>
         {saved && saved.addresses.length > 0 && (
           <div className="mt-3 text-[14px]" role="radiogroup" aria-label="Your saved addresses">
             {saved.addresses.map((a) => (

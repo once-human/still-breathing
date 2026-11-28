@@ -170,10 +170,10 @@ export const POLICIES: Record<PolicySlug, Policy> = {
         body: [
           "when you order: your name, email, phone number, delivery address, what you bought and what you paid. you give these at checkout, and we need them to make and send your shirt.",
           "when you just look: nothing that names you. no ad trackers, no analytics cookies, no third-party pixels.",
-          "the site keeps its own visit log, and nobody else sees it: the pages you open, how long each is on screen and how far down you read, whether you came from a link, a search or a post (the site, never who), the kind of device and browser, your rough city from the connection, and the shop steps you take (a size picked, a shirt put in the bag, checkout opened, paid). it isn't tied to your name, your email or your orders. visits from one browser are tied together by a random code that browser makes for itself and keeps in its own storage; it's made from nothing about you, and no cookie and no IP address are kept.",
+          "the site keeps its own visit log, and nobody else sees it: the pages you open, how long each is on screen and how far down you read, whether you came from a link, a search or a post (the site, never who), the kind of device and browser, your rough city from the connection, and the shop steps you take (a size picked, a shirt put in the bag, checkout opened, paid). while you're signed in to your profile, your visits are kept with it, so we can see what you looked at and help with an order; signed out, it isn't tied to your name, your email or your orders. visits from one browser are tied together by a random code that browser makes for itself and keeps in its own storage; it's made from nothing about you, and no cookie and no IP address are kept.",
           "the full log is kept for 90 days, then only daily totals stay. do not track or global privacy control turns it off, and so does the switch at the end of this page, where you can also see everything kept about your browser and delete it at once.",
           "the bag is kept in your own browser (which shirts, which sizes, how many) until you pay or empty it. no cookies are set for it.",
-          "if you sign in (with a code we email you, no password), we keep your name, phone and up to five delivery addresses so checkout fills itself in, and one cookie that keeps you signed in while you keep coming back; 90 days away signs you out. your account shows every order placed with your email. you can sign out any time, on one device or all of them, and delete the account yourself from its details: your orders stay on their way and in our records, the account and its addresses go.",
+          "if you make a profile (by a code we email you, a password you choose, or google), we keep your name, phone and up to five delivery addresses so checkout fills itself in; a password only as an argon2id hash, never the password; from google only your email and name. a cookie keeps you signed in while you keep coming back, and 90 days away signs you out; we note each device that's signed in (its kind and rough city, no ip address) and what you do with your profile, and show you all of it there. your profile shows every order placed with your email, including ones placed before it existed. you can sign out one device or all of them, download everything we keep about you, and delete the profile yourself: your orders stay on their way and in our records, the profile, addresses, password, devices and activity go.",
           "to show the nearest show, the site uses the rough city your connection comes from (the hosting service adds it to every request). it's rounded to about 10 km and used once for the distance; only the city's name goes in the visit log.",
         ],
       },
@@ -223,7 +223,7 @@ export const POLICIES: Record<PolicySlug, Policy> = {
       },
       {
         heading: "your order",
-        body: ["every order email has a link to your order's page. or open /order and put in the order number and your email, or sign in at /account to see all your orders."],
+        body: ["every order email has a link to your order's page. or open /order and put in the order number and your email, or sign in at /profile to see all your orders."],
       },
       {
         heading: "who runs sahn",
